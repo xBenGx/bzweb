@@ -2,17 +2,26 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // 1. Crear respuesta base
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  // 2. Cliente Supabase (Conectado a tus variables)
+  // Verificación de seguridad para evitar el Error 503
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("⚠️ FALTAN LAS VARIABLES DE ENTORNO EN HOSTINGER");
+    // Si faltan las claves, permitimos el paso para que el sitio NO se caiga (503)
+    // pero el login no funcionará hasta que las pongas.
+    return response;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {
@@ -33,23 +42,20 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // 3. Verificar usuario
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 4. Protección de Rutas (/admin)
+  // Protección de rutas
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    
-    const isLoginPage = request.nextUrl.pathname === '/admin/login';
-    const isRecoverPage = request.nextUrl.pathname === '/admin/update-password';
+    const isAuthRoute = 
+        request.nextUrl.pathname === '/admin/login' || 
+        request.nextUrl.pathname === '/admin/update-password';
 
-    // Si NO hay usuario y quiere entrar al panel -> Al Login
-    if (!user && !isLoginPage && !isRecoverPage) {
-      return NextResponse.redirect(new URL('/admin/login', request.url));
+    if (user && isAuthRoute) {
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
-    // Si YA hay usuario y quiere ir al Login -> Al Dashboard
-    if (user && isLoginPage) {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    if (!user && !isAuthRoute) {
+        return NextResponse.redirect(new URL('/admin/login', request.url));
     }
   }
 
@@ -58,9 +64,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Coincidir con todas las rutas excepto archivos estáticos e imágenes
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
