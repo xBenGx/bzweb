@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     LayoutDashboard, Calendar, Music, FileText, Users, 
     LogOut, Plus, Search, Trash2, Edit2, 
-    Image as ImageIcon, Flame, Gift, CalendarDays, Upload, X, Save, 
-    CheckCircle, ChevronRight, Bell, Tag, Clock, MapPin, DollarSign, 
-    Mail, Phone, Loader2, ShieldAlert
+    Image as ImageIcon, Flame, Gift, Upload, X, Save, 
+    CheckCircle, Bell, Clock, MapPin, 
+    Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,6 +20,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "reservas", label: "Reservas", icon: Calendar },
+    { id: "clientes", label: "Clientes VIP", icon: UserPlus }, // NUEVA PESTAÑA
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
@@ -36,6 +37,13 @@ export default function DashboardPage() {
   const [reservas, setReservas] = useState<any[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [candidatos, setCandidatos] = useState<any[]>([]); 
+  const [clientes, setClientes] = useState<any[]>([]); // ESTADO CLIENTES
+
+  // --- ESTADOS PARA CLIENTES ---
+  const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]); // Fecha para filtrar cumpleaños
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [currentClient, setCurrentClient] = useState<any>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   
   // --- CARGA DE DATOS ---
   useEffect(() => {
@@ -58,6 +66,10 @@ export default function DashboardPage() {
       // 4. Solicitudes
       const { data: solicitudesData } = await supabase.from('solicitudes').select('*').order('created_at', { ascending: false });
       if (solicitudesData) setSolicitudes(solicitudesData);
+
+      // 5. Clientes (NUEVO)
+      const { data: clientesData } = await supabase.from('clientes').select('*').order('nombre', { ascending: true });
+      if (clientesData) setClientes(clientesData);
   };
 
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
@@ -86,24 +98,115 @@ export default function DashboardPage() {
 
   const uploadImageToSupabase = async () => {
       if (!selectedFile) return null;
-      
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`; 
-      
-      const { error } = await supabase.storage.from('images').upload(filePath, selectedFile);
+      const { error } = await supabase.storage.from('images').upload(fileName, selectedFile);
       if (error) {
           console.error("Error subiendo imagen:", error);
           alert("Error al subir imagen: " + error.message);
           return null;
       }
-      const { data } = supabase.storage.from('images').getPublicUrl(filePath);
+      const { data } = supabase.storage.from('images').getPublicUrl(fileName);
       return data.publicUrl;
   };
 
   const triggerFileInput = () => {
       fileInputRef.current?.click();
   };
+
+  // ---------------------------------------------------------
+  // LÓGICA GESTIÓN DE CLIENTES (NUEVO)
+  // ---------------------------------------------------------
+  const handleOpenClientModal = (client: any = null) => {
+      setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
+      setIsClientModalOpen(true);
+  };
+
+  const handleSaveClient = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          const clientData = {
+              nombre: currentClient.nombre,
+              whatsapp: currentClient.whatsapp,
+              fecha_nacimiento: currentClient.fecha_nacimiento
+          };
+
+          if (currentClient.id) {
+              await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
+          } else {
+              await supabase.from('clientes').insert([clientData]);
+          }
+          await fetchData();
+          setIsClientModalOpen(false);
+      } catch (error: any) {
+          alert("Error: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDeleteClient = async (id: number) => {
+      if(confirm("¿Eliminar este cliente?")) {
+          await supabase.from('clientes').delete().eq('id', id);
+          fetchData();
+      }
+  };
+
+  // Función para procesar CSV
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+          const text = event.target?.result as string;
+          // Asumimos formato CSV simple: Nombre,Whatsapp,Fecha(YYYY-MM-DD)
+          const lines = text.split('\n');
+          const newClients = [];
+          
+          for (let i = 1; i < lines.length; i++) { // Saltar cabecera
+              const [nombre, whatsapp, fecha] = lines[i].split(',');
+              if (nombre && whatsapp) {
+                  newClients.push({
+                      nombre: nombre.trim(),
+                      whatsapp: whatsapp.trim(),
+                      fecha_nacimiento: fecha ? fecha.trim() : null
+                  });
+              }
+          }
+
+          if (newClients.length > 0) {
+              const { error } = await supabase.from('clientes').insert(newClients);
+              if (error) alert("Error importando: " + error.message);
+              else {
+                  alert(`Se importaron ${newClients.length} clientes correctamente.`);
+                  fetchData();
+              }
+          }
+      };
+      reader.readAsText(file);
+  };
+
+  // Filtrar cumpleañeros
+  const getBirthdays = () => {
+      if (!birthdayFilterDate) return [];
+      const filterDate = new Date(birthdayFilterDate);
+      const filterMonth = filterDate.getMonth(); // 0-11
+      const filterDay = filterDate.getDate() + 1; // Ajuste por zona horaria simple
+
+      return clientes.filter(c => {
+          if (!c.fecha_nacimiento) return false;
+          // Crear fecha sin ajuste horario forzado para comparar solo dia/mes
+          const dParts = c.fecha_nacimiento.split('-');
+          const dMonth = parseInt(dParts[1]) - 1;
+          const dDay = parseInt(dParts[2]);
+          
+          return dMonth === filterMonth && dDay === filterDay;
+      });
+  };
+
+  const birthdays = getBirthdays();
 
   // ---------------------------------------------------------
   // LÓGICA GESTIÓN DE PROMOCIONES
@@ -173,7 +276,6 @@ export default function DashboardPage() {
   // ---------------------------------------------------------
   const handleOpenShowModal = (show: any = null) => {
       setSelectedFile(null);
-      // CONFIGURACIÓN POR DEFECTO DEL SHOW
       setCurrentShow(show || { 
           title: "", subtitle: "", description: "", 
           date_event: "", time_event: "", end_time: "", 
@@ -198,7 +300,6 @@ export default function DashboardPage() {
 
   const updateTicketType = (index: number, field: string, value: any) => {
       const newTickets = [...currentShow.tickets];
-      // FIX: Evitar NaN si el usuario borra el campo
       let safeValue = value;
       if (field === 'price') {
           safeValue = isNaN(value) ? 0 : value;
@@ -335,7 +436,7 @@ export default function DashboardPage() {
                         {[
                             { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
                             { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
-                            { title: "Promos Activas", value: promos.filter(p=>p.active).length, color: "bg-red-500" },
+                            { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
                             { title: "Solicitudes", value: solicitudes.length, color: "bg-green-500" }
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
@@ -391,6 +492,79 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* --- NUEVA PESTAÑA: CLIENTES --- */}
+            {activeTab === "clientes" && (
+                <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    {/* Header Clientes */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        {/* Panel Cumpleaños */}
+                        <div className="bg-gradient-to-br from-zinc-900 to-black border border-[#DAA520]/30 p-6 rounded-2xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Cake className="w-20 h-20 text-[#DAA520]" /></div>
+                            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Gift className="w-5 h-5 text-[#DAA520]"/> Cumpleañeros</h3>
+                            <div className="flex gap-4 items-center mb-4">
+                                <input type="date" className="bg-zinc-800 text-white text-xs p-2 rounded-lg border border-white/10" value={birthdayFilterDate} onChange={(e) => setBirthdayFilterDate(e.target.value)} />
+                                <span className="text-xs text-zinc-400">Selecciona fecha para revisar</span>
+                            </div>
+                            <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+                                {birthdays.length > 0 ? birthdays.map(c => (
+                                    <div key={c.id} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg">
+                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                        <span className="text-xs font-bold text-white">{c.nombre}</span>
+                                        <span className="text-[10px] text-zinc-400 ml-auto">{c.whatsapp}</span>
+                                    </div>
+                                )) : <p className="text-xs text-zinc-500">No hay cumpleaños registrados para esta fecha.</p>}
+                            </div>
+                        </div>
+
+                        {/* Panel Importar */}
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-center items-center text-center">
+                            <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVUpload} className="hidden" />
+                            <FileSpreadsheet className="w-10 h-10 text-green-500 mb-3" />
+                            <h3 className="text-sm font-bold text-white">Importar Base de Datos</h3>
+                            <p className="text-[10px] text-zinc-500 mb-4 max-w-xs">Sube un archivo .csv con las columnas: Nombre, Whatsapp, Fecha Nacimiento (YYYY-MM-DD)</p>
+                            <button onClick={() => csvInputRef.current?.click()} className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all">
+                                <Upload className="w-3 h-3" /> Seleccionar Archivo
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Lista Clientes */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">Base de Clientes ({clientes.length})</h3>
+                            <button onClick={() => handleOpenClientModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <UserPlus className="w-4 h-4" /> Nuevo Cliente
+                            </button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-zinc-400">
+                                <thead className="text-xs uppercase bg-black/40 text-zinc-500">
+                                    <tr>
+                                        <th className="px-4 py-3">Nombre</th>
+                                        <th className="px-4 py-3">WhatsApp</th>
+                                        <th className="px-4 py-3">Cumpleaños</th>
+                                        <th className="px-4 py-3 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {clientes.map((client) => (
+                                        <tr key={client.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-4 py-3 font-medium text-white">{client.nombre}</td>
+                                            <td className="px-4 py-3">{client.whatsapp}</td>
+                                            <td className="px-4 py-3">{client.fecha_nacimiento || "---"}</td>
+                                            <td className="px-4 py-3 text-right flex justify-end gap-2">
+                                                <button onClick={() => handleOpenClientModal(client)} className="p-1.5 hover:bg-white/10 rounded text-zinc-300"><Edit2 className="w-3 h-3"/></button>
+                                                <button onClick={() => handleDeleteClient(client.id)} className="p-1.5 hover:bg-red-500/20 rounded text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </motion.div>
             )}
@@ -495,11 +669,11 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 6. EQUIPO */}
+            {/* 6. EQUIPO (RRHH) */}
             {activeTab === "rrhh" && (
                 <motion.div key="rrhh" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid gap-3">
-                        {candidatos.map((cand) => (
+                        {candidatos.length === 0 ? <p className="text-zinc-500">No hay equipo registrado.</p> : candidatos.map((cand) => (
                             <div key={cand.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-500 font-bold">{cand.name.charAt(0)}</div>
@@ -512,6 +686,38 @@ export default function DashboardPage() {
                         ))}
                     </div>
                 </motion.div>
+            )}
+        </AnimatePresence>
+
+        {/* --- MODAL CLIENTES (NUEVO) --- */}
+        <AnimatePresence>
+            {isClientModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsClientModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white uppercase">{currentClient.id ? "Editar" : "Nuevo"} Cliente</h3>
+                            <button onClick={() => setIsClientModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={handleSaveClient} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Completo</label>
+                                <input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.nombre} onChange={e => setCurrentClient({...currentClient, nombre: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label>
+                                <input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.whatsapp} onChange={e => setCurrentClient({...currentClient, whatsapp: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha de Nacimiento</label>
+                                <input type="date" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentClient.fecha_nacimiento || ""} onChange={e => setCurrentClient({...currentClient, fecha_nacimiento: e.target.value})} />
+                            </div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Cliente</>}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
             )}
         </AnimatePresence>
 
@@ -585,7 +791,6 @@ export default function DashboardPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label>
-                                            {/* CORRECCIÓN: TYPE DATE PARA CALENDARIO */}
                                             <input 
                                                 type="date" 
                                                 className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
@@ -654,7 +859,6 @@ export default function DashboardPage() {
                                                     <input type="text" placeholder="Descripción (Ej: Ingreso hasta 00:00)" className="w-full bg-transparent border-b border-zinc-700 text-[10px] text-zinc-400 p-1 outline-none" value={ticket.desc} onChange={(e) => updateTicketType(index, 'desc', e.target.value)} />
                                                 </div>
                                                 <div className="w-24">
-                                                    {/* CORRECCIÓN: EVITAR NaN AL BORRAR */}
                                                     <input 
                                                         type="number" 
                                                         placeholder="Precio" 

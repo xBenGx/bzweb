@@ -2,13 +2,15 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // 1. Crear una respuesta base para gestionar las cabeceras
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  // Cliente Supabase con manejo de cookies para SSR
+  // 2. Crear el cliente de Supabase usando tus variables de entorno
+  // El signo ! al final le dice a TypeScript: "Confía en mí, esta variable existe"
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -32,24 +34,27 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verificación de usuario
+  // 3. Verificar la sesión del usuario
+  // Usamos getUser() porque es más seguro que getSession() en el servidor
   const { data: { user } } = await supabase.auth.getUser()
 
-  // --- LÓGICA DE PROTECCIÓN DE RUTAS ---
+  // 4. Lógica de Protección de Rutas (/admin)
   if (request.nextUrl.pathname.startsWith('/admin')) {
     
-    const isAuthRoute = 
-        request.nextUrl.pathname === '/admin/login' || 
-        request.nextUrl.pathname === '/admin/update-password';
+    // Definimos qué páginas dentro de admin son públicas (Login y Recuperar Clave)
+    const isLoginPage = request.nextUrl.pathname === '/admin/login';
+    const isRecoverPage = request.nextUrl.pathname === '/admin/update-password';
 
-    // Si ya está logueado y va al login, lo mandamos al dashboard
-    if (user && isAuthRoute) {
-        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    // CASO A: El usuario NO está logueado y quiere entrar al panel privado
+    // Lo expulsamos al Login
+    if (!user && !isLoginPage && !isRecoverPage) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
     }
 
-    // Si NO está logueado y quiere entrar al dashboard, lo mandamos al login
-    if (!user && !isAuthRoute) {
-        return NextResponse.redirect(new URL('/admin/login', request.url));
+    // CASO B: El usuario YA está logueado pero intenta entrar al Login
+    // Lo mandamos directo al Dashboard para que no pierda tiempo
+    if (user && isLoginPage) {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
   }
 
@@ -59,8 +64,12 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Coincidir con todas las rutas excepto archivos estáticos e imágenes
+     * Ejecutar en todas las rutas excepto:
+     * - _next/static (archivos estáticos de compilación)
+     * - _next/image (imágenes optimizadas)
+     * - favicon.ico (icono del sitio)
+     * - Archivos de imagen comunes (svg, png, jpg, jpeg, gif, webp)
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
