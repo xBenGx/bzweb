@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Cliente Supabase con manejo de cookies para SSR
+  // Cliente Supabase seguro
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -32,22 +32,21 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verificación de usuario
+  // Refrescar sesión si existe
   const { data: { user } } = await supabase.auth.getUser()
 
-  // --- LÓGICA DE PROTECCIÓN DE RUTAS ---
+  // Proteger rutas de admin
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    
     const isAuthRoute = 
         request.nextUrl.pathname === '/admin/login' || 
         request.nextUrl.pathname === '/admin/update-password';
 
-    // Si ya está logueado y va al login, lo mandamos al dashboard
+    // Si tiene usuario y va al login -> Dashboard
     if (user && isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
-    // Si NO está logueado y quiere entrar al dashboard, lo mandamos al login
+    // Si NO tiene usuario y va al dashboard -> Login
     if (!user && !isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/login', request.url));
     }
@@ -58,9 +57,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Coincidir con todas las rutas excepto archivos estáticos e imágenes
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
