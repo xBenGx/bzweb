@@ -3,35 +3,82 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-    Mail, Lock, User, ArrowRight, Eye, EyeOff, 
-    ShieldCheck, ChevronLeft 
+    Mail, Lock, ArrowRight, Eye, EyeOff, 
+    ShieldCheck, ChevronLeft, KeyRound, AlertCircle, CheckCircle
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Montserrat } from "next/font/google";
+// Importamos el cliente de Supabase
+import { supabase } from "@/lib/supabaseClient";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
+  
+  // Estados de vista
+  const [view, setView] = useState<"login" | "recover">("login");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Estados de feedback
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Datos del formulario
-  const [formData, setFormData] = useState({ email: "", password: "", name: "" });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // --- FUNCIÓN: INICIAR SESIÓN ---
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulación de validación y login
-    setTimeout(() => {
+    setErrorMsg(null);
+
+    try {
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (error) {
+            throw error;
+        }
+
+        // Login exitoso
+        router.push("/admin/dashboard");
+        router.refresh(); // Asegura que el middleware detecte la nueva sesión
+
+    } catch (error: any) {
+        setErrorMsg("Credenciales incorrectas o acceso denegado.");
+    } finally {
         setIsLoading(false);
-        // REDIRECCIÓN AUTOMÁTICA AL DASHBOARD
-        router.push("/admin/dashboard"); 
-    }, 1500);
+    }
+  };
+
+  // --- FUNCIÓN: RECUPERAR / CAMBIAR CONTRASEÑA ---
+  const handleRecovery = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      try {
+          // Esto enviará un correo al usuario con un link para poner una nueva contraseña
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: `${window.location.origin}/admin/update-password`, // Asegúrate de crear esta página luego si quieres un flujo custom, o dejar que supabase maneje el default
+          });
+
+          if (error) throw error;
+
+          setSuccessMsg("Te hemos enviado un correo para cambiar tu contraseña.");
+      } catch (error: any) {
+          setErrorMsg(error.message || "Error al solicitar recuperación.");
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   return (
@@ -67,37 +114,31 @@ export default function AdminLoginPage() {
 
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-white mb-1">
-                    {isLogin ? "Bienvenido de nuevo" : "Crear Cuenta Staff"}
+                    {view === "login" ? "Bienvenido de nuevo" : "Cambiar Contraseña"}
                 </h1>
                 <p className="text-sm text-zinc-500">
-                    {isLogin ? "Ingresa tus credenciales para gestionar BZ." : "Solicita acceso al panel de administración."}
+                    {view === "login" 
+                        ? "Ingresa tus credenciales para gestionar BZ." 
+                        : "Ingresa tu correo institucional para recibir el enlace de cambio."}
                 </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-                
-                {/* Nombre (Solo Registro) */}
-                <AnimatePresence>
-                    {!isLogin && (
-                        <motion.div 
-                            initial={{ height: 0, opacity: 0 }} 
-                            animate={{ height: "auto", opacity: 1 }} 
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden"
-                        >
-                            <div className="relative group">
-                                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Nombre Completo" 
-                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder-zinc-600 focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all"
-                                    required={!isLogin}
-                                />
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+            {/* Mensajes de Alerta */}
+            <AnimatePresence>
+                {errorMsg && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-xs text-red-400 font-bold">
+                        <AlertCircle className="w-4 h-4" /> {errorMsg}
+                    </motion.div>
+                )}
+                {successMsg && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2 text-xs text-green-400 font-bold">
+                        <CheckCircle className="w-4 h-4" /> {successMsg}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
+            <form onSubmit={view === "login" ? handleLogin : handleRecovery} className="space-y-4">
+                
                 {/* Email */}
                 <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
@@ -106,29 +147,45 @@ export default function AdminLoginPage() {
                         placeholder="correo@boulevardzapallar.cl" 
                         className="w-full bg-black/50 border border-zinc-700 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder-zinc-600 focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all"
                         required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                     />
                 </div>
 
-                {/* Password */}
-                <div className="relative group">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
-                    <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="Contraseña" 
-                        className="w-full bg-black/50 border border-zinc-700 rounded-xl py-4 pl-12 pr-12 text-sm text-white placeholder-zinc-600 focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all"
-                        required
-                    />
-                    <button 
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
-                    >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                </div>
+                {/* Password (Solo en Login) */}
+                <AnimatePresence>
+                    {view === "login" && (
+                        <motion.div 
+                            initial={{ height: 0, opacity: 0 }} 
+                            animate={{ height: "auto", opacity: 1 }} 
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="relative group pt-1">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
+                                <input 
+                                    type={showPassword ? "text" : "password"} 
+                                    placeholder="Contraseña" 
+                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl py-4 pl-12 pr-12 text-sm text-white placeholder-zinc-600 focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all"
+                                    required={view === "login"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Botón Submit */}
                 <button 
+                    type="submit"
                     disabled={isLoading}
                     className="w-full bg-white text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-6 hover:bg-zinc-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg"
                 >
@@ -136,23 +193,32 @@ export default function AdminLoginPage() {
                         <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"/>
                     ) : (
                         <>
-                            {isLogin ? "Iniciar Sesión" : "Registrarse"} <ArrowRight className="w-4 h-4" />
+                            {view === "login" ? "Iniciar Sesión" : "Enviar Enlace"} 
+                            {view === "login" ? <ArrowRight className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
                         </>
                     )}
                 </button>
 
             </form>
 
-            {/* Switch Login/Register */}
+            {/* Switch Login/Recover */}
             <div className="mt-6 pt-6 border-t border-white/5 text-center">
                 <p className="text-xs text-zinc-500 mb-2">
-                    {isLogin ? "¿No tienes cuenta?" : "¿Ya tienes acceso?"}
+                    {view === "login" ? "¿Olvidaste o quieres cambiar tu clave?" : "¿Ya recordaste tu contraseña?"}
                 </p>
                 <button 
-                    onClick={() => setIsLogin(!isLogin)}
-                    className="text-xs font-bold text-[#DAA520] hover:text-[#B8860B] uppercase tracking-wider transition-colors"
+                    onClick={() => {
+                        setView(view === "login" ? "recover" : "login");
+                        setErrorMsg(null);
+                        setSuccessMsg(null);
+                    }}
+                    className="text-xs font-bold text-[#DAA520] hover:text-[#B8860B] uppercase tracking-wider transition-colors flex items-center justify-center gap-1 mx-auto"
                 >
-                    {isLogin ? "Solicitar Registro" : "Volver al Login"}
+                    {view === "login" ? (
+                        <><KeyRound className="w-3 h-3"/> Restablecer Contraseña</>
+                    ) : (
+                        "Volver al Login"
+                    )}
                 </button>
             </div>
 
