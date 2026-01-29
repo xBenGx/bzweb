@@ -4,16 +4,14 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**", // Permite imágenes de cualquier dominio (Supabase, etc.)
+        hostname: "**",
       },
     ],
   },
   typescript: {
-    // Ignora errores de tipado para que Hostinger compile sin fallar por detalles menores
     ignoreBuildErrors: true,
   },
   eslint: {
-    // Ignora errores de linter durante la construcción
     ignoreDuringBuilds: true,
   },
 };

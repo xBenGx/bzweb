@@ -2,15 +2,14 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // 1. Crear una respuesta base para gestionar las cabeceras
+  // 1. Crear respuesta base
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  // 2. Crear el cliente de Supabase usando tus variables de entorno
-  // El signo ! al final le dice a TypeScript: "Confía en mí, esta variable existe"
+  // 2. Cliente Supabase (Conectado a tus variables)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -34,25 +33,21 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // 3. Verificar la sesión del usuario
-  // Usamos getUser() porque es más seguro que getSession() en el servidor
+  // 3. Verificar usuario
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 4. Lógica de Protección de Rutas (/admin)
+  // 4. Protección de Rutas (/admin)
   if (request.nextUrl.pathname.startsWith('/admin')) {
     
-    // Definimos qué páginas dentro de admin son públicas (Login y Recuperar Clave)
     const isLoginPage = request.nextUrl.pathname === '/admin/login';
     const isRecoverPage = request.nextUrl.pathname === '/admin/update-password';
 
-    // CASO A: El usuario NO está logueado y quiere entrar al panel privado
-    // Lo expulsamos al Login
+    // Si NO hay usuario y quiere entrar al panel -> Al Login
     if (!user && !isLoginPage && !isRecoverPage) {
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }
 
-    // CASO B: El usuario YA está logueado pero intenta entrar al Login
-    // Lo mandamos directo al Dashboard para que no pierda tiempo
+    // Si YA hay usuario y quiere ir al Login -> Al Dashboard
     if (user && isLoginPage) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
@@ -64,11 +59,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Ejecutar en todas las rutas excepto:
-     * - _next/static (archivos estáticos de compilación)
-     * - _next/image (imágenes optimizadas)
-     * - favicon.ico (icono del sitio)
-     * - Archivos de imagen comunes (svg, png, jpg, jpeg, gif, webp)
+     * Coincidir con todas las rutas excepto archivos estáticos e imágenes
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
