@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Cliente Supabase para el Middleware (Manejo de Cookies)
+  // Usamos createServerClient de @supabase/ssr (LA LIBRERÍA NUEVA)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -36,21 +36,15 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // --- LÓGICA DE PROTECCIÓN ---
-  
-  // Si la ruta empieza con /admin
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    
-    // Rutas permitidas sin login (Login y Recuperar clave)
     const isAuthRoute = 
         request.nextUrl.pathname === '/admin/login' || 
         request.nextUrl.pathname === '/admin/update-password';
 
-    // Si ya está logueado y quiere ir al login, lo mandamos al dashboard
     if (user && isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
-    // Si NO está logueado y quiere entrar al dashboard, lo mandamos al login
     if (!user && !isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/login', request.url));
     }
@@ -61,12 +55,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Coincidir con todas las rutas de solicitud excepto las que comienzan con:
-     * - _next/static (archivos estáticos)
-     * - _next/image (archivos de optimización de imágenes)
-     * - favicon.ico (archivo favicon)
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
