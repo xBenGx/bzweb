@@ -63,7 +63,8 @@ const LARGE_LINKS = [
     title: "Reservar Mesa", 
     icon: CalendarCheck, 
     href: "/reservas", 
-    image: "https://images.unsplash.com/photo-1570560258879-af7f8e1447ac?q=80&w=1470&auto=format&fit=crop",
+    // CORREGIDO: Extension .jpg
+    image: "/reservas.jpg",
     overlay: "from-[#28A745]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
     borderGlow: "group-hover:border-[#28A745]/50 group-hover:shadow-[0_0_30px_rgba(40,167,69,0.3)]"
@@ -102,7 +103,8 @@ const BENTO_LINKS = [
     id: "trabajo", 
     title: "Únete al Equipo", 
     href: "/trabajo", 
-    image: "https://images.unsplash.com/photo-1574096079513-d8259312b785?q=80&w=1374&auto=format&fit=crop",
+    // CORREGIDO: Extension .jpg
+    image: "/unetealequipo.jpg",
     overlay: "from-[#2A9D8F]/90 via-black/80 via-40% to-transparent",
     colorClass: "text-[#2A9D8F] bg-[#2A9D8F]/20 border-[#2A9D8F]/30"
   },
