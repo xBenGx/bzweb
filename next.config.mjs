@@ -1,19 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Tu configuración de imágenes original (Permite todo)
   images: {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**",
+        hostname: "**", // Permite imágenes de cualquier dominio (Supabase, etc.)
       },
     ],
   },
-  // ESTO ES CLAVE: Le dice a Hostinger que ignore errores menores de tipos y construya la web igual
   typescript: {
+    // Ignora errores de tipado para que Hostinger compile sin fallar por detalles menores
     ignoreBuildErrors: true,
   },
   eslint: {
+    // Ignora errores de linter durante la construcción
     ignoreDuringBuilds: true,
   },
 };

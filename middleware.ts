@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Usamos createServerClient de @supabase/ssr (LA LIBRERÍA NUEVA)
+  // Cliente Supabase con manejo de cookies para SSR
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -32,19 +32,22 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verificar usuario
+  // Verificación de usuario
   const { data: { user } } = await supabase.auth.getUser()
 
-  // --- LÓGICA DE PROTECCIÓN ---
+  // --- LÓGICA DE PROTECCIÓN DE RUTAS ---
   if (request.nextUrl.pathname.startsWith('/admin')) {
+    
     const isAuthRoute = 
         request.nextUrl.pathname === '/admin/login' || 
         request.nextUrl.pathname === '/admin/update-password';
 
+    // Si ya está logueado y va al login, lo mandamos al dashboard
     if (user && isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
+    // Si NO está logueado y quiere entrar al dashboard, lo mandamos al login
     if (!user && !isAuthRoute) {
         return NextResponse.redirect(new URL('/admin/login', request.url));
     }
@@ -55,6 +58,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    /*
+     * Coincidir con todas las rutas excepto archivos estáticos e imágenes
+     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }
