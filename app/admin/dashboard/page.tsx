@@ -7,7 +7,8 @@ import {
     LogOut, Plus, Search, Trash2, Edit2, 
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
-    Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet
+    Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
+    Utensils, ShoppingBag // ICONOS NUEVOS AGREGADOS
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,7 +21,8 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "clientes", label: "Clientes VIP", icon: UserPlus }, // NUEVA PESTAÑA
+    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, // NUEVA PESTAÑA AGREGADA
+    { id: "clientes", label: "Clientes VIP", icon: UserPlus },
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
@@ -37,10 +39,11 @@ export default function DashboardPage() {
   const [reservas, setReservas] = useState<any[]>([]);
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [candidatos, setCandidatos] = useState<any[]>([]); 
-  const [clientes, setClientes] = useState<any[]>([]); // ESTADO CLIENTES
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState<any[]>([]); // ESTADO NUEVO PARA EL MENÚ
 
   // --- ESTADOS PARA CLIENTES ---
-  const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]); // Fecha para filtrar cumpleaños
+  const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -49,12 +52,10 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
 
-    // SUSCRIPCIÓN REALTIME: Escucha cambios en la tabla 'clientes' para actualizar auto
     const channel = supabase
-      .channel('realtime-clientes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => {
-        fetchData(); // Recarga los datos si hay cambios (insert/update/delete)
-      })
+      .channel('realtime-dashboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData()) // Escuchar cambios en menú
       .subscribe();
 
     return () => {
@@ -79,9 +80,13 @@ export default function DashboardPage() {
       const { data: solicitudesData } = await supabase.from('solicitudes').select('*').order('created_at', { ascending: false });
       if (solicitudesData) setSolicitudes(solicitudesData);
 
-      // 5. Clientes (NUEVO)
+      // 5. Clientes
       const { data: clientesData } = await supabase.from('clientes').select('*').order('nombre', { ascending: true });
       if (clientesData) setClientes(clientesData);
+
+      // 6. Menú Express (NUEVO)
+      const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
+      if (menuData) setMenuItems(menuData);
   };
 
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
@@ -91,11 +96,15 @@ export default function DashboardPage() {
   const [isShowModalOpen, setIsShowModalOpen] = useState(false);
   const [currentShow, setCurrentShow] = useState<any>(null);
 
+  // ESTADOS MODAL MENÚ (NUEVO)
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- MANEJADOR DE IMAGEN ---
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show') => {
+  // --- MANEJADOR DE IMAGEN (ACTUALIZADO PARA INCLUIR MENÚ) ---
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
           setSelectedFile(file);
@@ -103,6 +112,7 @@ export default function DashboardPage() {
           reader.onloadend = () => {
               if (type === 'promo') setCurrentPromo({ ...currentPromo, image_url: reader.result as string });
               if (type === 'show') setCurrentShow({ ...currentShow, image_url: reader.result as string });
+              if (type === 'menu') setCurrentMenuItem({ ...currentMenuItem, image_url: reader.result as string });
           };
           reader.readAsDataURL(file);
       }
@@ -127,7 +137,7 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE CLIENTES (CORREGIDA Y CONECTADA)
+  // LÓGICA GESTIÓN DE CLIENTES
   // ---------------------------------------------------------
   const handleOpenClientModal = (client: any = null) => {
       setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
@@ -151,10 +161,8 @@ export default function DashboardPage() {
               result = await supabase.from('clientes').insert([clientData]);
           }
 
-          // Verificamos explícitamente si hubo error en la base de datos
           if (result.error) throw result.error;
 
-          // Si todo sale bien, recargamos y cerramos
           await fetchData();
           setIsClientModalOpen(false);
       } catch (error: any) {
@@ -176,7 +184,6 @@ export default function DashboardPage() {
       }
   };
 
-  // Función para procesar CSV
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -184,11 +191,10 @@ export default function DashboardPage() {
       const reader = new FileReader();
       reader.onload = async (event) => {
           const text = event.target?.result as string;
-          // Asumimos formato CSV simple: Nombre,Whatsapp,Fecha(YYYY-MM-DD)
           const lines = text.split('\n');
           const newClients = [];
           
-          for (let i = 1; i < lines.length; i++) { // Saltar cabecera
+          for (let i = 1; i < lines.length; i++) {
               const [nombre, whatsapp, fecha] = lines[i].split(',');
               if (nombre && whatsapp) {
                   newClients.push({
@@ -211,16 +217,14 @@ export default function DashboardPage() {
       reader.readAsText(file);
   };
 
-  // Filtrar cumpleañeros
   const getBirthdays = () => {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
-      const filterMonth = filterDate.getMonth(); // 0-11
-      const filterDay = filterDate.getDate() + 1; // Ajuste por zona horaria simple
+      const filterMonth = filterDate.getMonth();
+      const filterDay = filterDate.getDate() + 1;
 
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
-          // Crear fecha sin ajuste horario forzado para comparar solo dia/mes
           const dParts = c.fecha_nacimiento.split('-');
           const dMonth = parseInt(dParts[1]) - 1;
           const dDay = parseInt(dParts[2]);
@@ -295,7 +299,67 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN AVANZADA DE SHOWS (TICKETS)
+  // LÓGICA GESTIÓN DE MENÚ EXPRESS (NUEVO)
+  // ---------------------------------------------------------
+  const handleOpenMenuModal = (item: any = null) => {
+      setSelectedFile(null);
+      setCurrentMenuItem(item || { 
+          name: "", description: "", price: 0, 
+          image_url: "", active: true, category: "General" 
+      });
+      setIsMenuModalOpen(true);
+  };
+
+  const handleSaveMenuItem = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+
+      try {
+          let finalImageUrl = currentMenuItem.image_url;
+          if (selectedFile) {
+              const uploadedUrl = await uploadImageToSupabase();
+              if (uploadedUrl) finalImageUrl = uploadedUrl;
+          }
+
+          const menuData = {
+              name: currentMenuItem.name,
+              description: currentMenuItem.description,
+              price: currentMenuItem.price,
+              active: currentMenuItem.active,
+              category: currentMenuItem.category,
+              image_url: finalImageUrl
+          };
+
+          if (currentMenuItem.id) {
+              await supabase.from('productos_reserva').update(menuData).eq('id', currentMenuItem.id);
+          } else {
+              await supabase.from('productos_reserva').insert([menuData]);
+          }
+
+          await fetchData();
+          setIsMenuModalOpen(false);
+      } catch (error: any) {
+          console.error("Error guardando producto:", error);
+          alert("Error: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDeleteMenuItem = async (id: number) => {
+      if(confirm("¿Estás seguro de eliminar este producto del menú?")) {
+          await supabase.from('productos_reserva').delete().eq('id', id);
+          fetchData();
+      }
+  };
+
+  const toggleMenuStatus = async (id: number, currentStatus: boolean) => {
+      await supabase.from('productos_reserva').update({ active: !currentStatus }).eq('id', id);
+      fetchData();
+  };
+
+  // ---------------------------------------------------------
+  // LÓGICA GESTIÓN DE SHOWS
   // ---------------------------------------------------------
   const handleOpenShowModal = (show: any = null) => {
       setSelectedFile(null);
@@ -409,7 +473,7 @@ export default function DashboardPage() {
                 <Image src="/logo.png" alt="BZ Logo" fill className="object-contain" priority />
             </div>
         </div>
-        <nav className="flex-1 w-full space-y-2 px-2">
+        <nav className="flex-1 w-full space-y-2 px-2 overflow-y-auto custom-scrollbar">
             {TABS.map((tab) => (
                 <button
                     key={tab.id}
@@ -460,7 +524,7 @@ export default function DashboardPage() {
                             { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
                             { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
                             { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
-                            { title: "Solicitudes", value: solicitudes.length, color: "bg-green-500" }
+                            { title: "Prod. Menú", value: menuItems.length, color: "bg-red-500" }
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
                                 <div className={`w-2 h-2 rounded-full mb-3 ${stat.color}`} />
@@ -519,12 +583,46 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* --- NUEVA PESTAÑA: CLIENTES (Optimizado) --- */}
+            {/* --- NUEVA PESTAÑA: MENÚ EXPRESS --- */}
+            {activeTab === "menu_express" && (
+                <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                     <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold">Menú para Reservas (Pre-order)</h3>
+                        <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                            <Plus className="w-4 h-4" /> Nuevo Producto
+                        </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {menuItems.map((item) => (
+                            <div key={item.id} className={`group bg-zinc-900 border ${item.active ? 'border-white/10' : 'border-red-900/30 opacity-60'} p-4 rounded-2xl relative transition-all hover:border-[#DAA520]/50`}>
+                                <div className="relative w-full aspect-square bg-black rounded-xl overflow-hidden mb-4 border border-white/5">
+                                    <Image src={item.image_url || "/placeholder.jpg"} alt={item.name} fill className="object-cover opacity-90" />
+                                </div>
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start">
+                                        <h3 className="text-lg font-bold text-white line-clamp-1">{item.name}</h3>
+                                        <span className="text-xs font-bold text-[#DAA520] bg-black/50 px-2 py-1 rounded">${item.price.toLocaleString()}</span>
+                                    </div>
+                                    <p className="text-xs text-zinc-400 mt-1 line-clamp-2 min-h-[2.5em]">{item.description}</p>
+                                    <div className="flex justify-between items-center border-t border-white/10 pt-4 mt-2">
+                                        <button onClick={() => toggleMenuStatus(item.id, item.active)} className={`text-[10px] font-bold uppercase ${item.active ? 'text-green-500' : 'text-zinc-500'}`}>{item.active ? "Disponible" : "Oculto"}</button>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleOpenMenuModal(item)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDeleteMenuItem(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* ... CLIENTES, SHOWS, PROMOS, ETC. SE MANTIENEN IGUAL ... */}
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Header Clientes */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        {/* Panel Cumpleaños */}
                         <div className="bg-gradient-to-br from-zinc-900 to-black border border-[#DAA520]/30 p-6 rounded-2xl relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Cake className="w-20 h-20 text-[#DAA520]" /></div>
                             <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Gift className="w-5 h-5 text-[#DAA520]"/> Cumpleañeros</h3>
@@ -543,7 +641,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* Panel Importar */}
                         <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-center items-center text-center">
                             <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVUpload} className="hidden" />
                             <FileSpreadsheet className="w-10 h-10 text-green-500 mb-3" />
@@ -555,7 +652,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* Lista Clientes */}
                     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-bold">Base de Clientes ({clientes.length})</h3>
@@ -592,7 +688,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. SHOWS (CRUD AVANZADO) */}
             {activeTab === "shows" && (
                 <motion.div key="shows" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between mb-4">
@@ -633,7 +728,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 4. PROMOCIONES */}
             {activeTab === "promos" && (
                 <motion.div key="promos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
@@ -666,7 +760,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 5. COTIZACIONES */}
             {activeTab === "eventos" && (
                 <motion.div key="eventos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="space-y-3">
@@ -692,7 +785,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 6. EQUIPO (RRHH) */}
             {activeTab === "rrhh" && (
                 <motion.div key="rrhh" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid gap-3">
@@ -712,7 +804,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL CLIENTES (NUEVO) --- */}
+        {/* --- MODAL CLIENTES --- */}
         <AnimatePresence>
             {isClientModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
@@ -739,6 +831,42 @@ export default function DashboardPage() {
                                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Cliente</>}
                             </button>
                         </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
+        <AnimatePresence>
+            {isMenuModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]">
+                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
+                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
+                            <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
+                                {currentMenuItem.image_url ? (
+                                    <>
+                                        <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                    </>
+                                ) : (
+                                    <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentMenuItem.id ? "Editar" : "Nuevo"} Producto</h3><button onClick={() => setIsMenuModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
+                            <form onSubmit={handleSaveMenuItem} className="space-y-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre del Producto</label><input required type="text" placeholder="Ej: Tabla de Quesos" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentMenuItem.name} onChange={e => setCurrentMenuItem({...currentMenuItem, name: e.target.value})} /></div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentMenuItem.category} onChange={e => setCurrentMenuItem({...currentMenuItem, category: e.target.value})}><option value="Entradas">Entradas</option><option value="Tablas">Tablas</option><option value="Tragos">Tragos</option><option value="Bebidas">Bebidas</option><option value="General">General</option></select></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentMenuItem.price} onChange={e => setCurrentMenuItem({...currentMenuItem, price: parseInt(e.target.value)})} /></div>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label><textarea rows={3} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none resize-none" value={currentMenuItem.description || ""} onChange={e => setCurrentMenuItem({...currentMenuItem, description: e.target.value})} /></div>
+                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Producto</>}</button>
+                            </form>
+                        </div>
                     </motion.div>
                 </div>
             )}
