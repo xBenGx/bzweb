@@ -4,14 +4,30 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowLeft, Users, ChevronRight, ChevronLeft, 
-  CheckCircle, Calendar, Clock, MapPin, AlertTriangle, 
-  Armchair, Cigarette, CigaretteOff, Loader2, User, Mail, Phone, X 
+  CheckCircle, Calendar, Clock, AlertTriangle, 
+  Armchair, Cigarette, CigaretteOff, Loader2, User, Mail, Phone, 
+  ShoppingBag, Plus, Minus, X, Utensils
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image"; // Importante para las imágenes 1080x1080
 import { Montserrat } from "next/font/google";
-import { supabase } from "@/lib/supabaseClient"; // Conexión a tu DB
+import { supabase } from "@/lib/supabaseClient"; 
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
+
+// --- INTERFACES ---
+interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  image_url: string;
+  category: string;
+}
+
+interface CartItem extends Product {
+  quantity: number;
+}
 
 // --- 1. CONFIGURACIÓN DE ZONAS ---
 const ZONES = [
@@ -80,7 +96,7 @@ const ZONES = [
     }
 ];
 
-// --- 2. GENERADOR DE HORARIOS (Cada 15 min) ---
+// --- 2. GENERADOR DE HORARIOS ---
 const generateTimeSlots = () => {
     const times = [];
     let startHour = 12; 
@@ -88,8 +104,7 @@ const generateTimeSlots = () => {
     
     for (let h = startHour; h <= endHour; h++) {
         for (let m = 0; m < 60; m += 15) {
-            if (h === 12 && m < 30) continue; // Empieza 12:30
-            
+            if (h === 12 && m < 30) continue; 
             const hourStr = h.toString().padStart(2, '0');
             const minStr = m.toString().padStart(2, '0');
             times.push(`${hourStr}:${minStr}`);
@@ -101,6 +116,14 @@ const generateTimeSlots = () => {
 const TIME_SLOTS = generateTimeSlots();
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
+// --- DATOS DE EJEMPLO POR SI FALLA LA DB (FALLBACK) ---
+const MOCK_PRODUCTS: Product[] = [
+  { id: 1, name: "Tabla de Quesos", description: "Selección de quesos premium, frutos secos y miel.", price: 18990, category: "Tablas", image_url: "https://images.unsplash.com/photo-1631379578550-7038263db699?q=80&w=1000&auto=format&fit=crop" },
+  { id: 2, name: "Ceviche Mixto", description: "Pescado del día, camarones, leche de tigre y maíz.", price: 14500, category: "Entradas", image_url: "https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?q=80&w=1000&auto=format&fit=crop" },
+  { id: 3, name: "Pisco Sour Catedral", description: "Nuestra receta secreta, doble medida.", price: 7900, category: "Tragos", image_url: "https://images.unsplash.com/photo-1510626176961-4b57d4fbad03?q=80&w=1000&auto=format&fit=crop" },
+  { id: 4, name: "Limonada Menta Jengibre", description: "Refrescante y natural.", price: 4500, category: "Bebidas", image_url: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=1000&auto=format&fit=crop" },
+];
+
 export default function BookingPage() {
   const [step, setStep] = useState(1);
   
@@ -110,17 +133,22 @@ export default function BookingPage() {
   const [time, setTime] = useState("");
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   
-  // Datos del Cliente (Nuevo Formulario)
+  // Datos del Cliente
   const [userData, setUserData] = useState({ name: "", email: "", phone: "" });
 
-  // Estado de envío
+  // Estado de envío y Reserva
   const [bookingCode, setBookingCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // --- NUEVO: ESTADOS PARA EL MENÚ PRE-ORDER ---
+  const [showMenu, setShowMenu] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isOrdering, setIsOrdering] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+
   const currentMonth = MONTHS[new Date().getMonth()];
   const currentYear = new Date().getFullYear();
-  
-  // Generar días del mes actual
   const daysInMonth = new Date(currentYear, new Date().getMonth() + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
@@ -128,7 +156,51 @@ export default function BookingPage() {
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
-  // --- FUNCIÓN PRINCIPAL: GUARDAR EN SUPABASE ---
+  // --- EFECTO: CARGAR PRODUCTOS AL ENTRAR AL PASO 4 O AL ABRIR MENU ---
+  useEffect(() => {
+    const fetchProducts = async () => {
+        // Intentamos cargar de Supabase
+        const { data, error } = await supabase
+            .from('productos_reserva') // Asegúrate de crear esta tabla
+            .select('*')
+            .eq('active', true);
+        
+        if (!error && data && data.length > 0) {
+            setProducts(data);
+        } else {
+            // Si no hay tabla o datos, usamos los Mock para que se vea el diseño
+            setProducts(MOCK_PRODUCTS); 
+        }
+    };
+    
+    fetchProducts();
+  }, []);
+
+  // --- LÓGICA DEL CARRITO ---
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+        const existing = prev.find(item => item.id === product.id);
+        if (existing) {
+            return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        }
+        return [...prev, { ...product, quantity: 1 }];
+    });
+  };
+
+  const removeFromCart = (productId: number) => {
+    setCart(prev => {
+        const existing = prev.find(item => item.id === productId);
+        if (existing && existing.quantity > 1) {
+            return prev.map(item => item.id === productId ? { ...item, quantity: item.quantity - 1 } : item);
+        }
+        return prev.filter(item => item.id !== productId);
+    });
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // --- GUARDAR RESERVA ---
   const handleConfirmReservation = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -141,26 +213,57 @@ export default function BookingPage() {
               name: userData.name,
               email: userData.email,
               phone: userData.phone,
-              date_reserva: `${selectedDate} de ${currentMonth}`, // Formato legible
+              date_reserva: `${selectedDate} de ${currentMonth}`,
               time_reserva: time,
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
               code: generatedCode,
-              status: 'pendiente' // Por defecto entra como pendiente
+              status: 'pendiente'
           }]);
 
           if (error) throw error;
 
-          // Éxito
           setBookingCode(generatedCode);
           setStep(4); // Ir al ticket final
 
       } catch (error) {
           console.error("Error reservando:", error);
-          alert("Hubo un problema al procesar tu reserva. Por favor intenta nuevamente.");
+          alert("Hubo un problema al procesar tu reserva.");
       } finally {
           setIsSubmitting(false);
       }
+  };
+
+  // --- GUARDAR PEDIDO PREVIO ---
+  const handleSubmitOrder = async () => {
+    if (cart.length === 0) return;
+    setIsOrdering(true);
+
+    try {
+        // Actualizamos la reserva existente con el pedido
+        // Asegúrate de tener una columna 'pre_order' de tipo JSONB en tu tabla 'reservas'
+        const { error } = await supabase
+            .from('reservas')
+            .update({ 
+                pre_order: cart,
+                total_pre_order: cartTotal
+            })
+            .eq('code', bookingCode);
+
+        if (error) throw error;
+
+        setOrderConfirmed(true);
+        setTimeout(() => {
+            setShowMenu(false);
+            setCart([]); // Limpiar carrito tras éxito
+        }, 2000);
+
+    } catch (error) {
+        console.error("Error al guardar pedido:", error);
+        alert("No se pudo guardar el pedido. Intenta nuevamente.");
+    } finally {
+        setIsOrdering(false);
+    }
   };
 
   // Animaciones
@@ -349,7 +452,7 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* PASO 3: FORMULARIO DE DATOS (EL PASO CLAVE PARA SUPABASE) */}
+          {/* PASO 3: FORMULARIO */}
           {step === 3 && (
             <motion.div 
                 key="step3"
@@ -358,76 +461,76 @@ export default function BookingPage() {
                 initial="enter" animate="center" exit="exit"
             >
                  <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-lg mb-6">
-                     <div className="text-center mb-6">
-                        <h3 className="text-lg font-bold text-white uppercase tracking-wide">Tus Datos</h3>
-                        <p className="text-xs text-zinc-500">Necesarios para confirmar tu reserva.</p>
-                     </div>
-                     
-                     <form onSubmit={handleConfirmReservation} className="space-y-4">
-                         {/* Nombre */}
-                         <div>
-                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Nombre Completo</label>
-                             <div className="relative">
-                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
-                                <input 
-                                    required 
-                                    type="text" 
-                                    placeholder="Ej: Juan Pérez"
-                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
-                                    value={userData.name} 
-                                    onChange={e => setUserData({...userData, name: e.target.value})} 
-                                />
-                             </div>
-                         </div>
+                      <div className="text-center mb-6">
+                         <h3 className="text-lg font-bold text-white uppercase tracking-wide">Tus Datos</h3>
+                         <p className="text-xs text-zinc-500">Necesarios para confirmar tu reserva.</p>
+                      </div>
+                      
+                      <form onSubmit={handleConfirmReservation} className="space-y-4">
+                          {/* Nombre */}
+                          <div>
+                              <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Nombre Completo</label>
+                              <div className="relative">
+                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
+                                 <input 
+                                     required 
+                                     type="text" 
+                                     placeholder="Ej: Juan Pérez"
+                                     className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
+                                     value={userData.name} 
+                                     onChange={e => setUserData({...userData, name: e.target.value})} 
+                                 />
+                              </div>
+                          </div>
 
-                         {/* Email */}
-                         <div>
-                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Correo Electrónico</label>
-                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
-                                <input 
-                                    required 
-                                    type="email" 
-                                    placeholder="tucorreo@ejemplo.com"
-                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
-                                    value={userData.email} 
-                                    onChange={e => setUserData({...userData, email: e.target.value})} 
-                                />
-                             </div>
-                         </div>
+                          {/* Email */}
+                          <div>
+                              <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Correo Electrónico</label>
+                              <div className="relative">
+                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
+                                 <input 
+                                     required 
+                                     type="email" 
+                                     placeholder="tucorreo@ejemplo.com"
+                                     className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
+                                     value={userData.email} 
+                                     onChange={e => setUserData({...userData, email: e.target.value})} 
+                                 />
+                              </div>
+                          </div>
 
-                         {/* Teléfono */}
-                         <div>
-                             <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Teléfono</label>
-                             <div className="relative">
-                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
-                                <input 
-                                    required 
-                                    type="tel" 
-                                    placeholder="+569 1234 5678"
-                                    className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
-                                    value={userData.phone} 
-                                    onChange={e => setUserData({...userData, phone: e.target.value})} 
-                                />
-                             </div>
-                         </div>
+                          {/* Teléfono */}
+                          <div>
+                              <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 ml-1">Teléfono</label>
+                              <div className="relative">
+                                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"/>
+                                 <input 
+                                     required 
+                                     type="tel" 
+                                     placeholder="+569 1234 5678"
+                                     className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 pl-10 text-white text-sm focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] outline-none transition-all placeholder:text-zinc-600" 
+                                     value={userData.phone} 
+                                     onChange={e => setUserData({...userData, phone: e.target.value})} 
+                                 />
+                              </div>
+                          </div>
 
-                         <div className="pt-4">
-                             <button 
-                                type="submit" 
-                                disabled={isSubmitting} 
-                                className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
-                             >
-                                 {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="animate-spin w-5 h-5"/> Procesando...
-                                    </>
-                                 ) : (
-                                    "Finalizar Reserva"
-                                 )}
-                             </button>
-                         </div>
-                     </form>
+                          <div className="pt-4">
+                              <button 
+                                 type="submit" 
+                                 disabled={isSubmitting} 
+                                 className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
+                              >
+                                  {isSubmitting ? (
+                                      <>
+                                          <Loader2 className="animate-spin w-5 h-5"/> Procesando...
+                                      </>
+                                  ) : (
+                                      "Finalizar Reserva"
+                                  )}
+                              </button>
+                          </div>
+                      </form>
                  </div>
                  
                  <button onClick={prevStep} className="w-full py-3 text-xs font-bold text-zinc-500 uppercase hover:text-white transition-colors">
@@ -436,15 +539,15 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* PASO 4: TICKET DE CONFIRMACIÓN */}
+          {/* PASO 4: TICKET DE CONFIRMACIÓN + MENÚ EXPRESS */}
           {step === 4 && (
              <motion.div 
                 key="step4" 
                 initial={{ scale: 0.9, opacity: 0 }} 
                 animate={{ scale: 1, opacity: 1 }} 
-                className="pt-2 flex flex-col items-center pb-10"
+                className="pt-2 flex flex-col items-center pb-24"
              >
-                <div className="w-full bg-white text-black rounded-3xl overflow-hidden shadow-2xl relative max-w-sm">
+                <div className="w-full bg-white text-black rounded-3xl overflow-hidden shadow-2xl relative max-w-sm mb-6">
                     {/* Header Ticket */}
                     <div className="bg-black p-8 text-center relative border-b-4 border-[#DAA520]">
                         <div className="absolute top-[-50%] left-1/2 -translate-x-1/2 w-40 h-40 bg-[#DAA520]/30 rounded-full blur-3xl" />
@@ -506,7 +609,41 @@ export default function BookingPage() {
                     </div>
                 </div>
 
-                <div className="mt-8 w-full px-6">
+                {/* BOTÓN PARA ABRIR MENÚ DE PEDIDOS ANTICIPADOS */}
+                {!orderConfirmed && (
+                    <div className="w-full px-6 mb-4">
+                         <button 
+                            onClick={() => setShowMenu(true)}
+                            className="w-full bg-gradient-to-r from-zinc-800 to-black border border-white/20 text-white p-4 rounded-2xl flex items-center justify-between shadow-xl group hover:border-[#DAA520]/50 transition-all"
+                         >
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-[#DAA520]/20 rounded-xl text-[#DAA520] group-hover:scale-110 transition-transform">
+                                    <Utensils className="w-6 h-6" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="font-bold text-sm uppercase text-[#DAA520]">¿Quieres adelantar algo?</p>
+                                    <p className="text-[10px] text-zinc-400">Pide productos para tener listos al llegar.</p>
+                                </div>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:text-white" />
+                         </button>
+                    </div>
+                )}
+                
+                {/* MENSAJE DE CONFIRMACIÓN DE PEDIDO */}
+                {orderConfirmed && (
+                    <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="w-full px-6 mb-4">
+                        <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-2xl flex items-center gap-3">
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                            <div>
+                                <p className="text-sm font-bold text-white">¡Pedido Adelantado Recibido!</p>
+                                <p className="text-[10px] text-zinc-400">Tus productos estarán listos en tu mesa.</p>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                <div className="w-full px-6">
                     <Link href="/" className="block w-full bg-zinc-900 text-white py-4 rounded-xl font-bold text-center border border-zinc-800 hover:bg-black transition-colors uppercase tracking-widest text-xs">
                         Volver al Inicio
                     </Link>
@@ -516,6 +653,82 @@ export default function BookingPage() {
 
         </AnimatePresence>
       </div>
+
+      {/* --- OVERLAY DEL MENÚ DE PRE-ORDEN --- */}
+      <AnimatePresence>
+        {showMenu && (
+            <motion.div 
+                initial={{ y: "100%" }} 
+                animate={{ y: 0 }} 
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed inset-0 z-50 bg-black flex flex-col"
+            >
+                {/* Header Menú */}
+                <div className="p-6 pb-4 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md border-b border-white/10">
+                    <button onClick={() => setShowMenu(false)} className="p-2 rounded-full hover:bg-white/10">
+                        <ArrowLeft className="w-6 h-6 text-white" />
+                    </button>
+                    <div className="text-center">
+                        <h2 className="text-lg font-bold text-white uppercase tracking-wider">Menú Express</h2>
+                        <p className="text-[10px] text-zinc-400">Adelanta tu pedido</p>
+                    </div>
+                    <div className="w-10" /> {/* Espaciador */}
+                </div>
+
+                {/* Lista de Productos */}
+                <div className="flex-1 overflow-y-auto p-4 pb-32 custom-scrollbar">
+                    <div className="grid grid-cols-1 gap-4">
+                        {products.map((product) => {
+                            const inCart = cart.find(item => item.id === product.id);
+                            return (
+                                <div key={product.id} className="bg-zinc-900 border border-white/5 rounded-2xl p-3 flex gap-4 items-center shadow-lg">
+                                    <div className="relative w-24 h-24 rounded-xl overflow-hidden shrink-0 bg-zinc-800">
+                                        <Image 
+                                            src={product.image_url} 
+                                            alt={product.name}
+                                            fill
+                                            className="object-cover"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-bold text-white text-sm truncate">{product.name}</h3>
+                                        <p className="text-[10px] text-zinc-500 line-clamp-2 leading-tight mt-1">{product.description}</p>
+                                        <p className="text-[#DAA520] font-bold text-sm mt-2">${product.price.toLocaleString('es-CL')}</p>
+                                    </div>
+                                    <div className="flex flex-col items-center gap-2 bg-black rounded-lg p-1 border border-white/10">
+                                        <button onClick={() => addToCart(product)} className="w-8 h-8 flex items-center justify-center text-white bg-zinc-800 rounded-md hover:bg-[#DAA520] hover:text-black transition-colors">
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                        <span className="text-xs font-bold w-6 text-center">{inCart?.quantity || 0}</span>
+                                        <button onClick={() => removeFromCart(product.id)} className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${inCart ? 'text-white bg-zinc-800 hover:bg-red-900' : 'text-zinc-600 bg-zinc-900'}`} disabled={!inCart}>
+                                            <Minus className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+
+                {/* Footer Carrito */}
+                <div className="absolute bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 safe-area-bottom">
+                    <div className="flex justify-between items-center mb-4 px-2">
+                        <span className="text-xs font-bold text-zinc-400 uppercase">Total Estimado</span>
+                        <span className="text-xl font-bold text-white">${cartTotal.toLocaleString('es-CL')}</span>
+                    </div>
+                    <button 
+                        onClick={handleSubmitOrder}
+                        disabled={cart.length === 0 || isOrdering}
+                        className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(218,165,32,0.3)]"
+                    >
+                         {isOrdering ? <Loader2 className="animate-spin" /> : <ShoppingBag className="w-5 h-5" />}
+                         {isOrdering ? "Enviando..." : `Confirmar Pedido (${cartCount})`}
+                    </button>
+                </div>
+            </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
