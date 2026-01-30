@@ -52,7 +52,7 @@ const LARGE_LINKS = [
     title: "Promociones", 
     icon: CustomBadgePercentIcon, 
     href: "/promociones", 
-    // IMAGEN ACTUALIZADA AQUÍ
+    // SE CONFIRMA LA RUTA EXACTA SEGÚN TU GITHUB
     image: "/promociones.jpeg",
     overlay: "from-[#FFCC00]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
@@ -64,7 +64,6 @@ const LARGE_LINKS = [
     title: "Reservar Mesa", 
     icon: CalendarCheck, 
     href: "/reservas", 
-    // CORREGIDO: Extension .jpg
     image: "/reservas.jpg",
     overlay: "from-[#28A745]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
@@ -104,7 +103,6 @@ const BENTO_LINKS = [
     id: "trabajo", 
     title: "Únete al Equipo", 
     href: "/trabajo", 
-    // CORREGIDO: Extension .jpg
     image: "/unetealequipo.jpg",
     overlay: "from-[#2A9D8F]/90 via-black/80 via-40% to-transparent",
     colorClass: "text-[#2A9D8F] bg-[#2A9D8F]/20 border-[#2A9D8F]/30"
