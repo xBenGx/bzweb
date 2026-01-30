@@ -10,7 +10,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Montserrat } from "next/font/google";
-// Importamos el cliente de Supabase
+// Importamos el cliente de Supabase (que actualizaste en el Paso 1)
 import { supabase } from "@/lib/supabaseClient";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
@@ -44,15 +44,21 @@ export default function AdminLoginPage() {
         });
 
         if (error) {
+            // Manejo de errores comunes de Supabase en español
+            if (error.message.includes("Invalid login")) throw new Error("Correo o contraseña incorrectos.");
+            if (error.message.includes("Email not confirmed")) throw new Error("Debes confirmar tu correo primero.");
             throw error;
         }
 
         // Login exitoso
+        // 1. Refrescamos para que el middleware lea la cookie nueva
+        router.refresh(); 
+        // 2. Redirigimos al dashboard
         router.push("/admin/dashboard");
-        router.refresh(); // Asegura que el middleware detecte la nueva sesión
 
     } catch (error: any) {
-        setErrorMsg("Credenciales incorrectas o acceso denegado.");
+        console.error("Login error:", error);
+        setErrorMsg(error.message || "Credenciales incorrectas o acceso denegado.");
     } finally {
         setIsLoading(false);
     }
@@ -66,9 +72,9 @@ export default function AdminLoginPage() {
       setSuccessMsg(null);
 
       try {
-          // Esto enviará un correo al usuario con un link para poner una nueva contraseña
+          // Esto enviará un correo al usuario con un link
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/admin/update-password`, // Asegúrate de crear esta página luego si quieres un flujo custom, o dejar que supabase maneje el default
+              redirectTo: `${window.location.origin}/admin/update-password`,
           });
 
           if (error) throw error;
