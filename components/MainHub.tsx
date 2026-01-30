@@ -52,7 +52,8 @@ const LARGE_LINKS = [
     title: "Promociones", 
     icon: CustomBadgePercentIcon, 
     href: "/promociones", 
-    image: "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?q=80&w=1470&auto=format&fit=crop",
+    // IMAGEN ACTUALIZADA AQUÍ
+    image: "/promociones.jpeg",
     overlay: "from-[#FFCC00]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
     textColor: "text-white",
