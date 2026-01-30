@@ -8,7 +8,7 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag // ICONOS NUEVOS AGREGADOS
+    Utensils, ShoppingBag
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,7 +21,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, // NUEVA PESTAÑA AGREGADA
+    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, // PESTAÑA PARA EL MENÚ DE PRE-ORDEN
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]); // ESTADO NUEVO PARA EL MENÚ
+  const [menuItems, setMenuItems] = useState<any[]>([]); // ESTADO PARA EL MENÚ DE RESERVAS
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -54,8 +54,9 @@ export default function DashboardPage() {
 
     const channel = supabase
       .channel('realtime-dashboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData()) // Escuchar cambios en menú
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData()) // Escuchar cambios en el menú
       .subscribe();
 
     return () => {
@@ -84,7 +85,7 @@ export default function DashboardPage() {
       const { data: clientesData } = await supabase.from('clientes').select('*').order('nombre', { ascending: true });
       if (clientesData) setClientes(clientesData);
 
-      // 6. Menú Express (NUEVO)
+      // 6. Menú Express (Productos Reserva)
       const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
       if (menuData) setMenuItems(menuData);
   };
@@ -96,14 +97,14 @@ export default function DashboardPage() {
   const [isShowModalOpen, setIsShowModalOpen] = useState(false);
   const [currentShow, setCurrentShow] = useState<any>(null);
 
-  // ESTADOS MODAL MENÚ (NUEVO)
+  // MODAL PARA MENÚ EXPRESS
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- MANEJADOR DE IMAGEN (ACTUALIZADO PARA INCLUIR MENÚ) ---
+  // --- MANEJADOR DE IMAGEN (Unificado) ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
@@ -176,11 +177,8 @@ export default function DashboardPage() {
   const handleDeleteClient = async (id: number) => {
       if(confirm("¿Estás seguro de eliminar este cliente?")) {
           const { error } = await supabase.from('clientes').delete().eq('id', id);
-          if (error) {
-            alert("Error al eliminar: " + error.message);
-          } else {
-            fetchData();
-          }
+          if (error) alert("Error al eliminar: " + error.message);
+          else fetchData();
       }
   };
 
@@ -228,7 +226,6 @@ export default function DashboardPage() {
           const dParts = c.fecha_nacimiento.split('-');
           const dMonth = parseInt(dParts[1]) - 1;
           const dDay = parseInt(dParts[2]);
-          
           return dMonth === filterMonth && dDay === filterDay;
       });
   };
@@ -240,50 +237,29 @@ export default function DashboardPage() {
   // ---------------------------------------------------------
   const handleOpenPromoModal = (promo: any = null) => {
       setSelectedFile(null);
-      setCurrentPromo(promo || { 
-          title: "", subtitle: "", category: "semana", day: "", 
-          price: 0, tag: "", active: true, desc_text: "", image_url: "" 
-      });
+      setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
       setIsPromoModalOpen(true);
   };
 
   const handleSavePromo = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
-
       try {
           let finalImageUrl = currentPromo.image_url;
           if (selectedFile) {
               const uploadedUrl = await uploadImageToSupabase();
               if (uploadedUrl) finalImageUrl = uploadedUrl;
           }
-
           const promoData = {
-              title: currentPromo.title,
-              subtitle: currentPromo.subtitle,
-              category: currentPromo.category,
-              day: currentPromo.day,
-              price: currentPromo.price,
-              tag: currentPromo.tag,
-              desc_text: currentPromo.desc_text,
-              active: currentPromo.active,
-              image_url: finalImageUrl
+              title: currentPromo.title, subtitle: currentPromo.subtitle, category: currentPromo.category,
+              day: currentPromo.day, price: currentPromo.price, tag: currentPromo.tag,
+              desc_text: currentPromo.desc_text, active: currentPromo.active, image_url: finalImageUrl
           };
-
-          if (currentPromo.id) {
-              await supabase.from('promociones').update(promoData).eq('id', currentPromo.id);
-          } else {
-              await supabase.from('promociones').insert([promoData]);
-          }
-
+          if (currentPromo.id) await supabase.from('promociones').update(promoData).eq('id', currentPromo.id);
+          else await supabase.from('promociones').insert([promoData]);
           await fetchData();
           setIsPromoModalOpen(false);
-      } catch (error: any) {
-          console.error("Error guardando promo:", error);
-          alert(error.message);
-      } finally {
-          setIsLoading(false);
-      }
+      } catch (error: any) { alert(error.message); } finally { setIsLoading(false); }
   };
 
   const handleDeletePromo = async (id: number) => {
@@ -299,13 +275,17 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE MENÚ EXPRESS (NUEVO)
+  // LÓGICA GESTIÓN DE MENÚ EXPRESS / RESERVA (NUEVO)
   // ---------------------------------------------------------
   const handleOpenMenuModal = (item: any = null) => {
       setSelectedFile(null);
       setCurrentMenuItem(item || { 
-          name: "", description: "", price: 0, 
-          image_url: "", active: true, category: "General" 
+          name: "", 
+          description: "", 
+          price: 0, 
+          image_url: "", 
+          active: true, 
+          category: "General" 
       });
       setIsMenuModalOpen(true);
   };
@@ -313,7 +293,6 @@ export default function DashboardPage() {
   const handleSaveMenuItem = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
-
       try {
           let finalImageUrl = currentMenuItem.image_url;
           if (selectedFile) {
@@ -363,91 +342,38 @@ export default function DashboardPage() {
   // ---------------------------------------------------------
   const handleOpenShowModal = (show: any = null) => {
       setSelectedFile(null);
-      setCurrentShow(show || { 
-          title: "", subtitle: "", description: "", 
-          date_event: "", time_event: "", end_time: "", 
-          location: "Boulevard Zapallar, Curicó", 
-          sold: 0, total: 200, active: true, image_url: "",
-          tag: "", is_adult: false,
-          tickets: [] 
-      });
+      setCurrentShow(show || { title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] });
       setIsShowModalOpen(true);
   };
 
-  const addTicketType = () => {
-      const newTicket = { id: Date.now().toString(), name: "", price: 0, desc: "" };
-      setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), newTicket] });
-  };
-
-  const removeTicketType = (index: number) => {
-      const newTickets = [...currentShow.tickets];
-      newTickets.splice(index, 1);
-      setCurrentShow({ ...currentShow, tickets: newTickets });
-  };
-
-  const updateTicketType = (index: number, field: string, value: any) => {
-      const newTickets = [...currentShow.tickets];
-      let safeValue = value;
-      if (field === 'price') {
-          safeValue = isNaN(value) ? 0 : value;
-      }
-      newTickets[index] = { ...newTickets[index], [field]: safeValue };
-      setCurrentShow({ ...currentShow, tickets: newTickets });
-  };
+  const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
+  const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
+  const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
 
   const handleSaveShow = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
-
       try {
           let finalImageUrl = currentShow.image_url;
           if (selectedFile) {
               const uploadedUrl = await uploadImageToSupabase();
               if (uploadedUrl) finalImageUrl = uploadedUrl;
-              else throw new Error("Falló la subida de imagen");
           }
-
           const showData = {
-              title: currentShow.title,
-              subtitle: currentShow.subtitle,
-              description: currentShow.description,
-              date_event: currentShow.date_event,
-              time_event: currentShow.time_event,
-              end_time: currentShow.end_time,
-              location: currentShow.location,
-              sold: currentShow.sold || 0,
-              total: currentShow.total || 0,
-              image_url: finalImageUrl,
-              tag: currentShow.tag,
-              is_adult: currentShow.is_adult,
-              tickets: currentShow.tickets
+              title: currentShow.title, subtitle: currentShow.subtitle, description: currentShow.description,
+              date_event: currentShow.date_event, time_event: currentShow.time_event, end_time: currentShow.end_time,
+              location: currentShow.location, sold: currentShow.sold || 0, total: currentShow.total || 0,
+              image_url: finalImageUrl, tag: currentShow.tag, is_adult: currentShow.is_adult, tickets: currentShow.tickets
           };
-
-          let result;
-          if (currentShow.id) {
-              result = await supabase.from('shows').update(showData).eq('id', currentShow.id);
-          } else {
-              result = await supabase.from('shows').insert([showData]);
-          }
-
-          if (result.error) throw result.error;
-
+          if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id);
+          else await supabase.from('shows').insert([showData]);
           await fetchData();
           setIsShowModalOpen(false);
-
-      } catch (error: any) {
-          console.error("Error al guardar show:", error);
-          alert(error.message);
-      } finally {
-          setIsLoading(false);
-      }
+      } catch (error: any) { alert(error.message); } finally { setIsLoading(false); }
   };
 
   const handleDeleteShow = async (id: number) => {
-      if(confirm("¿Eliminar show?")) {
-          await supabase.from('shows').delete().eq('id', id);
-          fetchData();
-      }
+      if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); }
   };
 
   // ---------------------------------------------------------
@@ -542,7 +468,14 @@ export default function DashboardPage() {
                                         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><CheckCircle className="w-4 h-4 text-green-500"/></div>
                                         <div><p className="text-xs text-white">Reserva de {res.name}</p><p className="text-[10px] text-zinc-500">{res.date_reserva} • {res.zone}</p></div>
                                     </div>
-                                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${res.status === 'confirmada' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>{res.status}</span>
+                                    <div className="flex items-center gap-2">
+                                        {res.total_pre_order > 0 && (
+                                            <span className="text-[9px] font-bold text-[#DAA520] bg-[#DAA520]/10 px-2 py-1 rounded-full flex items-center gap-1">
+                                                <ShoppingBag className="w-3 h-3"/> Pedido
+                                            </span>
+                                        )}
+                                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${res.status === 'confirmada' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>{res.status}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -550,40 +483,62 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS */}
+            {/* 2. GESTIÓN DE RESERVAS (CON DETALLE DEL PEDIDO ANTICIPADO) */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="space-y-3">
                         {reservas.length === 0 ? <p className="text-zinc-500">No hay reservas registradas.</p> : reservas.map((res) => (
-                            <div key={res.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
-                                <div className="flex items-center gap-4 w-full md:w-auto">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[#DAA520]">{res.guests}</div>
-                                    <div>
-                                        <h4 className="font-bold text-white text-sm">{res.name}</h4>
-                                        <div className="flex gap-2 text-xs text-zinc-400">
-                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {res.date_reserva} - {res.time_reserva}</span>
-                                            <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {res.zone}</span>
+                            <div key={res.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                    <div className="flex items-center gap-4 w-full md:w-auto">
+                                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[#DAA520]">{res.guests}</div>
+                                        <div>
+                                            <h4 className="font-bold text-white text-sm">{res.name}</h4>
+                                            <div className="flex gap-2 text-xs text-zinc-400">
+                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {res.date_reserva} - {res.time_reserva}</span>
+                                                <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {res.zone}</span>
+                                            </div>
+                                            <p className="text-[10px] text-zinc-500 mt-1">{res.phone} • {res.email} • {res.code}</p>
                                         </div>
-                                        <p className="text-[10px] text-zinc-500 mt-1">{res.phone} • {res.email} • {res.code}</p>
+                                    </div>
+                                    <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto justify-end items-end">
+                                        {res.status === "pendiente" ? (
+                                            <div className="flex gap-2">
+                                                <button onClick={() => updateReservaStatus(res.id, 'confirmada')} className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30">Aceptar</button>
+                                                <button onClick={() => updateReservaStatus(res.id, 'rechazada')} className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30">Rechazar</button>
+                                            </div>
+                                        ) : (
+                                            <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400' : 'bg-zinc-800 text-red-400'}`}>{res.status}</span>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex gap-2 w-full md:w-auto justify-end">
-                                    {res.status === "pendiente" ? (
-                                        <>
-                                            <button onClick={() => updateReservaStatus(res.id, 'confirmada')} className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30">Aceptar</button>
-                                            <button onClick={() => updateReservaStatus(res.id, 'rechazada')} className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30">Rechazar</button>
-                                        </>
-                                    ) : (
-                                        <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400' : 'bg-zinc-800 text-red-400'}`}>{res.status}</span>
-                                    )}
-                                </div>
+
+                                {/* SECCIÓN DE PEDIDO ANTICIPADO (SI EXISTE) */}
+                                {res.pre_order && res.pre_order.length > 0 && (
+                                    <div className="mt-4 bg-black/40 rounded-lg p-3 border border-[#DAA520]/20">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-xs font-bold text-[#DAA520] uppercase flex items-center gap-2">
+                                                <ShoppingBag className="w-3 h-3" /> Pedido Anticipado
+                                            </p>
+                                            <span className="text-sm font-bold text-white">${res.total_pre_order?.toLocaleString() || 0}</span>
+                                        </div>
+                                        <div className="space-y-1">
+                                            {res.pre_order.map((item: any, idx: number) => (
+                                                <div key={idx} className="flex justify-between text-[11px] text-zinc-400 border-b border-white/5 pb-1 last:border-0">
+                                                    <span>{item.quantity}x {item.name}</span>
+                                                    <span>${(item.price * item.quantity).toLocaleString()}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
                 </motion.div>
             )}
 
-            {/* --- NUEVA PESTAÑA: MENÚ EXPRESS --- */}
+            {/* 3. MENÚ RESERVA / EXPRESS (¡NUEVO!) */}
             {activeTab === "menu_express" && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-between items-center mb-6">
@@ -619,7 +574,9 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* ... CLIENTES, SHOWS, PROMOS, ETC. SE MANTIENEN IGUAL ... */}
+            {/* ... RESTO DE LAS PESTAÑAS (Clientes, Shows, Promos, Eventos, RRHH) SE MANTIENEN IGUAL ... */}
+            {/* Solo pego el resto para que el archivo esté completo y no se corte */}
+            
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -733,7 +690,7 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Promociones Activas</h3>
                         <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                            <Plus className="w-4 h-4" /> Nueva Promo
+                            <Plus className="w-4 h-4" /> Nuevo Promo
                         </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
