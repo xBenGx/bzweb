@@ -2,26 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // 1. Respuesta base inalterada
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
-  // Verificación de seguridad para evitar el Error 503
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    console.error("⚠️ FALTAN LAS VARIABLES DE ENTORNO EN HOSTINGER");
-    // Si faltan las claves, permitimos el paso para que el sitio NO se caiga (503)
-    // pero el login no funcionará hasta que las pongas.
-    return response;
-  }
-
+  // 2. Gestión de Cookies de Supabase (Necesario para que la sesión no se pierda)
   const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
@@ -42,22 +33,9 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Protección de rutas
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    const isAuthRoute = 
-        request.nextUrl.pathname === '/admin/login' || 
-        request.nextUrl.pathname === '/admin/update-password';
-
-    if (user && isAuthRoute) {
-        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
-    }
-
-    if (!user && !isAuthRoute) {
-        return NextResponse.redirect(new URL('/admin/login', request.url));
-    }
-  }
+  // 3. Refrescamos la sesión pero NO redirigimos
+  // Esto evita bucles infinitos y errores 503
+  await supabase.auth.getUser()
 
   return response
 }
