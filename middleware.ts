@@ -18,13 +18,22 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+        // CORRECCIÓN: Aquí agregamos el tipado al argumento 'cookiesToSet'
+        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
+          
+          // Actualizamos las cookies en la petición entrante
+          cookiesToSet.forEach(({ name, value }) => 
+            request.cookies.set(name, value)
+          )
+          
+          // Recreamos la respuesta para incluir las cookies actualizadas de la petición
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           })
+          
+          // Actualizamos las cookies en la respuesta saliente
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           )

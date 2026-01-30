@@ -45,9 +45,21 @@ export default function DashboardPage() {
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   
-  // --- CARGA DE DATOS ---
+  // --- CARGA DE DATOS Y REALTIME ---
   useEffect(() => {
     fetchData();
+
+    // SUSCRIPCIÓN REALTIME: Escucha cambios en la tabla 'clientes' para actualizar auto
+    const channel = supabase
+      .channel('realtime-clientes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => {
+        fetchData(); // Recarga los datos si hay cambios (insert/update/delete)
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchData = async () => {
@@ -115,7 +127,7 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE CLIENTES (NUEVO)
+  // LÓGICA GESTIÓN DE CLIENTES (CORREGIDA Y CONECTADA)
   // ---------------------------------------------------------
   const handleOpenClientModal = (client: any = null) => {
       setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
@@ -132,24 +144,35 @@ export default function DashboardPage() {
               fecha_nacimiento: currentClient.fecha_nacimiento
           };
 
+          let result;
           if (currentClient.id) {
-              await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
+              result = await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
           } else {
-              await supabase.from('clientes').insert([clientData]);
+              result = await supabase.from('clientes').insert([clientData]);
           }
+
+          // Verificamos explícitamente si hubo error en la base de datos
+          if (result.error) throw result.error;
+
+          // Si todo sale bien, recargamos y cerramos
           await fetchData();
           setIsClientModalOpen(false);
       } catch (error: any) {
-          alert("Error: " + error.message);
+          console.error("Error al guardar cliente:", error);
+          alert("Error al guardar: " + error.message);
       } finally {
           setIsLoading(false);
       }
   };
 
   const handleDeleteClient = async (id: number) => {
-      if(confirm("¿Eliminar este cliente?")) {
-          await supabase.from('clientes').delete().eq('id', id);
-          fetchData();
+      if(confirm("¿Estás seguro de eliminar este cliente?")) {
+          const { error } = await supabase.from('clientes').delete().eq('id', id);
+          if (error) {
+            alert("Error al eliminar: " + error.message);
+          } else {
+            fetchData();
+          }
       }
   };
 
@@ -496,7 +519,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* --- NUEVA PESTAÑA: CLIENTES --- */}
+            {/* --- NUEVA PESTAÑA: CLIENTES (Optimizado) --- */}
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {/* Header Clientes */}
