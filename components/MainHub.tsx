@@ -52,8 +52,8 @@ const LARGE_LINKS = [
     title: "Promociones", 
     icon: CustomBadgePercentIcon, 
     href: "/promociones", 
-    // SE CONFIRMA LA RUTA EXACTA SEGÚN TU GITHUB
-    image: "/promociones.jpeg",
+    // IMAGEN ACTUALIZADA A PROMOS.JPEG
+    image: "/promos.jpeg",
     overlay: "from-[#FFCC00]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
     textColor: "text-white",
