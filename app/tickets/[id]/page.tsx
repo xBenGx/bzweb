@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     ArrowLeft, Calendar, MapPin, Clock, Minus, Plus, 
-    ShoppingCart, Lock, Share2, AlertCircle, 
-    Ticket as TicketIcon, CheckCircle, X, Loader2, AlertTriangle
+    ShoppingCart, Share2, AlertCircle, 
+    Ticket as TicketIcon, CheckCircle, X, Loader2, AlertTriangle, Shield
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -152,7 +152,7 @@ export default function EventDetailPage() {
   const totalCount = Object.values(ticketsSelection).reduce((a, b) => a + b, 0);
 
   return (
-    <main className={`min-h-screen bg-black text-white pb-32 overflow-x-hidden ${montserrat.className}`}>
+    <main className={`min-h-screen bg-black text-white pb-40 overflow-x-hidden ${montserrat.className}`}>
       
       {/* --- HEADER EVENTO (HERO) --- */}
       <div className="relative h-[450px] w-full">
@@ -245,6 +245,40 @@ export default function EventDetailPage() {
         <div className="text-zinc-400 text-sm leading-relaxed space-y-4">
             <p>{event.description}</p>
             <p>Ven a disfrutar de una experiencia única en Boulevard Zapallar. Contamos con estacionamiento privado, seguridad reforzada y la mejor coctelería de autor.</p>
+        </div>
+      </div>
+
+      {/* --- POLÍTICAS DE COMPRA (NUEVA SECCIÓN) --- */}
+      <div className="px-4 mb-8">
+        <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3 text-zinc-300">
+                <Shield className="w-4 h-4 text-[#DAA520]" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">Políticas de Compra y Devoluciones</h4>
+            </div>
+            
+            <div className="text-[10px] text-zinc-500 space-y-3 leading-relaxed text-justify">
+                <p>
+                    Estimado cliente, por normativa de <strong>Boulevard Zapallar</strong>, declaramos expresamente que <strong>no se realizarán cambios ni devoluciones de dinero</strong> una vez finalizado el proceso de compra.
+                </p>
+                
+                <p>
+                    <strong>Excepción por Fuerza Mayor:</strong> Únicamente en caso de que el evento sea suspendido o cancelado por fuerza mayor, se procederá al reintegro del dinero por concepto de venta de entradas. Alternativamente, y solo si el cliente lo desea, se podrá optar por el canje de las entradas del evento cancelado por tickets para futuros eventos.
+                </p>
+
+                <p>
+                    <strong>Devolución por Cancelación:</strong> En caso de cancelación o suspensión definitiva del evento, la devolución de los montos recaudados se realizará previa autorización, coordinación y publicación oficial, en un plazo no mayor a <strong>15 días hábiles</strong>.
+                </p>
+
+                <p>
+                    Recomendamos revisar cuidadosamente los datos de su orden antes de confirmar la compra. Las entradas son nominativas y personalizadas.
+                </p>
+
+                <div className="bg-[#DAA520]/10 border border-[#DAA520]/20 p-2 rounded text-[#DAA520] font-bold text-center mt-2">
+                    AVISO IMPORTANTE: Según el tipo de evento, las mesas podrían ser compartidas.
+                </div>
+                
+                <p className="text-center pt-2 italic">Agradecemos su atención y preferencia.</p>
+            </div>
         </div>
       </div>
 
