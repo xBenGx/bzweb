@@ -41,7 +41,7 @@ const LARGE_LINKS = [
     id: "carta", 
     title: "Nuestra Carta", 
     icon: Utensils, 
-    href: "/carta", 
+    href: "https://menu.fu.do/boulevardzapallar/qr-menu", // LINK ACTUALIZADO
     image: "/menu.jpeg",
     overlay: "from-[#FF4500]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
@@ -74,7 +74,7 @@ const LARGE_LINKS = [
     title: "Show Musicales", 
     icon: Music, 
     href: "/tickets", 
-    image: "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?q=80&w=1470&auto=format&fit=crop",
+    image: "/shows.jpeg", // IMAGEN ACTUALIZADA
     overlay: "from-[#8338EC]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
     borderGlow: "group-hover:border-[#8338EC]/50 group-hover:shadow-[0_0_30px_rgba(131,56,236,0.3)]"
