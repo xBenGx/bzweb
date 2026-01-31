@@ -10,12 +10,9 @@ export default function FloatingCart() {
   // Calculamos la cantidad total de items
   const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Si no hay items, no mostramos el botón (opcional: puedes quitar esta línea si quieres que siempre se vea el menú)
-  // if (totalItems === 0) return null; 
-
   return (
     <AnimatePresence>
-      {(totalItems > 0) && ( // Solo mostramos si hay items, como tenías antes
+      {(totalItems > 0) && (
         <motion.button
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -27,7 +24,6 @@ export default function FloatingCart() {
         >
           <ShoppingCart className="w-6 h-6" />
           
-          {/* Badge con la cantidad */}
           <div className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-black shadow-sm">
             {totalItems}
           </div>
