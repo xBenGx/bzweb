@@ -8,7 +8,7 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag
+    Utensils, ShoppingBag, Send
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -32,6 +32,9 @@ const TABS = [
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("resumen");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // --- ESTADO PARA PROCESOS ASÍNCRONOS INDIVIDUALES (WHATSAPP) ---
+  const [processingId, setProcessingId] = useState<string | number | null>(null);
   
   // --- ESTADOS DE DATOS ---
   const [promos, setPromos] = useState<any[]>([]);
@@ -380,8 +383,10 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA RESERVAS & SOLICITUDES
+  // LÓGICA RESERVAS & SOLICITUDES (ACTUALIZADA CON WHATSAPP)
   // ---------------------------------------------------------
+  
+  // Función SIMPLE para actualizar estado (usada para rechazar)
   const updateReservaStatus = async (id: number, status: string) => {
       await supabase.from('reservas').update({ status }).eq('id', id);
       fetchData();
@@ -390,6 +395,37 @@ export default function DashboardPage() {
   const updateSolicitudStatus = async (id: number, status: string) => {
       await supabase.from('solicitudes').update({ status }).eq('id', id);
       fetchData();
+  };
+
+  // --- NUEVA FUNCIÓN: CONFIRMAR Y ENVIAR WHATSAPP AUTOMÁTICO ---
+  const handleConfirmReservation = async (reserva: any) => {
+    if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
+
+    setProcessingId(reserva.id); // Activar spinner para este item
+
+    try {
+      // Llamada a la API que creamos (Backend)
+      const response = await fetch("/api/admin/confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservaId: reserva.id }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        alert("✅ Reserva confirmada. WhatsApp y Ticket enviados correctamente.");
+        fetchData(); // Recargar datos
+      } else {
+        alert("⚠️ Reserva confirmada pero hubo error enviando el mensaje: " + (result.error || "Error desconocido"));
+        fetchData(); // Recargar igual para mostrar el cambio de estado
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error de conexión con el servidor.");
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   return (
@@ -507,11 +543,29 @@ export default function DashboardPage() {
                                     <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto justify-end items-end">
                                         {res.status === "pendiente" ? (
                                             <div className="flex gap-2">
-                                                <button onClick={() => updateReservaStatus(res.id, 'confirmada')} className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30">Aceptar</button>
-                                                <button onClick={() => updateReservaStatus(res.id, 'rechazada')} className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30">Rechazar</button>
+                                                <button 
+                                                    onClick={() => handleConfirmReservation(res)} 
+                                                    disabled={processingId === res.id}
+                                                    className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
+                                                >
+                                                    {processingId === res.id ? (
+                                                        <><Loader2 className="w-3 h-3 animate-spin" /> Enviando...</>
+                                                    ) : (
+                                                        "Aceptar y Enviar"
+                                                    )}
+                                                </button>
+                                                <button 
+                                                    onClick={() => updateReservaStatus(res.id, 'rechazada')} 
+                                                    disabled={!!processingId}
+                                                    className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50"
+                                                >
+                                                    Rechazar
+                                                </button>
                                             </div>
                                         ) : (
-                                            <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400' : 'bg-zinc-800 text-red-400'}`}>{res.status}</span>
+                                            <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400 border-green-900' : 'bg-zinc-800 text-red-400 border-red-900'}`}>
+                                                {res.status === 'confirmada' ? 'Confirmado ✅' : res.status}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
