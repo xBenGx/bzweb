@@ -3,21 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import path from "path";
 
 // ----------------------------------------------------------------------
-// 1. CARGA SEGURA DE LIBRERÍAS
-// ----------------------------------------------------------------------
-// Intentamos cargar Canvas. Si falla, no rompemos el servidor.
-let canvasLib: any = null;
-try {
-    canvasLib = require("canvas");
-} catch (e) {
-    console.warn("⚠️ Canvas no disponible. Se usará modo solo texto o imagen del cliente.");
-}
-
-// ----------------------------------------------------------------------
-// 2. CONFIGURACIÓN Y CREDENCIALES
+// 1. CONFIGURACIÓN Y CREDENCIALES
 // ----------------------------------------------------------------------
 
-// Credenciales SUPABASE (Directas)
+// Credenciales SUPABASE
 const SUPABASE_URL = "https://lqelewbxejvsiitpjjly.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WQ6_AT1KoCGLJ_kbAgrszA_-p9hSp_Z"; 
 
@@ -30,12 +19,19 @@ const WAPP_URL_IMAGE = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}/messages/im
 const WAPP_URL_CHAT = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}/messages/chat`; 
 
 // ----------------------------------------------------------------------
-// 3. FUNCIONES AUXILIARES
+// 2. FUNCIONES AUXILIARES
 // ----------------------------------------------------------------------
 
+// Intentamos cargar Canvas de forma dinámica
+let canvasLib: any = null;
+try {
+    canvasLib = require("canvas");
+} catch (e) {
+    console.warn("⚠️ La librería 'canvas' no está instalada. Se usará modo solo texto/fallback.");
+}
+
 /**
- * Genera una imagen PNG del ticket usando Canvas (Lógica del Servidor).
- * Retorna el Buffer de la imagen o NULL si falla/no está disponible.
+ * Genera una imagen PNG del ticket usando Canvas.
  */
 async function generarTicketImagen(reserva: any) {
   if (!canvasLib) return null;
@@ -63,9 +59,9 @@ async function generarTicketImagen(reserva: any) {
     if (image) {
         ctx.drawImage(image, 0, 0);
     } else {
-        ctx.fillStyle = "#111111"; // Negro
+        ctx.fillStyle = "#111111"; // Negro elegante
         ctx.fillRect(0, 0, width, height);
-        ctx.strokeStyle = "#DAA520"; 
+        ctx.strokeStyle = "#DAA520";
         ctx.lineWidth = 30;
         ctx.strokeRect(40, 40, width - 80, height - 80);
     }
@@ -73,22 +69,25 @@ async function generarTicketImagen(reserva: any) {
     // 2. Configuración de Textos
     ctx.fillStyle = image ? "#000000" : "#FFFFFF";
     
-    // Código
-    ctx.font = "bold 55px Arial"; 
+    // Código de Reserva
+    ctx.font = "bold 80px Arial"; 
     ctx.textAlign = "center";
+    // Ajuste vertical según si hay imagen o no
     const yCode = image ? 450 : height / 2 - 150;
     ctx.fillText(reserva.reservation_code, width / 2, yCode); 
 
     // Detalles
-    ctx.font = "bold 30px Arial";
+    ctx.font = "bold 40px Arial";
     ctx.textAlign = image ? "right" : "center"; 
     
     const xPos = image ? 550 : width / 2;
     const yBase = image ? 580 : (height / 2) + 50;
+    const lh = 70; // Line height
 
-    ctx.fillText(`${reserva.date_reserva}, ${reserva.time_reserva}`, xPos, yBase);
-    ctx.fillText(reserva.zone, xPos, yBase + 60);
-    ctx.fillText(`${reserva.guests} Personas`, xPos, yBase + 120);
+    ctx.fillText(`${reserva.date_reserva}`, xPos, yBase);
+    ctx.fillText(`${reserva.time_reserva} hrs`, xPos, yBase + lh);
+    ctx.fillText(reserva.zone, xPos, yBase + (lh * 2));
+    ctx.fillText(`${reserva.guests} Personas`, xPos, yBase + (lh * 3));
 
     return canvas.toBuffer("image/png");
 
@@ -100,47 +99,51 @@ async function generarTicketImagen(reserva: any) {
 
 /**
  * Envía el mensaje a UltraMsg.
- * CORRECCIÓN: Agrega el "+" al número final.
+ * CORRECCIÓN: Formato Estricto con "+" (+569...)
  */
 async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo: string, nombre: string) {
-  // 1. Obtener solo dígitos primero para análisis
+  // 1. OBTENER SOLO DÍGITOS
   let rawDigits = telefono.replace(/\D/g, ""); 
   
-  // 2. Lógica para completar números de Chile si faltan prefijos
+  // 2. CORRECCIÓN INTELIGENTE PARA CHILE
+  // Si tiene 9 dígitos y empieza con 9 (ej: 958444061) -> Falta el 56
   if (rawDigits.length === 9 && rawDigits.startsWith("9")) {
-      rawDigits = "56" + rawDigits; // ej: 912345678 -> 56912345678
+      rawDigits = "56" + rawDigits;
   }
+  // Si tiene 8 dígitos (ej: 58444061) -> Falta el 569
   if (rawDigits.length === 8) {
-      rawDigits = "569" + rawDigits; // ej: 12345678 -> 56912345678
+      rawDigits = "569" + rawDigits;
   }
   // Si ya tiene 11 (569...) lo dejamos igual.
 
-  // 3. AGREGAR EL "+" (Requerimiento de usuario)
+  // 3. AGREGAR EL "+" (Vital para que UltraMsg lo reconozca igual que en tu prueba manual)
   const phoneFinal = "+" + rawDigits;
 
-  const mensaje = `Hola ${nombre} 👋,\n\n¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂\n\n📌 *Código:* ${codigo}\n\n${imagenUrl ? "Adjuntamos tu ticket de entrada. 🎟️" : "Por favor muestra este mensaje y código en recepción."}\n\n¡Te esperamos!`;
+  // Mensaje con Emojis
+  const mensaje = `Hola ${nombre} 👋,\n\n¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂\n\n📌 *Código:* ${codigo}\n📅 *Fecha:* Pronto\n\n${imagenUrl ? "Adjuntamos tu ticket de entrada. 🎟️" : "Por favor muestra este mensaje y código en recepción."}\n\n¡Te esperamos!`;
 
   try {
     let urlToUse = WAPP_URL_CHAT;
     let bodyParams: any = {
         token: WAPP_TOKEN,
-        to: phoneFinal, // Aquí va el número con "+"
+        to: phoneFinal, // Enviamos con el +
         body: mensaje, 
         priority: 10
     };
 
+    // Si hay imagen, cambiamos endpoint
     if (imagenUrl) {
         urlToUse = WAPP_URL_IMAGE;
         bodyParams = {
             token: WAPP_TOKEN,
-            to: phoneFinal, // Aquí va el número con "+"
+            to: phoneFinal, // Enviamos con el +
             image: imagenUrl,
             caption: mensaje,
             priority: 10
         };
     }
 
-    console.log(`📨 Enviando a: ${phoneFinal} | Modo: ${imagenUrl ? 'IMAGEN' : 'TEXTO'}`);
+    console.log(`📨 Enviando a: ${phoneFinal} | URL: ${urlToUse}`);
 
     const res = await fetch(urlToUse, {
       method: "POST",
@@ -148,15 +151,15 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
       body: new URLSearchParams(bodyParams)
     });
     
-    // Leemos la respuesta para debug
+    // Loguear respuesta de UltraMsg para depuración
     const responseText = await res.text();
+    console.log("📡 Respuesta UltraMsg:", responseText);
     
     if (!res.ok) {
         console.error("❌ Error HTTP UltraMsg:", responseText);
         return false;
     }
     
-    console.log("✅ Respuesta UltraMsg:", responseText);
     return true;
 
   } catch (e) {
@@ -177,7 +180,7 @@ export async function POST(req: Request) {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     
     const body = await req.json();
-    // Recibimos ticketUrl si viene del Dashboard (HTML2Canvas)
+    // Aceptamos ticketUrl si viene del frontend (plan B)
     const { reservaId, ticketUrl: clientTicketUrl } = body;
 
     if (!reservaId) return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
@@ -190,7 +193,6 @@ export async function POST(req: Request) {
       .single();
 
     if (error || !reserva) {
-        console.error("Reserva no encontrada");
         return NextResponse.json({ error: "No encontrada" }, { status: 404 });
     }
 
@@ -200,11 +202,10 @@ export async function POST(req: Request) {
         codigoReserva = `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
-    // 4. Determinar URL del Ticket
-    // Prioridad: 1. URL del cliente | 2. Generada en servidor | 3. Texto
+    // 4. Lógica de Imagen (Prioridad: Frontend > Backend Canvas > Texto)
     let finalTicketUrl = clientTicketUrl || "";
 
-    // Si NO vino del cliente y tenemos Canvas, intentamos generar
+    // Si NO vino del cliente y tenemos Canvas, intentamos generar en servidor
     if (!finalTicketUrl && canvasLib) {
         try {
             const reservaConCodigo = { ...reserva, reservation_code: codigoReserva };
@@ -234,7 +235,7 @@ export async function POST(req: Request) {
     if (reserva.phone) {
        whatsappEnviado = await enviarWhatsApp(reserva.phone, finalTicketUrl || null, codigoReserva, reserva.name);
     } else {
-        console.warn("⚠️ Sin teléfono");
+        console.warn("⚠️ Reserva sin teléfono");
     }
 
     // 6. Actualizar DB
