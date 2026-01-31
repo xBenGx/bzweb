@@ -14,7 +14,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { supabase } from "@/lib/supabaseClient";
-// IMPORTANTE: Librería para generar el ticket visualmente
+// IMPORTANTE: Esta librería es la clave para generar la imagen en el cliente
 import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
@@ -126,18 +126,20 @@ export default function DashboardPage() {
       }
   };
 
-  const uploadImageToSupabase = async () => {
-      if (!selectedFile) return null;
-      const fileExt = selectedFile.name.split('.').pop();
+  const uploadImageToSupabase = async (bucket: string = 'images', file: File | null = null) => {
+      const fileToUpload = file || selectedFile;
+      if (!fileToUpload) return null;
+      
+      const fileExt = fileToUpload.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       // Asegúrate de tener un bucket llamado 'images' en Supabase Storage
-      const { error } = await supabase.storage.from('images').upload(fileName, selectedFile);
+      const { error } = await supabase.storage.from(bucket).upload(fileName, fileToUpload);
       if (error) {
           console.error("Error subiendo imagen:", error);
-          alert("Error al subir imagen: " + error.message);
+          if (!file) alert("Error al subir imagen: " + error.message);
           return null;
       }
-      const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+      const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
       return data.publicUrl;
   };
 
@@ -385,7 +387,7 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA RESERVAS & SOLICITUDES (ACTUALIZADA CON WHATSAPP)
+  // LÓGICA RESERVAS & SOLICITUDES (ACTUALIZADA CON WHATSAPP + IMAGEN)
   // ---------------------------------------------------------
   
   // Función SIMPLE para actualizar estado (usada para rechazar)
@@ -399,101 +401,112 @@ export default function DashboardPage() {
       fetchData();
   };
 
-  // --- NUEVA FUNCIÓN: CONFIRMAR Y ENVIAR WHATSAPP AUTOMÁTICO ---
-  // AHORA GENERA LA IMAGEN EN EL CLIENTE ANTES DE ENVIAR
+  // --- FUNCIÓN CLAVE: CONFIRMAR, GENERAR IMAGEN Y SINCRONIZAR CÓDIGO ---
   const handleConfirmReservation = async (reserva: any) => {
     if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
 
-    setProcessingId(reserva.id); // Activar spinner para este item
+    setProcessingId(reserva.id); 
 
     try {
-      // 1. GENERAR CÓDIGO SI NO EXISTE
-      const codigoParaTicket = reserva.reservation_code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+        // 1. DETERMINAR CÓDIGO FINAL (Prioridad: el que ya tiene > generar uno nuevo)
+        const codigoFinal = reserva.reservation_code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+        console.log("Generando ticket para código:", codigoFinal);
 
-      // 2. CREAR ELEMENTO VISUAL DEL TICKET
-      // Creamos un div temporal fuera de la pantalla
-      const ticketElement = document.createElement("div");
-      ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #000;";
-      
-      // HTML del Ticket (Estilo Negro y Dorado)
-      ticketElement.innerHTML = `
-        <div style="width:100%; height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 20px solid #DAA520; box-sizing: border-box; background: radial-gradient(circle, #222 0%, #000 100%);">
-             
-             <img src="/ticket-bg.png" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; z-index:-1;" onerror="this.style.display='none'" />
+        // 2. CREAR ELEMENTO VISUAL (Ticket Negro y Dorado)
+        const ticketElement = document.createElement("div");
+        // Posicionamos fuera de pantalla pero visible para el render
+        ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #000;";
+        
+        // HTML del Ticket usando el CÓDIGO FINAL
+        ticketElement.innerHTML = `
+          <div style="width: 100%; height: 100%; position: relative; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+              
+              <img src="/ticket-bg.png" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; z-index:0; opacity: 0.6;" onerror="this.style.display='none'" />
+              
+              <div style="z-index: 10; width: 100%; display: flex; flex-direction: column; align-items: center; border: 20px solid #DAA520; height: 100%; box-sizing: border-box; justify-content: center;">
+                  
+                  <h1 style="font-size: 80px; color: #DAA520; margin: 0; letter-spacing: 10px; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">BOULEVARD</h1>
+                  <h2 style="font-size: 50px; margin: 10px 0 60px 0; letter-spacing: 10px; color: #fff; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">ZAPALLAR</h2>
+                  
+                  <div style="font-size: 130px; font-weight: bold; color: #DAA520; margin: 60px 0; background: rgba(0,0,0,0.8); padding: 40px 80px; border: 4px solid #DAA520; border-radius: 40px; text-shadow: 0 0 20px #DAA520;">
+                      ${codigoFinal}
+                  </div>
+                  
+                  <div style="text-align: left; width: 80%; margin-top: 60px; font-size: 45px; line-height: 1.8; background: rgba(0,0,0,0.6); padding: 40px; border-radius: 30px; border: 1px solid #333;">
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">TITULAR:</strong> ${reserva.name}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">FECHA:</strong> ${reserva.date_reserva}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">HORA:</strong> ${reserva.time_reserva} HRS</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">ZONA:</strong> ${reserva.zone}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">CANTIDAD:</strong> ${reserva.guests} PAX</p>
+                  </div>
 
-             <h1 style="font-size: 60px; color: #DAA520; margin: 0; letter-spacing: 10px; font-weight: bold; z-index: 10;">BOULEVARD</h1>
-             <h2 style="font-size: 40px; margin: 10px 0 60px 0; letter-spacing: 8px; color: #fff; z-index: 10;">ZAPALLAR</h2>
-             
-             <div style="font-size: 140px; font-weight: bold; color: #DAA520; margin: 50px 0; background: rgba(0,0,0,0.8); padding: 30px 60px; border: 2px solid #DAA520; border-radius: 20px; z-index: 10;">
-                ${codigoParaTicket}
-             </div>
-             
-             <div style="text-align: right; width: 80%; margin-top: 80px; font-size: 45px; line-height: 1.8; z-index: 10; background: rgba(0,0,0,0.4); padding: 20px; border-radius: 20px;">
-                <p style="margin: 0;"><span style="color: #DAA520;">FECHA:</span> ${reserva.date_reserva}</p>
-                <p style="margin: 0;"><span style="color: #DAA520;">HORA:</span> ${reserva.time_reserva} HRS</p>
-                <p style="margin: 0;"><span style="color: #DAA520;">ZONA:</span> ${reserva.zone}</p>
-                <p style="margin: 0;"><span style="color: #DAA520;">PERSONAS:</span> ${reserva.guests}</p>
-             </div>
+                  <p style="margin-top: 100px; font-size: 35px; color: #aaa; text-transform: uppercase; letter-spacing: 2px; text-shadow: 1px 1px 2px black;">Presenta este código en recepción</p>
+              </div>
+          </div>
+        `;
+        document.body.appendChild(ticketElement);
 
-             <p style="margin-top: 150px; font-size: 30px; color: #888; z-index: 10;">Presenta este código en recepción</p>
-        </div>
-      `;
-      document.body.appendChild(ticketElement);
+        // 3. GENERAR IMAGEN
+        // Pequeña espera para cargar recursos
+        await new Promise(resolve => setTimeout(resolve, 800));
 
-      // 3. CONVERTIR A IMAGEN (PNG)
-      // Damos un pequeño delay para asegurar que la imagen de fondo (si hay) cargue
-      await new Promise(resolve => setTimeout(resolve, 500));
+        const canvas = await html2canvas(ticketElement, { 
+            scale: 1, 
+            useCORS: true, 
+            allowTaint: true,
+            backgroundColor: null 
+        });
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        document.body.removeChild(ticketElement); // Limpieza
 
-      const canvas = await html2canvas(ticketElement, { scale: 1 });
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-      document.body.removeChild(ticketElement); // Borrar el elemento temporal
+        let ticketPublicUrl = null;
 
-      let ticketPublicUrl = null;
+        // 4. SUBIR A SUPABASE
+        if (blob) {
+            // Nombre único con el código
+            const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
+            // Subimos directamente usando uploadImageToSupabase modificado o lógica directa
+            // Usamos lógica directa aquí para asegurar bucket 'tickets'
+            const { error: uploadError } = await supabase.storage
+                .from('tickets') // Asegúrate que este bucket es público
+                .upload(fileName, blob, { contentType: 'image/png', upsert: true });
+            
+            if (!uploadError) {
+                const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
+                ticketPublicUrl = data.publicUrl;
+                console.log("Ticket subido:", ticketPublicUrl);
+            } else {
+                 console.warn("Error subiendo ticket:", uploadError);
+            }
+        }
 
-      // 4. SUBIR A SUPABASE (Bucket 'tickets')
-      if (blob) {
-          const fileName = `ticket-${codigoParaTicket}-${Date.now()}.png`;
-          
-          // Asegúrate que el bucket 'tickets' existe y es público en tu Supabase
-          const { error: uploadError } = await supabase.storage
-              .from('tickets')
-              .upload(fileName, blob, { contentType: 'image/png', upsert: true });
-          
-          if (!uploadError) {
-              const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
-              ticketPublicUrl = data.publicUrl;
-              console.log("Ticket subido a:", ticketPublicUrl);
-          } else {
-             console.warn("Error subiendo ticket a Supabase (revisa permisos bucket):", uploadError);
-          }
-      }
+        // 5. ENVIAR A LA API (Sincronizando Código)
+        // Enviamos 'codigoFinal' para forzar a la API a usar ESTE mismo código
+        const response = await fetch("/api/admin/confirmar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                reservaId: reserva.id,
+                ticketUrl: ticketPublicUrl,
+                codigo: codigoFinal // <--- CLAVE DE LA SINCRONIZACIÓN
+            }),
+        });
 
-      // 5. LLAMAR A LA API (Con la URL lista)
-      const response = await fetch("/api/admin/confirmar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-            reservaId: reserva.id,
-            ticketUrl: ticketPublicUrl, // Enviamos la imagen generada
-            codigo: codigoParaTicket    // Enviamos el código para sincronizar
-        }),
-      });
+        const result = await response.json();
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        alert("✅ Reserva confirmada. WhatsApp con Ticket enviado correctamente.");
-        fetchData(); // Recargar datos
-      } else {
-        alert("⚠️ Reserva confirmada pero hubo error enviando el mensaje: " + (result.error || "Error desconocido"));
-        fetchData(); // Recargar igual
-      }
+        if (response.ok && result.success) {
+            alert(`✅ Reserva confirmada (Código: ${codigoFinal}).\nWhatsApp enviado.`);
+            fetchData(); 
+        } else {
+            alert("⚠️ Confirmado en BD, pero error al enviar: " + (result.error || "Desconocido"));
+            fetchData();
+        }
 
     } catch (error: any) {
-      console.error(error);
-      alert("Error crítico en el proceso: " + error.message);
+        console.error(error);
+        alert("Error crítico al generar ticket: " + error.message);
     } finally {
-      setProcessingId(null);
+        setProcessingId(null);
     }
   };
 
@@ -591,7 +604,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS (CON DETALLE DEL PEDIDO ANTICIPADO) */}
+            {/* 2. GESTIÓN DE RESERVAS */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="space-y-3">
@@ -618,7 +631,7 @@ export default function DashboardPage() {
                                                     className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
                                                 >
                                                     {processingId === res.id ? (
-                                                        <><Loader2 className="w-3 h-3 animate-spin" /> Generando Ticket...</>
+                                                        <><Loader2 className="w-3 h-3 animate-spin" /> Generando...</>
                                                     ) : (
                                                         "Aceptar y Enviar"
                                                     )}
@@ -639,7 +652,7 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
 
-                                {/* SECCIÓN DE PEDIDO ANTICIPADO (SI EXISTE) */}
+                                {/* SECCIÓN DE PEDIDO ANTICIPADO */}
                                 {res.pre_order && res.pre_order.length > 0 && (
                                     <div className="mt-4 bg-black/40 rounded-lg p-3 border border-[#DAA520]/20">
                                             <div className="flex justify-between items-center mb-2">
@@ -884,7 +897,8 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL CLIENTES --- */}
+        {/* --- MODALES --- */}
+        {/* CLIENTES */}
         <AnimatePresence>
             {isClientModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
