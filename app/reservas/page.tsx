@@ -6,8 +6,7 @@ import {
   ArrowLeft, Users, ChevronRight, ChevronLeft, 
   CheckCircle, Calendar, Clock, AlertTriangle, 
   Armchair, Cigarette, CigaretteOff, Loader2, User, Mail, Phone, 
-  ShoppingBag, Plus, Minus, X, Utensils, Wine, ChefHat, Sparkles, Eye,
-  Hourglass, MessageCircle
+  ShoppingBag, Plus, Minus, X, Utensils, Wine, ChefHat, Sparkles, Eye
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image"; 
@@ -145,6 +144,7 @@ export default function BookingPage() {
   const [userData, setUserData] = useState({ name: "", email: "", phone: "" });
 
   // Estados de Backend y UI
+  const [bookingCode, setBookingCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // --- NUEVO: ESTADOS PARA EL MENÚ PRE-ORDER ---
@@ -219,11 +219,11 @@ export default function BookingPage() {
       e.preventDefault();
       setIsSubmitting(true);
       
+      const generatedCode = `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
       const zoneDetails = ZONES.find(z => z.id === selectedZone);
 
       try {
           // Construimos el objeto de datos a enviar
-          // NOTA: No generamos el código aquí, se genera en el backend al confirmar
           const payload = {
               name: userData.name,
               email: userData.email,
@@ -232,7 +232,8 @@ export default function BookingPage() {
               time_reserva: time,
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
-              status: 'pendiente', // Estado inicial
+              code: generatedCode,
+              status: 'pendiente',
               // Aquí integramos el pedido directamente en la reserva
               pre_order: cart.length > 0 ? cart : null, 
               total_pre_order: cartTotal
@@ -242,7 +243,8 @@ export default function BookingPage() {
 
           if (error) throw error;
 
-          setStep(4); // Éxito: Ir a pantalla de "Solicitud Enviada"
+          setBookingCode(generatedCode);
+          setStep(4); // Éxito: Ir al ticket final
 
       } catch (error) {
           console.error("Error reservando:", error);
@@ -486,8 +488,8 @@ export default function BookingPage() {
             >
                   <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-lg mb-6">
                       <div className="text-center mb-6">
-                          <h3 className="text-lg font-bold text-white uppercase tracking-wide">Tus Datos</h3>
-                          <p className="text-xs text-zinc-500">Completa para asegurar tu mesa.</p>
+                         <h3 className="text-lg font-bold text-white uppercase tracking-wide">Tus Datos</h3>
+                         <p className="text-xs text-zinc-500">Completa para asegurar tu mesa.</p>
                       </div>
                       
                       <form onSubmit={handleConfirmReservation} className="space-y-4">
@@ -544,18 +546,18 @@ export default function BookingPage() {
                                         }}
                                         style={{ width: "max-content" }}
                                     >
-                                            {/* Duplicamos los productos para crear el efecto de bucle infinito */}
-                                            {[...products, ...products].map((item, idx) => (
-                                                <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
-                                                    <div className="relative h-20 w-full bg-zinc-800">
-                                                        <Image src={item.image_url} alt={item.name} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                                                    </div>
-                                                    <div className="p-2">
-                                                        <p className="text-[10px] font-bold text-white truncate">{item.name}</p>
-                                                        <p className="text-[10px] text-[#DAA520] font-bold mt-0.5">${item.price.toLocaleString('es-CL')}</p>
-                                                    </div>
+                                        {/* Duplicamos los productos para crear el efecto de bucle infinito */}
+                                        {[...products, ...products].map((item, idx) => (
+                                            <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
+                                                <div className="relative h-20 w-full bg-zinc-800">
+                                                    <Image src={item.image_url} alt={item.name} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                                 </div>
-                                            ))}
+                                                <div className="p-2">
+                                                    <p className="text-[10px] font-bold text-white truncate">{item.name}</p>
+                                                    <p className="text-[10px] text-[#DAA520] font-bold mt-0.5">${item.price.toLocaleString('es-CL')}</p>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </motion.div>
                                   ) : (
                                     <div className="text-center py-4">
@@ -599,9 +601,9 @@ export default function BookingPage() {
                                   className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(218,165,32,0.3)] disabled:opacity-70 disabled:cursor-not-allowed transform hover:scale-[1.01] active:scale-[0.99]"
                               >
                                   {isSubmitting ? (
-                                    <><Loader2 className="animate-spin w-5 h-5"/> Procesando...</>
+                                      <><Loader2 className="animate-spin w-5 h-5"/> Procesando...</>
                                   ) : (
-                                    cart.length > 0 ? `Reservar y Pedir ($${cartTotal.toLocaleString('es-CL')})` : "Finalizar Reserva"
+                                      cart.length > 0 ? `Reservar y Pedir ($${cartTotal.toLocaleString('es-CL')})` : "Finalizar Reserva"
                                   )}
                               </button>
                           </div>
@@ -612,49 +614,78 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* ================= PASO 4: PANTALLA DE "SOLICITUD ENVIADA" (SIN CÓDIGO) ================= */}
+          {/* ================= PASO 4: TICKET DE CONFIRMACIÓN ================= */}
           {step === 4 && (
              <motion.div 
                 key="step4" 
                 initial={{ scale: 0.9, opacity: 0 }} 
                 animate={{ scale: 1, opacity: 1 }} 
-                className="pt-10 flex flex-col items-center pb-24 text-center px-4"
+                className="pt-2 flex flex-col items-center pb-24"
              >
-                <div className="w-full bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl relative max-w-sm p-8">
-                    
-                    {/* ÍCONO DE ESPERA */}
-                    <div className="mb-6 relative">
-                        <div className="absolute inset-0 bg-[#DAA520]/20 blur-3xl rounded-full" />
-                        <Hourglass className="w-20 h-20 text-[#DAA520] mx-auto animate-pulse relative z-10" />
+                <div className="w-full bg-white text-black rounded-3xl overflow-hidden shadow-2xl relative max-w-sm mb-6">
+                    {/* Header del Ticket */}
+                    <div className="bg-black p-8 text-center relative border-b-4 border-[#DAA520]">
+                        <div className="absolute top-[-50%] left-1/2 -translate-x-1/2 w-40 h-40 bg-[#DAA520]/30 rounded-full blur-3xl" />
+                        <motion.div 
+                            initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                        >
+                            <CheckCircle className="w-12 h-12 text-[#DAA520] mx-auto mb-3 relative z-10" />
+                        </motion.div>
+                        <h2 className="text-white font-black text-2xl uppercase tracking-widest relative z-10">¡Exitoso!</h2>
+                        <p className="text-zinc-400 text-[10px] uppercase tracking-[0.3em] mt-1 relative z-10">Reserva Confirmada</p>
                     </div>
 
-                    <h2 className="text-2xl font-bold text-white uppercase tracking-wide mb-2">
-                        Solicitud Enviada
-                    </h2>
-                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
-                        Hemos recibido tu solicitud de reserva. Nuestro equipo está verificando la disponibilidad.
-                    </p>
-
-                    <div className="bg-black/30 rounded-xl p-4 border border-white/5 mb-6 text-left">
-                        <div className="flex items-start gap-3">
-                            <MessageCircle className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
-                            <div>
-                                <h4 className="text-xs font-bold text-white uppercase mb-1">Confirmación por WhatsApp</h4>
-                                <p className="text-[10px] text-zinc-400 leading-snug">
-                                    En breves momentos recibirás un mensaje a tu WhatsApp con tu <strong>Ticket de Entrada y Código QR</strong> una vez que confirmemos tu mesa.
-                                </p>
+                    <div className="p-6 relative bg-zinc-50">
+                        {/* Detalles del Código */}
+                        <div className="text-center mb-6">
+                            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-2">Tu Código</p>
+                            <div className="text-3xl font-black text-black tracking-wider font-mono bg-white border-2 border-dashed border-zinc-200 py-3 rounded-xl select-all">
+                                {bookingCode}
                             </div>
                         </div>
-                    </div>
 
-                    <div className="border-t border-white/10 pt-4 mt-2">
-                        <p className="text-[10px] text-zinc-600 uppercase tracking-widest">
-                            Estado: <span className="text-yellow-500 font-bold">En Revisión</span>
-                        </p>
+                        {/* Detalles de la Reserva */}
+                        <div className="space-y-3 mb-6">
+                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
+                                <span className="text-xs font-bold text-zinc-400 uppercase">Fecha y Hora</span>
+                                <span className="text-xs font-bold text-black">{selectedDate} {currentMonth}, {time}</span>
+                            </div>
+                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
+                                <span className="text-xs font-bold text-zinc-400 uppercase">Zona</span>
+                                <span className="text-xs font-bold text-black">{ZONES.find(z => z.id === selectedZone)?.name}</span>
+                            </div>
+                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
+                                <span className="text-xs font-bold text-zinc-400 uppercase">Personas</span>
+                                <span className="text-xs font-bold text-black">{guests} Pax</span>
+                            </div>
+                            
+                            {/* Bloque de Pedido en el Ticket */}
+                            {cart.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <ShoppingBag className="w-4 h-4 text-amber-600"/>
+                                        <span className="text-xs font-bold text-amber-800 uppercase">Pedido Express Incluido</span>
+                                    </div>
+                                    <p className="text-[10px] text-amber-700 leading-tight">Tu selección de <strong>{cartCount} productos</strong> estará lista en tu mesa a la hora de llegada.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Advertencia / Info */}
+                        <div className="bg-zinc-100 rounded-xl p-3 flex gap-2 items-start">
+                            <AlertTriangle className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
+                            <p className="text-[9px] text-zinc-500 leading-snug">
+                                Tolerancia de espera: 15 mins.<br/>Presenta este código en recepción.
+                            </p>
+                        </div>
                     </div>
+                    
+                    {/* Decoración Ticket Cutoff */}
+                    <div className="absolute top-[215px] -left-3 w-6 h-6 bg-black rounded-full"></div>
+                    <div className="absolute top-[215px] -right-3 w-6 h-6 bg-black rounded-full"></div>
                 </div>
 
-                <Link href="/" className="mt-8 px-8 py-3 bg-white/5 text-white rounded-xl font-bold border border-white/10 text-xs uppercase tracking-widest hover:bg-white/10 transition-colors">
+                <Link href="/" className="px-8 py-3 bg-zinc-900 text-white rounded-xl font-bold border border-zinc-800 text-xs uppercase tracking-widest hover:bg-black transition-colors">
                     Volver al Inicio
                 </Link>
              </motion.div>
