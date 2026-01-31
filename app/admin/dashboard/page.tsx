@@ -21,7 +21,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, // PESTAÑA PARA EL MENÚ DE PRE-ORDEN
+    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, // GESTIÓN DEL MENÚ DE LA PÁGINA WEB
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]); // ESTADO PARA EL MENÚ DE RESERVAS
+  const [menuItems, setMenuItems] = useState<any[]>([]); // DATA DEL MENÚ EXPRESS
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -48,15 +48,16 @@ export default function DashboardPage() {
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   
-  // --- CARGA DE DATOS Y REALTIME ---
+  // --- CARGA DE DATOS Y REALTIME (Conexión Supabase) ---
   useEffect(() => {
     fetchData();
 
+    // Suscripción a cambios en tiempo real en las tablas críticas
     const channel = supabase
       .channel('realtime-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData()) // Escuchar cambios en el menú
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -73,11 +74,11 @@ export default function DashboardPage() {
       const { data: showsData } = await supabase.from('shows').select('*').order('created_at', { ascending: false });
       if (showsData) setShows(showsData);
 
-      // 3. Reservas
+      // 3. Reservas (Incluye el JSON del pedido anticipado)
       const { data: reservasData } = await supabase.from('reservas').select('*').order('created_at', { ascending: false });
       if (reservasData) setReservas(reservasData);
 
-      // 4. Solicitudes
+      // 4. Solicitudes / Eventos
       const { data: solicitudesData } = await supabase.from('solicitudes').select('*').order('created_at', { ascending: false });
       if (solicitudesData) setSolicitudes(solicitudesData);
 
@@ -85,7 +86,7 @@ export default function DashboardPage() {
       const { data: clientesData } = await supabase.from('clientes').select('*').order('nombre', { ascending: true });
       if (clientesData) setClientes(clientesData);
 
-      // 6. Menú Express (Productos Reserva)
+      // 6. Menú Express (Productos que se muestran en la web)
       const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
       if (menuData) setMenuItems(menuData);
   };
@@ -104,13 +105,14 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- MANEJADOR DE IMAGEN (Unificado) ---
+  // --- MANEJADOR DE IMAGEN (Unificado para todos los módulos) ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
           setSelectedFile(file);
           const reader = new FileReader();
           reader.onloadend = () => {
+              // Previsualización local
               if (type === 'promo') setCurrentPromo({ ...currentPromo, image_url: reader.result as string });
               if (type === 'show') setCurrentShow({ ...currentShow, image_url: reader.result as string });
               if (type === 'menu') setCurrentMenuItem({ ...currentMenuItem, image_url: reader.result as string });
@@ -123,6 +125,7 @@ export default function DashboardPage() {
       if (!selectedFile) return null;
       const fileExt = selectedFile.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
+      // Asegúrate de tener un bucket llamado 'images' en Supabase Storage
       const { error } = await supabase.storage.from('images').upload(fileName, selectedFile);
       if (error) {
           console.error("Error subiendo imagen:", error);
@@ -219,7 +222,7 @@ export default function DashboardPage() {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
       const filterMonth = filterDate.getMonth();
-      const filterDay = filterDate.getDate() + 1;
+      const filterDay = filterDate.getDate() + 1; // Ajuste por zona horaria simple
 
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
@@ -275,7 +278,7 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE MENÚ EXPRESS / RESERVA (NUEVO)
+  // LÓGICA GESTIÓN DE MENÚ EXPRESS / RESERVA (INTEGRADO CON PÁGINA WEB)
   // ---------------------------------------------------------
   const handleOpenMenuModal = (item: any = null) => {
       setSelectedFile(null);
@@ -538,10 +541,10 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. MENÚ RESERVA / EXPRESS (¡NUEVO!) */}
+            {/* 3. MENÚ RESERVA / EXPRESS (NUEVO) */}
             {activeTab === "menu_express" && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                     <div className="flex justify-between items-center mb-6">
+                      <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Menú para Reservas (Pre-order)</h3>
                         <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
                             <Plus className="w-4 h-4" /> Nuevo Producto
@@ -574,9 +577,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* ... RESTO DE LAS PESTAÑAS (Clientes, Shows, Promos, Eventos, RRHH) SE MANTIENEN IGUAL ... */}
-            {/* Solo pego el resto para que el archivo esté completo y no se corte */}
-            
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
