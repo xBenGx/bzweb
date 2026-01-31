@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-// Usamos imports dinámicos o try/catch para canvas para evitar que tumbe el servidor si falta la librería
-import { createCanvas, loadImage } from "canvas"; 
 import path from "path";
 
 // ----------------------------------------------------------------------
-// 1. CONFIGURACIÓN Y CREDENCIALES (HARCODED PARA EVITAR ERRORES)
+// 1. CONFIGURACIÓN Y CREDENCIALES (HARCODED PARA EVITAR ERRORES DE ENTORNO)
 // ----------------------------------------------------------------------
 
-// Credenciales SUPABASE DIRECTAS (Soluciona el error "Faltan variables")
+// Credenciales SUPABASE
 const SUPABASE_URL = "https://lqelewbxejvsiitpjjly.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WQ6_AT1KoCGLJ_kbAgrszA_-p9hSp_Z"; 
 
@@ -24,9 +22,24 @@ const WAPP_URL_CHAT = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}/messages/cha
 // 2. FUNCIONES AUXILIARES
 // ----------------------------------------------------------------------
 
-// Genera una imagen PNG del ticket usando Canvas.
+// Intentamos cargar Canvas de forma dinámica para evitar que el servidor explote si falta la librería
+let canvasLib: any = null;
+try {
+    canvasLib = require("canvas");
+} catch (e) {
+    console.warn("⚠️ La librería 'canvas' no está instalada o soportada en este servidor. Se usará modo solo texto.");
+}
+
+/**
+ * Genera una imagen PNG del ticket usando Canvas.
+ * Retorna el Buffer de la imagen o NULL si falla.
+ */
 async function generarTicketImagen(reserva: any) {
+  // Si la librería no cargó al inicio, retornamos null directo (Modo Texto)
+  if (!canvasLib) return null;
+
   try {
+    const { createCanvas, loadImage } = canvasLib;
     const bgPath = path.join(process.cwd(), "public", "ticket-bg.png");
     
     // Dimensiones por defecto
@@ -39,92 +52,102 @@ async function generarTicketImagen(reserva: any) {
         width = image.width;
         height = image.height;
     } catch (e) {
-        console.warn("⚠️ No se encontró ticket-bg.png, usando fondo generado.");
+        console.warn("⚠️ No se encontró ticket-bg.png en public, generando fondo negro por código.");
     }
 
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    // 1. Dibujar Fondo
+    // --- 1. DIBUJAR FONDO ---
     if (image) {
         ctx.drawImage(image, 0, 0);
     } else {
-        ctx.fillStyle = "#000000";
+        // Fondo de respaldo elegante si no hay imagen
+        ctx.fillStyle = "#111111"; // Negro casi puro
         ctx.fillRect(0, 0, width, height);
+        // Borde Dorado
         ctx.strokeStyle = "#DAA520";
-        ctx.lineWidth = 20;
-        ctx.strokeRect(20, 20, width - 40, height - 40);
+        ctx.lineWidth = 30;
+        ctx.strokeRect(40, 40, width - 80, height - 80);
     }
 
-    // 2. Configuración de Textos
+    // --- 2. CONFIGURACIÓN DE TEXTOS ---
+    // Ajustamos color dependiendo si hay imagen de fondo o es el negro
     ctx.fillStyle = image ? "#000000" : "#FFFFFF";
     
-    // Código de Reserva
-    ctx.font = "bold 55px Arial"; 
+    // A. Código de Reserva (Grande y Centrado)
+    ctx.font = "bold 80px Arial"; 
     ctx.textAlign = "center";
-    const yCode = image ? 450 : height / 2 - 100;
+    // Si no hay imagen, centramos verticalmente, si hay, ajustamos a la posición del diseño
+    const yCode = image ? 450 : height / 2 - 150;
     ctx.fillText(reserva.reservation_code, width / 2, yCode); 
 
-    // Detalles
-    ctx.font = "bold 30px Arial";
+    // B. Detalles de la Reserva
+    ctx.font = "bold 40px Arial";
     ctx.textAlign = image ? "right" : "center"; 
     
-    const xPos = image ? 550 : width / 2;
+    // Coordenadas base
+    const xPos = image ? 900 : width / 2; // Si es imagen, alineado a la derecha
     const yBase = image ? 580 : (height / 2) + 50;
+    const lineHeight = 70;
 
-    ctx.fillText(`${reserva.date_reserva}, ${reserva.time_reserva}`, xPos, yBase);
-    ctx.fillText(reserva.zone, xPos, yBase + 60);
-    ctx.fillText(`${reserva.guests} Personas`, xPos, yBase + 120);
+    // Pintamos los datos
+    ctx.fillText(`${reserva.date_reserva}`, xPos, yBase);
+    ctx.fillText(`${reserva.time_reserva} hrs`, xPos, yBase + lineHeight);
+    ctx.fillText(reserva.zone, xPos, yBase + (lineHeight * 2));
+    ctx.fillText(`${reserva.guests} Personas`, xPos, yBase + (lineHeight * 3));
 
     return canvas.toBuffer("image/png");
 
   } catch (error) {
-    console.error("❌ Error generando ticket (Canvas):", error);
-    // Retornamos null para que el sistema NO se detenga y envíe al menos el texto
-    return null; 
+    console.error("❌ Error generando ticket visual:", error);
+    return null; // Fallback a texto
   }
 }
 
-// Envía WhatsApp (Imagen o Texto)
+/**
+ * Envía el mensaje a UltraMsg.
+ * Decide automáticamente si enviar Endpoint de Imagen o de Chat.
+ */
 async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo: string, nombre: string) {
-  // 1. LIMPIEZA DE TELÉFONO (CRÍTICO PARA CHILE)
-  // Eliminamos el +, espacios, guiones
-  let phoneClean = telefono.replace(/\D/g, ""); 
+  // --- LIMPIEZA DE TELÉFONO PARA CHILE ---
+  let phoneClean = telefono.replace(/\D/g, ""); // Quitar todo lo que no sea número
   
-  // Caso Chile 9 dígitos: 958444061 -> Agregamos 56 => 56958444061
+  // Caso 9 dígitos (9 1234 5678) -> Agregamos 56
   if (phoneClean.length === 9 && phoneClean.startsWith("9")) {
       phoneClean = "56" + phoneClean;
   }
-  // Caso Chile 8 dígitos (formato antiguo): 12345678 -> Agregamos 569 => 56912345678
+  // Caso 8 dígitos antiguo (1234 5678) -> Agregamos 569
   if (phoneClean.length === 8) {
       phoneClean = "569" + phoneClean;
   }
-  // Si ya tiene 11 dígitos (56958444061) se deja igual.
+  // Si ya tiene 11 (569...) o 12 (549...), se deja igual.
 
-  const mensaje = `Hola ${nombre} 👋,\n\n¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂\n\n📌 *Código:* ${codigo}\n📅 *Fecha:* Hoy/Pronto\n\n${imagenUrl ? "Adjuntamos tu ticket de entrada. 🎟️" : "Por favor muestra este mensaje en recepción."}\n\n¡Te esperamos!`;
+  // --- MENSAJE ---
+  const mensaje = `Hola ${nombre} 👋,\n\n¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂\n\n📌 *Código:* ${codigo}\n\n${imagenUrl ? "Adjuntamos tu ticket de entrada. 🎟️" : "Por favor muestra este mensaje y código en recepción."}\n\n¡Te esperamos!`;
 
   try {
     let urlToUse = WAPP_URL_CHAT;
     let bodyParams: any = {
         token: WAPP_TOKEN,
         to: phoneClean,
-        body: mensaje, // Para chat se usa 'body'
-        priority: 10 // Prioridad alta
+        body: mensaje, // 'body' para texto
+        priority: 10
     };
 
-    // Si tenemos imagen, cambiamos el endpoint y los parámetros
+    // Si logramos generar la imagen, cambiamos al endpoint de imagen
     if (imagenUrl) {
         urlToUse = WAPP_URL_IMAGE;
         bodyParams = {
             token: WAPP_TOKEN,
             to: phoneClean,
             image: imagenUrl,
-            caption: mensaje, // Para imagen se usa 'caption'
+            caption: mensaje, // 'caption' para imagen
             priority: 10
         };
     }
 
-    console.log(`📨 Enviando WhatsApp a: ${phoneClean} (Con imagen: ${!!imagenUrl})`);
+    console.log(`📨 Enviando WhatsApp a: ${phoneClean} | Modo: ${imagenUrl ? 'IMAGEN' : 'TEXTO'}`);
 
     const res = await fetch(urlToUse, {
       method: "POST",
@@ -134,13 +157,13 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
     
     if (!res.ok) {
         const txt = await res.text();
-        console.error("❌ Error UltraMsg:", txt);
+        console.error("❌ Error respuesta UltraMsg:", txt);
         return false;
     }
     
     return true;
   } catch (e) {
-    console.error("❌ Error API WhatsApp:", e);
+    console.error("❌ Error conexión WhatsApp:", e);
     return false;
   }
 }
@@ -150,19 +173,18 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
 // ----------------------------------------------------------------------
 export async function POST(req: Request) {
   try {
-    console.log("🚀 Iniciando confirmación de reserva...");
+    console.log("🚀 Iniciando proceso de confirmación...");
 
-    // Inicializamos Supabase con las claves harcodeadas
+    // 1. Inicializar Supabase
+    if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Credenciales vacías");
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     
     const body = await req.json();
     const { reservaId } = body;
 
-    if (!reservaId) {
-        return NextResponse.json({ error: "Falta el ID de la reserva" }, { status: 400 });
-    }
+    if (!reservaId) return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
 
-    // 1. Obtener datos de la Reserva
+    // 2. Obtener datos de la Reserva
     const { data: reserva, error } = await supabase
       .from("reservas")
       .select("*")
@@ -170,51 +192,59 @@ export async function POST(req: Request) {
       .single();
 
     if (error || !reserva) {
-        console.error("❌ Reserva no encontrada:", error);
+        console.error("Reserva no encontrada en DB");
         return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
     }
 
-    // 2. Generar Código si no existe
+    // 3. Generar Código si no existe
     let codigoReserva = reserva.reservation_code;
     if (!codigoReserva) {
         codigoReserva = `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
-    // 3. Intentar Generar Ticket (Imagen)
+    // 4. Intentar Generar Ticket (Imagen)
     let publicUrl = "";
-    try {
-        // Pasamos el código actualizado
-        const ticketBuffer = await generarTicketImagen({ ...reserva, reservation_code: codigoReserva });
-        
-        if (ticketBuffer) {
-            const fileName = `ticket-${codigoReserva}.png`;
-            // IMPORTANTE: Si usas la KEY publica, asegúrate de que el bucket 'tickets' sea publico y tenga politicas abiertas
-            const { error: uploadError } = await supabase.storage
-              .from('tickets')
-              .upload(fileName, ticketBuffer, { contentType: 'image/png', upsert: true });
+    
+    // Solo intentamos si tenemos librería Canvas
+    if (canvasLib) {
+        try {
+            // Pasamos el código actualizado al generador
+            const reservaConCodigo = { ...reserva, reservation_code: codigoReserva };
+            const ticketBuffer = await generarTicketImagen(reservaConCodigo);
+            
+            if (ticketBuffer) {
+                const fileName = `ticket-${codigoReserva}-${Date.now()}.png`;
+                // Subir a Supabase Storage (Bucket 'tickets')
+                const { error: uploadError } = await supabase.storage
+                  .from('tickets')
+                  .upload(fileName, ticketBuffer, { contentType: 'image/png', upsert: true });
 
-            if (!uploadError) {
-                const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
-                publicUrl = data.publicUrl;
-            } else {
-                console.error("⚠️ Error subiendo imagen a Supabase (posible permiso):", uploadError);
+                if (!uploadError) {
+                    const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
+                    publicUrl = data.publicUrl;
+                    console.log("✅ Imagen generada y subida:", publicUrl);
+                } else {
+                    console.error("⚠️ Error subiendo a Supabase Storage:", uploadError.message);
+                }
             }
+        } catch (imgErr) {
+            console.error("⚠️ Falló proceso de imagen (Se usará fallback texto):", imgErr);
         }
-    } catch (imgErr) {
-        console.error("⚠️ Saltando generación de imagen por error de servidor:", imgErr);
+    } else {
+        console.log("ℹ️ Modo Texto: Librería Canvas no disponible.");
     }
 
-    // 4. Enviar WhatsApp (Con o Sin Imagen)
+    // 5. Enviar WhatsApp (Imagen o Texto según resultado anterior)
     let whatsappEnviado = false;
     if (reserva.phone) {
-       // Si publicUrl está vacío, se envía solo texto automáticamente
+       // Si publicUrl existe, enviará foto. Si es "", enviará texto.
        whatsappEnviado = await enviarWhatsApp(reserva.phone, publicUrl || null, codigoReserva, reserva.name);
+    } else {
+        console.warn("⚠️ Reserva sin teléfono, no se envió WhatsApp.");
     }
 
-    // 5. Actualizar Base de Datos
-    // NOTA: Si usas la clave 'anon' (public), asegúrate de que tengas permisos RLS para hacer UPDATE en la tabla 'reservas'
-    // Si esto falla, el mensaje de WhatsApp YA SE ENVIÓ en el paso anterior, así que al menos el cliente sabe.
-    const { error: updateError } = await supabase.from("reservas")
+    // 6. Actualizar Base de Datos (Confirmar)
+    await supabase.from("reservas")
       .update({ 
         status: "confirmada", 
         reservation_code: codigoReserva,
@@ -222,27 +252,16 @@ export async function POST(req: Request) {
       })
       .eq("id", reservaId);
 
-    if (updateError) {
-        console.error("⚠️ Error actualizando estado en DB (RLS o Permisos):", updateError);
-        // Retornamos 200 aunque falle la DB para que el frontend no muestre error rojo si el WhatsApp se envió
-        if (whatsappEnviado) {
-             return NextResponse.json({ 
-                success: true, 
-                warning: "WhatsApp enviado, pero error al actualizar estado DB",
-                whatsapp: true 
-            });
-        }
-        return NextResponse.json({ error: "Error actualizando DB" }, { status: 500 });
-    }
-
+    // Respuesta Final al Dashboard
     return NextResponse.json({ 
         success: true, 
         whatsapp: whatsappEnviado,
-        mode: publicUrl ? "imagen" : "texto_fallback"
+        mode: publicUrl ? "imagen" : "texto_fallback",
+        code: codigoReserva
     });
 
   } catch (err: any) {
-    console.error("🔥 Error Critico Endpoint:", err);
+    console.error("🔥 Error Crítico Endpoint:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
