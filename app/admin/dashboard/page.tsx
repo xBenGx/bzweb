@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     LayoutDashboard, Calendar, Music, FileText, Users, 
@@ -8,7 +8,7 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag, Menu as MenuIcon
+    Utensils, ShoppingBag, Menu as MenuIcon, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -31,9 +31,9 @@ const TABS = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("resumen");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar toggle
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isPageLoaded, setIsPageLoaded] = useState(false); // To prevent hydration mismatch
+  const [isMounted, setIsMounted] = useState(false); // CRÍTICO: Evita errores de hidratación y chunk loading
   
   // --- ESTADOS DE DATOS ---
   const [promos, setPromos] = useState<any[]>([]);
@@ -42,7 +42,7 @@ export default function DashboardPage() {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]); 
+  const [menuItems, setMenuItems] = useState<any[]>([]);
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -50,27 +50,8 @@ export default function DashboardPage() {
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   
-  // --- CARGA DE DATOS ---
-  useEffect(() => {
-    setIsPageLoaded(true);
-    fetchData();
-
-    // Realtime subscriptions
-    const channel = supabase
-      .channel('realtime-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchData = async () => {
+  // --- FUNCIÓN DE CARGA DE DATOS (Optimizada con useCallback para no congelar) ---
+  const fetchData = useCallback(async () => {
       try {
         const [promosData, showsData, reservasData, solicitudesData, clientesData, menuData] = await Promise.all([
             supabase.from('promociones').select('*').order('id', { ascending: false }),
@@ -88,9 +69,29 @@ export default function DashboardPage() {
         if (clientesData.data) setClientes(clientesData.data);
         if (menuData.data) setMenuItems(menuData.data);
       } catch (error) {
-          console.error("Error fetching data:", error);
+          console.error("Error recuperando datos (No crítico):", error);
       }
-  };
+  }, []);
+
+  // --- EFECTO DE MONTAJE Y REALTIME (ARREGLADO) ---
+  useEffect(() => {
+    setIsMounted(true);
+    fetchData();
+
+    // Suscripción segura a cambios
+    const channel = supabase
+      .channel('dashboard_changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          // Solo recargamos si hay cambios reales, evitando bucles
+          fetchData();
+      })
+      .subscribe();
+
+    // LIMPIEZA CRÍTICA: Esto evita que el navegador se congele
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData]);
 
   // --- MODALS STATE ---
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
@@ -105,7 +106,7 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- IMAGE HANDLER ---
+  // --- MANEJADOR DE IMAGEN ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
@@ -122,54 +123,81 @@ export default function DashboardPage() {
 
   const uploadImageToSupabase = async () => {
       if (!selectedFile) return null;
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const { error } = await supabase.storage.from('images').upload(fileName, selectedFile);
-      if (error) {
-          alert("Error al subir imagen: " + error.message);
+      try {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const { error } = await supabase.storage.from('images').upload(fileName, selectedFile);
+        if (error) throw error;
+        const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+        return data.publicUrl;
+      } catch (error: any) {
+          alert("Error subiendo imagen: " + error.message);
           return null;
       }
-      const { data } = supabase.storage.from('images').getPublicUrl(fileName);
-      return data.publicUrl;
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
 
-  // --- CLIENT ACTIONS ---
-  const handleOpenClientModal = (client: any = null) => {
-      setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
-      setIsClientModalOpen(true);
-  };
-
-  const handleSaveClient = async (e: React.FormEvent) => {
-      e.preventDefault();
+  // --- ACTIONS (Guardado Genérico) ---
+  const genericSave = async (table: string, data: any, id: number | undefined, closeModal: () => void) => {
       setIsLoading(true);
       try {
-          const clientData = {
-              nombre: currentClient.nombre,
-              whatsapp: currentClient.whatsapp,
-              fecha_nacimiento: currentClient.fecha_nacimiento
-          };
-          const query = currentClient.id 
-            ? supabase.from('clientes').update(clientData).eq('id', currentClient.id)
-            : supabase.from('clientes').insert([clientData]);
+          let finalData = { ...data };
+          if (selectedFile) {
+              const url = await uploadImageToSupabase();
+              if (url) finalData.image_url = url;
+          }
           
+          const query = id 
+            ? supabase.from(table).update(finalData).eq('id', id)
+            : supabase.from(table).insert([finalData]);
+            
           const { error } = await query;
           if (error) throw error;
           
           await fetchData();
-          setIsClientModalOpen(false);
-      } catch (error: any) { alert("Error: " + error.message); } 
+          closeModal();
+      } catch (error: any) { console.error(error); alert("Error: " + error.message); } 
       finally { setIsLoading(false); }
   };
 
-  const handleDeleteClient = async (id: number) => {
-      if(confirm("¿Estás seguro?")) {
-          await supabase.from('clientes').delete().eq('id', id);
+  const genericDelete = async (table: string, id: number) => {
+      if(confirm("¿Estás seguro de eliminar este elemento?")) {
+          await supabase.from(table).delete().eq('id', id);
           fetchData();
       }
   };
 
+  // --- WRAPPERS ESPECÍFICOS ---
+  const handleSaveClient = (e: React.FormEvent) => { e.preventDefault(); genericSave('clientes', currentClient, currentClient.id, () => setIsClientModalOpen(false)); };
+  const handleDeleteClient = (id: number) => genericDelete('clientes', id);
+
+  const handleSavePromo = (e: React.FormEvent) => { e.preventDefault(); genericSave('promociones', currentPromo, currentPromo.id, () => setIsPromoModalOpen(false)); };
+  const handleDeletePromo = (id: number) => genericDelete('promociones', id);
+
+  const handleSaveMenuItem = (e: React.FormEvent) => { e.preventDefault(); genericSave('productos_reserva', currentMenuItem, currentMenuItem.id, () => setIsMenuModalOpen(false)); };
+  const handleDeleteMenuItem = (id: number) => genericDelete('productos_reserva', id);
+
+  const handleSaveShow = (e: React.FormEvent) => { e.preventDefault(); genericSave('shows', currentShow, currentShow.id, () => setIsShowModalOpen(false)); };
+  const handleDeleteShow = (id: number) => genericDelete('shows', id);
+
+  // --- SHOW ACTIONS EXTRAS ---
+  const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
+  const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
+  const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
+
+  // --- STATUS UPDATES & TOGGLES ---
+  const updateStatus = async (table: string, id: number, field: string, value: any) => {
+      await supabase.from(table).update({ [field]: value }).eq('id', id);
+      fetchData();
+  };
+
+  const updateReservaStatus = (id: number, status: string) => updateStatus('reservas', id, 'status', status);
+  const updateSolicitudStatus = (id: number, status: string) => updateStatus('solicitudes', id, 'status', status);
+  const toggleMenuStatus = (id: number, active: boolean) => updateStatus('productos_reserva', id, 'active', !active);
+  const togglePromoStatus = (id: number, active: boolean) => updateStatus('promociones', id, 'active', !active);
+
+  // --- CSV UPLOAD ---
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -193,128 +221,7 @@ export default function DashboardPage() {
       reader.readAsText(file);
   };
 
-  // --- PROMO ACTIONS ---
-  const handleOpenPromoModal = (promo: any = null) => {
-      setSelectedFile(null);
-      setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
-      setIsPromoModalOpen(true);
-  };
-
-  const handleSavePromo = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsLoading(true);
-      try {
-          let finalImageUrl = currentPromo.image_url;
-          if (selectedFile) {
-              const url = await uploadImageToSupabase();
-              if (url) finalImageUrl = url;
-          }
-          const promoData = { ...currentPromo, image_url: finalImageUrl };
-          const query = currentPromo.id 
-            ? supabase.from('promociones').update(promoData).eq('id', currentPromo.id)
-            : supabase.from('promociones').insert([promoData]);
-            
-          await query;
-          await fetchData();
-          setIsPromoModalOpen(false);
-      } catch (error) { console.error(error); } 
-      finally { setIsLoading(false); }
-  };
-
-  const handleDeletePromo = async (id: number) => {
-      if(confirm("¿Eliminar?")) { await supabase.from('promociones').delete().eq('id', id); fetchData(); }
-  };
-
-  const togglePromoStatus = async (id: number, currentStatus: boolean) => {
-      await supabase.from('promociones').update({ active: !currentStatus }).eq('id', id);
-      fetchData();
-  };
-
-  // --- MENU ACTIONS ---
-  const handleOpenMenuModal = (item: any = null) => {
-      setSelectedFile(null);
-      setCurrentMenuItem(item || { name: "", description: "", price: 0, image_url: "", active: true, category: "General" });
-      setIsMenuModalOpen(true);
-  };
-
-  const handleSaveMenuItem = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsLoading(true);
-      try {
-          let finalImageUrl = currentMenuItem.image_url;
-          if (selectedFile) {
-              const url = await uploadImageToSupabase();
-              if (url) finalImageUrl = url;
-          }
-          const menuData = { ...currentMenuItem, image_url: finalImageUrl };
-          const query = currentMenuItem.id 
-            ? supabase.from('productos_reserva').update(menuData).eq('id', currentMenuItem.id)
-            : supabase.from('productos_reserva').insert([menuData]);
-
-          await query;
-          await fetchData();
-          setIsMenuModalOpen(false);
-      } catch (error) { console.error(error); } 
-      finally { setIsLoading(false); }
-  };
-
-  const handleDeleteMenuItem = async (id: number) => {
-      if(confirm("¿Eliminar?")) { await supabase.from('productos_reserva').delete().eq('id', id); fetchData(); }
-  };
-
-  const toggleMenuStatus = async (id: number, currentStatus: boolean) => {
-      await supabase.from('productos_reserva').update({ active: !currentStatus }).eq('id', id);
-      fetchData();
-  };
-
-  // --- SHOW ACTIONS ---
-  const handleOpenShowModal = (show: any = null) => {
-      setSelectedFile(null);
-      setCurrentShow(show || { title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] });
-      setIsShowModalOpen(true);
-  };
-
-  const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
-  const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
-  const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
-
-  const handleSaveShow = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setIsLoading(true);
-      try {
-          let finalImageUrl = currentShow.image_url;
-          if (selectedFile) {
-              const url = await uploadImageToSupabase();
-              if (url) finalImageUrl = url;
-          }
-          const showData = { ...currentShow, image_url: finalImageUrl };
-          const query = currentShow.id 
-            ? supabase.from('shows').update(showData).eq('id', currentShow.id)
-            : supabase.from('shows').insert([showData]);
-
-          await query;
-          await fetchData();
-          setIsShowModalOpen(false);
-      } catch (error) { console.error(error); } 
-      finally { setIsLoading(false); }
-  };
-
-  const handleDeleteShow = async (id: number) => {
-      if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); }
-  };
-
-  // --- RESERVATIONS ACTIONS ---
-  const updateReservaStatus = async (id: number, status: string) => {
-      await supabase.from('reservas').update({ status }).eq('id', id);
-      fetchData();
-  };
-
-  const updateSolicitudStatus = async (id: number, status: string) => {
-      await supabase.from('solicitudes').update({ status }).eq('id', id);
-      fetchData();
-  };
-
-  // Helper for birthdays
+  // Helper birthdays
   const getBirthdays = () => {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
@@ -323,32 +230,38 @@ export default function DashboardPage() {
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
           const dParts = c.fecha_nacimiento.split('-');
-          const dMonth = parseInt(dParts[1]) - 1;
-          const dDay = parseInt(dParts[2]);
-          return dMonth === filterMonth && dDay === filterDay;
+          return (parseInt(dParts[1]) - 1) === filterMonth && parseInt(dParts[2]) === filterDay;
       });
   };
   const birthdays = getBirthdays();
 
-  if (!isPageLoaded) return null;
+  // --- EVITAR RENDERIZADO ANTES DE CARGAR (Soluciona ChunkLoadError visual) ---
+  if (!isMounted) return <div className="min-h-screen bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin w-10 h-10 text-[#DAA520]"/></div>;
 
   return (
-    <div className={`min-h-screen bg-black text-white flex ${montserrat.className}`}>
+    <div className={`min-h-screen bg-black text-white flex ${montserrat.className} overflow-hidden`}>
       
       {/* MOBILE TOGGLE */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-800 rounded-lg text-white"
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-zinc-800 rounded-lg text-white border border-white/10"
       >
         <MenuIcon className="w-6 h-6"/>
       </button>
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR (Corregido Logo Gigante) */}
       <aside className={`fixed inset-y-0 left-0 bg-zinc-900 border-r border-white/10 z-40 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 w-64 flex flex-col`}>
-        <div className="p-6 flex justify-center border-b border-white/5">
-            {/* Fixed Logo Size */}
+        <div className="h-24 flex items-center justify-center border-b border-white/5 relative bg-black/20">
+            {/* Contenedor fijo para el logo */}
             <div className="relative w-40 h-16">
-                <Image src="/logo.png" alt="BZ Logo" fill className="object-contain" priority sizes="(max-width: 768px) 100vw, 33vw" />
+                <Image 
+                    src="/logo.png" 
+                    alt="BZ Logo" 
+                    fill 
+                    className="object-contain" 
+                    priority 
+                    sizes="(max-width: 768px) 100vw, 33vw" 
+                />
             </div>
         </div>
         <nav className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
@@ -372,13 +285,16 @@ export default function DashboardPage() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 bg-black min-h-screen">
+      <main className="flex-1 md:ml-64 p-4 md:p-8 bg-black min-h-screen overflow-y-auto">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pl-12 md:pl-0">
             <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white uppercase tracking-wide">{TABS.find(t => t.id === activeTab)?.label}</h1>
                 <p className="text-xs text-zinc-500 mt-1">Panel de Administración Avanzado</p>
             </div>
             <div className="flex items-center gap-4 mt-4 md:mt-0">
+                <button onClick={fetchData} className="p-2 bg-zinc-900 rounded-full hover:bg-zinc-800 border border-white/10 transition-colors group" title="Recargar Datos">
+                    <RefreshCw className="w-4 h-4 text-zinc-400 group-hover:rotate-180 transition-transform" />
+                </button>
                 <div className="flex items-center gap-3 pl-4">
                     <div className="w-10 h-10 rounded-full bg-[#DAA520] flex items-center justify-center text-black font-bold shadow-lg border-2 border-white/10">A</div>
                     <div className="hidden md:block">
@@ -432,11 +348,11 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* Quick Stats or Promo Preview */}
+                        {/* Promo Preview */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Flame className="w-5 h-5 text-red-500"/> Promoción Vigente</h3>
                             {promos.length > 0 ? (
-                                <div className="relative flex-1 rounded-2xl overflow-hidden group">
+                                <div className="relative flex-1 rounded-2xl overflow-hidden group min-h-[200px]">
                                     <Image src={promos[0].image_url || "/placeholder.jpg"} alt="Promo" fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent p-6 flex flex-col justify-end">
                                         <h4 className="text-xl font-bold text-white">{promos[0].title}</h4>
@@ -444,7 +360,7 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex-1 flex items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl">
+                                <div className="flex-1 flex items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl min-h-[200px]">
                                     <p className="text-zinc-500 text-xs">No hay promociones activas</p>
                                 </div>
                             )}
@@ -779,7 +695,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL MENÚ EXPRESS --- */}
+        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
         <AnimatePresence>
             {isMenuModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
