@@ -34,7 +34,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("resumen");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isMounted, setIsMounted] = useState(false); // CRÍTICO: Previene errores de hidratación
+  const [isMounted, setIsMounted] = useState(false); // CRÍTICO: Previene el pantallazo negro por hidratación
   
   // --- ESTADOS DE DATOS ---
   const [promos, setPromos] = useState<any[]>([]);
@@ -94,11 +94,11 @@ export default function DashboardPage() {
 
   // --- 2. EFECTO DE INICIO (Con limpieza para evitar 'Freeze') ---
   useEffect(() => {
-    setIsMounted(true);
+    setIsMounted(true); // Indica que el componente ya está en el cliente
     fetchData();
 
     const channel = supabase
-      .channel('dashboard_realtime')
+      .channel('dashboard_realtime_v2') // Canal único para evitar conflictos
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
           fetchData();
       })
@@ -141,9 +141,9 @@ export default function DashboardPage() {
 
   const triggerFileInput = () => fileInputRef.current?.click();
 
-  // --- 4. DEFINICIÓN DE HANDLERS (Aquí estaba el error de TypeScript) ---
+  // --- 4. HANDLERS DEFINIDOS EN EL SCOPE PRINCIPAL (Solución a errores de TS) ---
 
-  // === CLIENTES HANDLERS ===
+  // === CLIENTES ===
   const handleOpenClientModal = (client: any = null) => {
       setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
       setIsClientModalOpen(true);
@@ -165,7 +165,7 @@ export default function DashboardPage() {
       if(confirm("¿Borrar cliente?")) { await supabase.from('clientes').delete().eq('id', id); fetchData(); }
   };
 
-  // === PROMOCIONES HANDLERS ===
+  // === PROMOCIONES ===
   const handleOpenPromoModal = (promo: any = null) => {
       setSelectedFile(null);
       setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
@@ -195,7 +195,7 @@ export default function DashboardPage() {
       fetchData();
   };
 
-  // === SHOWS HANDLERS ===
+  // === SHOWS ===
   const handleOpenShowModal = (show: any = null) => {
       setSelectedFile(null);
       setCurrentShow(show || { title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] });
@@ -224,7 +224,7 @@ export default function DashboardPage() {
   const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
   const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
 
-  // === MENÚ HANDLERS ===
+  // === MENÚ ===
   const handleOpenMenuModal = (item: any = null) => {
       setSelectedFile(null);
       setCurrentMenuItem(item || { name: "", description: "", price: 0, image_url: "", active: true, category: "General" });
@@ -254,7 +254,7 @@ export default function DashboardPage() {
       fetchData();
   };
 
-  // === RESERVAS & SOLICITUDES HANDLERS ===
+  // === OTROS ===
   const updateReservaStatus = async (id: number, status: string) => {
       await supabase.from('reservas').update({ status }).eq('id', id);
       fetchData();
@@ -265,7 +265,6 @@ export default function DashboardPage() {
       fetchData();
   };
 
-  // === CSV HANDLER ===
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -289,7 +288,6 @@ export default function DashboardPage() {
       reader.readAsText(file);
   };
 
-  // Helper birthdays
   const getBirthdays = () => {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
@@ -303,8 +301,15 @@ export default function DashboardPage() {
   };
   const birthdays = getBirthdays();
 
-  // PREVENCIÓN DE RENDERIZADO SI NO ESTÁ MONTADO
-  if (!isMounted) return <div className="min-h-screen bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin w-10 h-10 text-[#DAA520]"/></div>;
+  // --- RENDERIZADO SEGURO ---
+  // Si no está montado, mostramos loader para evitar el error "ChunkLoad" visual y el freeze
+  if (!isMounted) {
+      return (
+          <div className="min-h-screen bg-black flex items-center justify-center text-white">
+              <Loader2 className="animate-spin w-10 h-10 text-[#DAA520]"/>
+          </div>
+      );
+  }
 
   return (
     <div className={`min-h-screen bg-black text-white flex ${montserrat.className} overflow-hidden`}>
@@ -319,7 +324,7 @@ export default function DashboardPage() {
 
       {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 bg-zinc-900 border-r border-white/10 z-40 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 w-64 flex flex-col`}>
-        {/* LOGO ARREGLADO (tamaño fijo) */}
+        {/* LOGO ARREGLADO */}
         <div className="h-24 flex items-center justify-center border-b border-white/5 relative bg-black/20">
             <div className="relative w-40 h-16">
                 <Image 
