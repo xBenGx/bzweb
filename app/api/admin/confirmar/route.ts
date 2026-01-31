@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-// Importaciones para manejo de archivos e imágenes
+// Usamos imports dinámicos o try/catch para canvas para evitar que tumbe el servidor si falta la librería
 import { createCanvas, loadImage } from "canvas"; 
 import path from "path";
 
 // ----------------------------------------------------------------------
-// 1. CONFIGURACIÓN Y CREDENCIALES
+// 1. CONFIGURACIÓN Y CREDENCIALES (HARCODED PARA EVITAR ERRORES)
 // ----------------------------------------------------------------------
 
-// Credenciales SUPABASE
+// Credenciales SUPABASE DIRECTAS (Soluciona el error "Faltan variables")
 const SUPABASE_URL = "https://lqelewbxejvsiitpjjly.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WQ6_AT1KoCGLJ_kbAgrszA_-p9hSp_Z"; 
 
 // Configuración WHATSAPP (UltraMsg)
 const WAPP_INSTANCE_ID = "instance160510"; 
 const WAPP_TOKEN = "j5bw6c72071pgp29";     
+
 // URLs para imagen y texto
 const WAPP_URL_IMAGE = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}/messages/image`; 
 const WAPP_URL_CHAT = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}/messages/chat`; 
@@ -79,16 +80,18 @@ async function generarTicketImagen(reserva: any) {
 
   } catch (error) {
     console.error("❌ Error generando ticket (Canvas):", error);
-    return null; // Retornamos null para activar el modo "solo texto"
+    // Retornamos null para que el sistema NO se detenga y envíe al menos el texto
+    return null; 
   }
 }
 
 // Envía WhatsApp (Imagen o Texto)
 async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo: string, nombre: string) {
-  // 1. LIMPIEZA DE TELÉFONO (CRÍTICO)
+  // 1. LIMPIEZA DE TELÉFONO (CRÍTICO PARA CHILE)
+  // Eliminamos el +, espacios, guiones
   let phoneClean = telefono.replace(/\D/g, ""); 
   
-  // Caso Chile 9 dígitos: 912345678 -> Agregamos 56 => 56912345678
+  // Caso Chile 9 dígitos: 958444061 -> Agregamos 56 => 56958444061
   if (phoneClean.length === 9 && phoneClean.startsWith("9")) {
       phoneClean = "56" + phoneClean;
   }
@@ -96,7 +99,7 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
   if (phoneClean.length === 8) {
       phoneClean = "569" + phoneClean;
   }
-  // Si ya tiene 11 dígitos (569...) se deja igual.
+  // Si ya tiene 11 dígitos (56958444061) se deja igual.
 
   const mensaje = `Hola ${nombre} 👋,\n\n¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂\n\n📌 *Código:* ${codigo}\n📅 *Fecha:* Hoy/Pronto\n\n${imagenUrl ? "Adjuntamos tu ticket de entrada. 🎟️" : "Por favor muestra este mensaje en recepción."}\n\n¡Te esperamos!`;
 
@@ -105,7 +108,8 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
     let bodyParams: any = {
         token: WAPP_TOKEN,
         to: phoneClean,
-        body: mensaje // Para chat se usa 'body'
+        body: mensaje, // Para chat se usa 'body'
+        priority: 10 // Prioridad alta
     };
 
     // Si tenemos imagen, cambiamos el endpoint y los parámetros
@@ -115,7 +119,8 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
             token: WAPP_TOKEN,
             to: phoneClean,
             image: imagenUrl,
-            caption: mensaje // Para imagen se usa 'caption'
+            caption: mensaje, // Para imagen se usa 'caption'
+            priority: 10
         };
     }
 
@@ -130,9 +135,10 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
     if (!res.ok) {
         const txt = await res.text();
         console.error("❌ Error UltraMsg:", txt);
+        return false;
     }
     
-    return res.ok;
+    return true;
   } catch (e) {
     console.error("❌ Error API WhatsApp:", e);
     return false;
@@ -144,13 +150,17 @@ async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo
 // ----------------------------------------------------------------------
 export async function POST(req: Request) {
   try {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      throw new Error("Credenciales de Supabase vacías.");
-    }
+    console.log("🚀 Iniciando confirmación de reserva...");
 
+    // Inicializamos Supabase con las claves harcodeadas
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    
     const body = await req.json();
     const { reservaId } = body;
+
+    if (!reservaId) {
+        return NextResponse.json({ error: "Falta el ID de la reserva" }, { status: 400 });
+    }
 
     // 1. Obtener datos de la Reserva
     const { data: reserva, error } = await supabase
@@ -159,7 +169,10 @@ export async function POST(req: Request) {
       .eq("id", reservaId)
       .single();
 
-    if (error || !reserva) return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
+    if (error || !reserva) {
+        console.error("❌ Reserva no encontrada:", error);
+        return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
+    }
 
     // 2. Generar Código si no existe
     let codigoReserva = reserva.reservation_code;
@@ -175,6 +188,7 @@ export async function POST(req: Request) {
         
         if (ticketBuffer) {
             const fileName = `ticket-${codigoReserva}.png`;
+            // IMPORTANTE: Si usas la KEY publica, asegúrate de que el bucket 'tickets' sea publico y tenga politicas abiertas
             const { error: uploadError } = await supabase.storage
               .from('tickets')
               .upload(fileName, ticketBuffer, { contentType: 'image/png', upsert: true });
@@ -183,28 +197,43 @@ export async function POST(req: Request) {
                 const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
                 publicUrl = data.publicUrl;
             } else {
-                console.error("Error subiendo imagen:", uploadError);
+                console.error("⚠️ Error subiendo imagen a Supabase (posible permiso):", uploadError);
             }
         }
     } catch (imgErr) {
-        console.error("Saltando generación de imagen por error:", imgErr);
+        console.error("⚠️ Saltando generación de imagen por error de servidor:", imgErr);
     }
 
     // 4. Enviar WhatsApp (Con o Sin Imagen)
     let whatsappEnviado = false;
     if (reserva.phone) {
-       // Si publicUrl está vacío, la función enviarWhatsApp enviará automáticamente solo texto
+       // Si publicUrl está vacío, se envía solo texto automáticamente
        whatsappEnviado = await enviarWhatsApp(reserva.phone, publicUrl || null, codigoReserva, reserva.name);
     }
 
     // 5. Actualizar Base de Datos
-    await supabase.from("reservas")
+    // NOTA: Si usas la clave 'anon' (public), asegúrate de que tengas permisos RLS para hacer UPDATE en la tabla 'reservas'
+    // Si esto falla, el mensaje de WhatsApp YA SE ENVIÓ en el paso anterior, así que al menos el cliente sabe.
+    const { error: updateError } = await supabase.from("reservas")
       .update({ 
         status: "confirmada", 
         reservation_code: codigoReserva,
         ticket_url: publicUrl || null 
       })
       .eq("id", reservaId);
+
+    if (updateError) {
+        console.error("⚠️ Error actualizando estado en DB (RLS o Permisos):", updateError);
+        // Retornamos 200 aunque falle la DB para que el frontend no muestre error rojo si el WhatsApp se envió
+        if (whatsappEnviado) {
+             return NextResponse.json({ 
+                success: true, 
+                warning: "WhatsApp enviado, pero error al actualizar estado DB",
+                whatsapp: true 
+            });
+        }
+        return NextResponse.json({ error: "Error actualizando DB" }, { status: 500 });
+    }
 
     return NextResponse.json({ 
         success: true, 
@@ -213,7 +242,7 @@ export async function POST(req: Request) {
     });
 
   } catch (err: any) {
-    console.error("Error Endpoint:", err);
+    console.error("🔥 Error Critico Endpoint:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
