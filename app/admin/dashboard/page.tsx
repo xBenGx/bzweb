@@ -30,10 +30,11 @@ const TABS = [
 ];
 
 export default function DashboardPage() {
+  // --- ESTADOS GLOBALES ---
   const [activeTab, setActiveTab] = useState("resumen");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isMounted, setIsMounted] = useState(false); // CRÍTICO: Evita errores de hidratación y chunk loading
+  const [isMounted, setIsMounted] = useState(false); // CRÍTICO: Previene errores de hidratación
   
   // --- ESTADOS DE DATOS ---
   const [promos, setPromos] = useState<any[]>([]);
@@ -44,13 +45,31 @@ export default function DashboardPage() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]);
 
-  // --- ESTADOS PARA CLIENTES ---
+  // --- ESTADOS PARA MODALES Y EDICIÓN ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [currentClient, setCurrentClient] = useState<any>(null);
-  const csvInputRef = useRef<HTMLInputElement>(null);
   
-  // --- FUNCIÓN DE CARGA DE DATOS (Optimizada con useCallback para no congelar) ---
+  // Modal Clientes
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [currentClient, setCurrentClient] = useState<any>({ nombre: "", whatsapp: "", fecha_nacimiento: "" });
+  
+  // Modal Promociones
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [currentPromo, setCurrentPromo] = useState<any>({ title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
+
+  // Modal Shows
+  const [isShowModalOpen, setIsShowModalOpen] = useState(false);
+  const [currentShow, setCurrentShow] = useState<any>({ title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] });
+
+  // Modal Menú
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [currentMenuItem, setCurrentMenuItem] = useState<any>({ name: "", description: "", price: 0, image_url: "", active: true, category: "General" });
+
+  // Archivos
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // --- 1. FUNCIÓN DE CARGA DE DATOS (Estabilizada) ---
   const fetchData = useCallback(async () => {
       try {
         const [promosData, showsData, reservasData, solicitudesData, clientesData, menuData] = await Promise.all([
@@ -69,44 +88,28 @@ export default function DashboardPage() {
         if (clientesData.data) setClientes(clientesData.data);
         if (menuData.data) setMenuItems(menuData.data);
       } catch (error) {
-          console.error("Error recuperando datos (No crítico):", error);
+          console.error("Error cargando datos:", error);
       }
   }, []);
 
-  // --- EFECTO DE MONTAJE Y REALTIME (ARREGLADO) ---
+  // --- 2. EFECTO DE INICIO (Con limpieza para evitar 'Freeze') ---
   useEffect(() => {
     setIsMounted(true);
     fetchData();
 
-    // Suscripción segura a cambios
     const channel = supabase
-      .channel('dashboard_changes')
+      .channel('dashboard_realtime')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          // Solo recargamos si hay cambios reales, evitando bucles
           fetchData();
       })
       .subscribe();
 
-    // LIMPIEZA CRÍTICA: Esto evita que el navegador se congele
     return () => {
       supabase.removeChannel(channel);
     };
   }, [fetchData]);
 
-  // --- MODALS STATE ---
-  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-  const [currentPromo, setCurrentPromo] = useState<any>(null);
-  
-  const [isShowModalOpen, setIsShowModalOpen] = useState(false);
-  const [currentShow, setCurrentShow] = useState<any>(null);
-
-  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
-  const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  // --- MANEJADOR DE IMAGEN ---
+  // --- 3. UTILIDADES DE IMAGEN ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
@@ -131,73 +134,138 @@ export default function DashboardPage() {
         const { data } = supabase.storage.from('images').getPublicUrl(fileName);
         return data.publicUrl;
       } catch (error: any) {
-          alert("Error subiendo imagen: " + error.message);
+          alert("Error imagen: " + error.message);
           return null;
       }
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
 
-  // --- ACTIONS (Guardado Genérico) ---
-  const genericSave = async (table: string, data: any, id: number | undefined, closeModal: () => void) => {
+  // --- 4. DEFINICIÓN DE HANDLERS (Aquí estaba el error de TypeScript) ---
+
+  // === CLIENTES HANDLERS ===
+  const handleOpenClientModal = (client: any = null) => {
+      setCurrentClient(client || { nombre: "", whatsapp: "", fecha_nacimiento: "" });
+      setIsClientModalOpen(true);
+  };
+
+  const handleSaveClient = async (e: React.FormEvent) => {
+      e.preventDefault();
       setIsLoading(true);
       try {
-          let finalData = { ...data };
-          if (selectedFile) {
-              const url = await uploadImageToSupabase();
-              if (url) finalData.image_url = url;
-          }
-          
-          const query = id 
-            ? supabase.from(table).update(finalData).eq('id', id)
-            : supabase.from(table).insert([finalData]);
-            
-          const { error } = await query;
-          if (error) throw error;
-          
+          const clientData = { nombre: currentClient.nombre, whatsapp: currentClient.whatsapp, fecha_nacimiento: currentClient.fecha_nacimiento };
+          const query = currentClient.id ? supabase.from('clientes').update(clientData).eq('id', currentClient.id) : supabase.from('clientes').insert([clientData]);
+          await query;
           await fetchData();
-          closeModal();
-      } catch (error: any) { console.error(error); alert("Error: " + error.message); } 
-      finally { setIsLoading(false); }
+          setIsClientModalOpen(false);
+      } catch (error: any) { alert("Error: " + error.message); } finally { setIsLoading(false); }
   };
 
-  const genericDelete = async (table: string, id: number) => {
-      if(confirm("¿Estás seguro de eliminar este elemento?")) {
-          await supabase.from(table).delete().eq('id', id);
-          fetchData();
-      }
+  const handleDeleteClient = async (id: number) => {
+      if(confirm("¿Borrar cliente?")) { await supabase.from('clientes').delete().eq('id', id); fetchData(); }
   };
 
-  // --- WRAPPERS ESPECÍFICOS ---
-  const handleSaveClient = (e: React.FormEvent) => { e.preventDefault(); genericSave('clientes', currentClient, currentClient.id, () => setIsClientModalOpen(false)); };
-  const handleDeleteClient = (id: number) => genericDelete('clientes', id);
+  // === PROMOCIONES HANDLERS ===
+  const handleOpenPromoModal = (promo: any = null) => {
+      setSelectedFile(null);
+      setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
+      setIsPromoModalOpen(true);
+  };
 
-  const handleSavePromo = (e: React.FormEvent) => { e.preventDefault(); genericSave('promociones', currentPromo, currentPromo.id, () => setIsPromoModalOpen(false)); };
-  const handleDeletePromo = (id: number) => genericDelete('promociones', id);
+  const handleSavePromo = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          let url = currentPromo.image_url;
+          if (selectedFile) { const up = await uploadImageToSupabase(); if(up) url = up; }
+          const data = { ...currentPromo, image_url: url };
+          const query = currentPromo.id ? supabase.from('promociones').update(data).eq('id', currentPromo.id) : supabase.from('promociones').insert([data]);
+          await query;
+          await fetchData();
+          setIsPromoModalOpen(false);
+      } catch (error: any) { alert("Error: " + error.message); } finally { setIsLoading(false); }
+  };
 
-  const handleSaveMenuItem = (e: React.FormEvent) => { e.preventDefault(); genericSave('productos_reserva', currentMenuItem, currentMenuItem.id, () => setIsMenuModalOpen(false)); };
-  const handleDeleteMenuItem = (id: number) => genericDelete('productos_reserva', id);
+  const handleDeletePromo = async (id: number) => {
+      if(confirm("¿Borrar promo?")) { await supabase.from('promociones').delete().eq('id', id); fetchData(); }
+  };
 
-  const handleSaveShow = (e: React.FormEvent) => { e.preventDefault(); genericSave('shows', currentShow, currentShow.id, () => setIsShowModalOpen(false)); };
-  const handleDeleteShow = (id: number) => genericDelete('shows', id);
+  const togglePromoStatus = async (id: number, active: boolean) => {
+      await supabase.from('promociones').update({ active: !active }).eq('id', id);
+      fetchData();
+  };
 
-  // --- SHOW ACTIONS EXTRAS ---
+  // === SHOWS HANDLERS ===
+  const handleOpenShowModal = (show: any = null) => {
+      setSelectedFile(null);
+      setCurrentShow(show || { title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] });
+      setIsShowModalOpen(true);
+  };
+
+  const handleSaveShow = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          let url = currentShow.image_url;
+          if (selectedFile) { const up = await uploadImageToSupabase(); if(up) url = up; }
+          const data = { ...currentShow, image_url: url };
+          const query = currentShow.id ? supabase.from('shows').update(data).eq('id', currentShow.id) : supabase.from('shows').insert([data]);
+          await query;
+          await fetchData();
+          setIsShowModalOpen(false);
+      } catch (error: any) { alert("Error: " + error.message); } finally { setIsLoading(false); }
+  };
+
+  const handleDeleteShow = async (id: number) => {
+      if(confirm("¿Borrar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); }
+  };
+
   const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
   const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
   const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
 
-  // --- STATUS UPDATES & TOGGLES ---
-  const updateStatus = async (table: string, id: number, field: string, value: any) => {
-      await supabase.from(table).update({ [field]: value }).eq('id', id);
+  // === MENÚ HANDLERS ===
+  const handleOpenMenuModal = (item: any = null) => {
+      setSelectedFile(null);
+      setCurrentMenuItem(item || { name: "", description: "", price: 0, image_url: "", active: true, category: "General" });
+      setIsMenuModalOpen(true);
+  };
+
+  const handleSaveMenuItem = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          let url = currentMenuItem.image_url;
+          if (selectedFile) { const up = await uploadImageToSupabase(); if(up) url = up; }
+          const data = { ...currentMenuItem, image_url: url };
+          const query = currentMenuItem.id ? supabase.from('productos_reserva').update(data).eq('id', currentMenuItem.id) : supabase.from('productos_reserva').insert([data]);
+          await query;
+          await fetchData();
+          setIsMenuModalOpen(false);
+      } catch (error: any) { alert("Error: " + error.message); } finally { setIsLoading(false); }
+  };
+
+  const handleDeleteMenuItem = async (id: number) => {
+      if(confirm("¿Borrar item?")) { await supabase.from('productos_reserva').delete().eq('id', id); fetchData(); }
+  };
+
+  const toggleMenuStatus = async (id: number, active: boolean) => {
+      await supabase.from('productos_reserva').update({ active: !active }).eq('id', id);
       fetchData();
   };
 
-  const updateReservaStatus = (id: number, status: string) => updateStatus('reservas', id, 'status', status);
-  const updateSolicitudStatus = (id: number, status: string) => updateStatus('solicitudes', id, 'status', status);
-  const toggleMenuStatus = (id: number, active: boolean) => updateStatus('productos_reserva', id, 'active', !active);
-  const togglePromoStatus = (id: number, active: boolean) => updateStatus('promociones', id, 'active', !active);
+  // === RESERVAS & SOLICITUDES HANDLERS ===
+  const updateReservaStatus = async (id: number, status: string) => {
+      await supabase.from('reservas').update({ status }).eq('id', id);
+      fetchData();
+  };
 
-  // --- CSV UPLOAD ---
+  const updateSolicitudStatus = async (id: number, status: string) => {
+      await supabase.from('solicitudes').update({ status }).eq('id', id);
+      fetchData();
+  };
+
+  // === CSV HANDLER ===
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -214,7 +282,7 @@ export default function DashboardPage() {
           }
           if (newClients.length > 0) {
               await supabase.from('clientes').insert(newClients);
-              alert(`${newClients.length} clientes importados.`);
+              alert(`${newClients.length} importados.`);
               fetchData();
           }
       };
@@ -235,7 +303,7 @@ export default function DashboardPage() {
   };
   const birthdays = getBirthdays();
 
-  // --- EVITAR RENDERIZADO ANTES DE CARGAR (Soluciona ChunkLoadError visual) ---
+  // PREVENCIÓN DE RENDERIZADO SI NO ESTÁ MONTADO
   if (!isMounted) return <div className="min-h-screen bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin w-10 h-10 text-[#DAA520]"/></div>;
 
   return (
@@ -249,10 +317,10 @@ export default function DashboardPage() {
         <MenuIcon className="w-6 h-6"/>
       </button>
 
-      {/* SIDEBAR (Corregido Logo Gigante) */}
+      {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 bg-zinc-900 border-r border-white/10 z-40 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 w-64 flex flex-col`}>
+        {/* LOGO ARREGLADO (tamaño fijo) */}
         <div className="h-24 flex items-center justify-center border-b border-white/5 relative bg-black/20">
-            {/* Contenedor fijo para el logo */}
             <div className="relative w-40 h-16">
                 <Image 
                     src="/logo.png" 
@@ -326,7 +394,6 @@ export default function DashboardPage() {
                     </div>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Latest Reservations */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Clock className="w-5 h-5 text-[#DAA520]"/> Últimas Reservas</h3>
                             <div className="space-y-3">
@@ -348,7 +415,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* Promo Preview */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 flex flex-col">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Flame className="w-5 h-5 text-red-500"/> Promoción Vigente</h3>
                             {promos.length > 0 ? (
@@ -376,7 +442,6 @@ export default function DashboardPage() {
                         {reservas.map((res) => (
                             <div key={res.id} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl hover:border-[#DAA520]/20 transition-all">
                                 <div className="flex flex-col md:flex-row justify-between gap-4">
-                                    {/* Info Principal */}
                                     <div className="flex gap-4">
                                         <div className="w-12 h-12 bg-zinc-800 rounded-xl flex flex-col items-center justify-center border border-white/10">
                                             <span className="text-lg font-bold text-white">{res.guests}</span>
@@ -394,8 +459,6 @@ export default function DashboardPage() {
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Acciones */}
                                     <div className="flex flex-col items-end gap-2">
                                         {res.status === "pendiente" ? (
                                             <div className="flex gap-2">
@@ -409,8 +472,6 @@ export default function DashboardPage() {
                                         )}
                                     </div>
                                 </div>
-
-                                {/* PRE-ORDER SECTION */}
                                 {res.pre_order && res.pre_order.length > 0 && (
                                     <div className="mt-4 pt-4 border-t border-white/5">
                                         <div className="bg-black/30 rounded-xl p-4 border border-[#DAA520]/20">
@@ -444,7 +505,6 @@ export default function DashboardPage() {
                             <Plus className="w-4 h-4" /> Agregar Item
                         </button>
                     </div>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {menuItems.map((item) => (
                             <div key={item.id} className={`group bg-zinc-900 border ${item.active ? 'border-white/10' : 'border-red-900/30 opacity-60'} p-4 rounded-2xl relative transition-all hover:border-[#DAA520]/50 hover:shadow-xl`}>
@@ -476,7 +536,6 @@ export default function DashboardPage() {
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        {/* Birthday Module */}
                         <div className="bg-gradient-to-br from-zinc-900 to-black border border-[#DAA520]/30 p-6 rounded-2xl relative overflow-hidden">
                             <div className="absolute -top-4 -right-4 opacity-10"><Cake className="w-32 h-32 text-[#DAA520]" /></div>
                             <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Gift className="w-5 h-5 text-[#DAA520]"/> Cumpleañeros</h3>
@@ -495,7 +554,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* Import Module */}
                         <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-center items-center text-center">
                             <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVUpload} className="hidden" />
                             <div className="w-12 h-12 bg-green-900/20 rounded-full flex items-center justify-center mb-3 text-green-500"><FileSpreadsheet className="w-6 h-6" /></div>
@@ -507,7 +565,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* Clients Table */}
                     <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden">
                         <div className="p-6 flex justify-between items-center border-b border-white/5">
                             <h3 className="text-lg font-bold">Lista de Clientes <span className="text-zinc-500 text-sm font-normal">({clientes.length})</span></h3>
@@ -695,7 +752,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
+        {/* --- MODAL MENÚ EXPRESS --- */}
         <AnimatePresence>
             {isMenuModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
