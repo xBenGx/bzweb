@@ -7,7 +7,6 @@ import {
     CreditCard, Upload, Copy, CheckCircle, Loader2 
 } from "lucide-react";
 import Image from "next/image";
-import { toast } from "sonner"; // Opcional: si usas notificaciones, sino usa alert
 
 // Estructura del Ítem
 export type CartItem = {
@@ -68,6 +67,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       if (data) setMenuExtras(data);
     };
     fetchMenu();
+    
+    // Suscripción Realtime para actualizar precios/menú si cambian en el dashboard
+    const channel = supabase
+      .channel('cart-menu-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchMenu())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const total = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -127,7 +136,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
   const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text);
-      alert("Copiado al portapapeles"); // O usar toast
+      alert("Copiado al portapapeles"); 
   };
 
   const handleFinalizeReservation = async () => {
@@ -194,7 +203,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                     ) : (
                         <div className="flex items-center gap-3">
                             <ShoppingBag className="w-5 h-5 text-[#DAA520]" />
-                            <h2 className="text-lg font-black text-white uppercase tracking-widest">Tu Carrito</h2>
+                            <h2 className="text-lg font-black text-white uppercase tracking-widest">TU CARRITO</h2>
                         </div>
                     )}
                     <button onClick={toggleCart} className="text-zinc-500 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -395,7 +404,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             disabled={items.length === 0}
                             className={`w-full py-4 rounded-xl uppercase tracking-widest font-black text-sm flex items-center justify-center gap-2 transition-all ${items.length > 0 ? 'bg-gradient-to-r from-[#DAA520] to-[#B8860B] text-black hover:shadow-[0_0_20px_rgba(218,165,32,0.4)] active:scale-95' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
                         >
-                            Ir al Pago <ChevronLeft className="w-4 h-4 rotate-180" />
+                            IR AL PAGO <ChevronLeft className="w-4 h-4 rotate-180" />
                         </button>
                     ) : (
                         <button 
@@ -403,7 +412,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             disabled={isSubmitting}
                             className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : "Finalizar y Reservar"}
+                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : "FINALIZAR Y RESERVAR"}
                         </button>
                     )}
                 </div>
