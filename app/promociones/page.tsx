@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     ArrowLeft, Calendar, Clock, Gift, ShoppingCart, 
-    Loader2, MapPin, ChevronRight, Info
+    Loader2, MapPin, ChevronRight, Info, Star
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -113,7 +113,7 @@ export default function PromocionesPage() {
     <main className={`min-h-screen bg-black text-white pb-32 overflow-x-hidden ${montserrat.className}`}>
       
       {/* --- HEADER FLOTANTE --- */}
-      <div className="fixed top-0 left-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/10 shadow-2xl transition-all duration-300">
+      <div className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-md border-b border-white/10 shadow-2xl transition-all duration-300">
           <div className="px-4 py-3 flex items-center justify-between max-w-7xl mx-auto">
             <Link href="/" className="p-2 bg-white/5 rounded-full hover:bg-white/20 transition-colors group">
                 <ArrowLeft className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
@@ -136,7 +136,7 @@ export default function PromocionesPage() {
       {loading ? (
          <div className="w-full h-[50vh] bg-zinc-900 animate-pulse mb-8" />
       ) : heroPromo ? (
-        <div className="relative w-full h-[60vh] max-h-[600px] overflow-hidden group">
+        <div className="relative w-full h-[60vh] max-h-[600px] overflow-hidden group border-b border-[#DAA520]/20">
             {/* Imagen Full con Overlay cinemático */}
             <Image 
                 src={heroPromo.image_url || "/placeholder.jpg"} 
@@ -145,22 +145,18 @@ export default function PromocionesPage() {
                 className="object-cover transition-transform duration-1000 group-hover:scale-105" 
                 priority
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+            {/* Gradiente oscuro inferior para legibilidad */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
             
-            <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 flex flex-col items-start max-w-4xl mx-auto">
+            <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 flex flex-col items-start max-w-5xl mx-auto z-10">
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     className="flex flex-wrap gap-2 mb-4"
                 >
-                    <span className="bg-[#DAA520] text-black text-[10px] md:text-xs font-black px-3 py-1 rounded uppercase tracking-widest shadow-lg">
-                        {heroPromo.tag || "DESTACADO"}
+                    <span className="bg-[#DAA520] text-black text-[10px] md:text-xs font-black px-3 py-1 rounded uppercase tracking-widest shadow-lg flex items-center gap-1">
+                        <Star className="w-3 h-3 fill-black" /> {heroPromo.tag || "DESTACADO"}
                     </span>
-                    {heroPromo.day && (
-                        <span className="bg-white/10 backdrop-blur-md text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded uppercase tracking-wide border border-white/10">
-                            {heroPromo.day === 'todos' ? 'Todos los días' : heroPromo.day}
-                        </span>
-                    )}
                 </motion.div>
                 
                 <motion.h1 
@@ -190,10 +186,10 @@ export default function PromocionesPage() {
             </div>
         </div>
       ) : (
-        <div className="relative w-full h-64 bg-zinc-900 flex items-center justify-center mb-8 border-b border-white/5">
+        <div className="relative w-full h-48 bg-zinc-900 flex items-center justify-center mb-8 border-b border-white/5">
             <div className="text-center">
-                <Gift className="w-12 h-12 text-zinc-700 mx-auto mb-2"/>
-                <p className="text-zinc-500 text-sm">Configura un 'Banner Principal' en el dashboard.</p>
+                <Gift className="w-10 h-10 text-zinc-700 mx-auto mb-2"/>
+                <p className="text-zinc-500 text-xs">Configura un 'Banner Principal' en el dashboard.</p>
             </div>
         </div>
       )}
@@ -201,10 +197,10 @@ export default function PromocionesPage() {
       {/* --- BARRA DE NAVEGACIÓN (ESTILO SHOWS) --- */}
       <div className="sticky top-[60px] z-40 bg-black/95 backdrop-blur-xl border-y border-white/10 shadow-2xl mb-8">
         <div className="max-w-5xl mx-auto px-4 py-3">
-            <div className="flex gap-2 md:gap-4 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 md:gap-4 overflow-x-auto no-scrollbar justify-center">
                 <button 
                     onClick={() => setActiveTab("semana")}
-                    className={`flex-1 min-w-[140px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 max-w-[200px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                         activeTab === "semana" 
                         ? 'bg-[#DAA520] text-black shadow-[0_0_15px_rgba(218,165,32,0.4)]' 
                         : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-white/5'
@@ -214,7 +210,7 @@ export default function PromocionesPage() {
                 </button>
                 <button 
                     onClick={() => setActiveTab("pack")}
-                    className={`flex-1 min-w-[140px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                    className={`flex-1 max-w-[200px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
                         activeTab === "pack" 
                         ? 'bg-[#DAA520] text-black shadow-[0_0_15px_rgba(218,165,32,0.4)]' 
                         : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-white/5'
@@ -226,7 +222,7 @@ export default function PromocionesPage() {
         </div>
       </div>
 
-      {/* --- GRID DE PROMOCIONES (1080x1080) --- */}
+      {/* --- GRID DE PROMOCIONES (1080x1080 - 2 COLUMNAS) --- */}
       <div className="px-4 max-w-6xl mx-auto pb-16">
         {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -239,12 +235,12 @@ export default function PromocionesPage() {
                 <p className="text-zinc-500 text-sm font-medium">No hay promociones activas en esta categoría por el momento.</p>
             </div>
         ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 <AnimatePresence mode="popLayout">
                     {displayPromos.map((promo, index) => (
                         <motion.div 
                             key={promo.id}
-                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             transition={{ duration: 0.4, delay: index * 0.1 }}
                             className="bg-zinc-900 rounded-2xl overflow-hidden border border-white/10 shadow-lg hover:border-[#DAA520]/50 transition-all duration-300 group flex flex-col h-full"
@@ -261,8 +257,8 @@ export default function PromocionesPage() {
                                 
                                 {/* Etiqueta Tag (Top Left) */}
                                 {promo.tag && (
-                                    <div className="absolute top-3 left-3 z-10">
-                                        <span className="bg-[#DAA520] text-black text-[9px] font-black px-2.5 py-1 rounded shadow-lg uppercase tracking-wider">
+                                    <div className="absolute top-4 left-4 z-10">
+                                        <span className="bg-[#DAA520] text-black text-[9px] font-black px-2.5 py-1.5 rounded shadow-lg uppercase tracking-wider">
                                             {promo.tag}
                                         </span>
                                     </div>
@@ -270,9 +266,9 @@ export default function PromocionesPage() {
 
                                 {/* Badge de Día (Top Right) - Solo para 'semana' */}
                                 {promo.category === "semana" && (
-                                    <div className="absolute top-3 right-3 z-10 flex flex-col items-end">
-                                        <span className={`text-[10px] font-black px-3 py-1 rounded border shadow-lg backdrop-blur-md uppercase tracking-wider ${
-                                            promo.day === currentDay 
+                                    <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
+                                        <span className={`text-[10px] font-black px-3 py-1.5 rounded border shadow-lg backdrop-blur-md uppercase tracking-wider ${
+                                            promo.day === currentDay || promo.day === 'todos'
                                             ? 'bg-green-600 text-white border-green-500' 
                                             : 'bg-black/70 text-white border-white/20'
                                         }`}>
@@ -283,44 +279,45 @@ export default function PromocionesPage() {
                             </div>
 
                             {/* 2. CONTENIDO (Panel Inferior) */}
-                            <div className="p-5 flex flex-col flex-1 relative">
-                                {/* Decoración dorada sutil */}
-                                <div className="absolute top-0 left-5 w-10 h-0.5 bg-[#DAA520]" />
+                            <div className="p-6 flex flex-col flex-1 relative bg-zinc-900">
+                                {/* Decoración dorada sutil lateral */}
+                                <div className="absolute top-6 left-0 w-1 h-12 bg-[#DAA520]" />
 
-                                <div className="flex-1 mt-2">
-                                    <h3 className="text-xl font-black text-white uppercase leading-none mb-1 group-hover:text-[#DAA520] transition-colors">
+                                <div className="flex-1 pl-2">
+                                    <h3 className="text-2xl font-black text-white uppercase leading-none mb-1 group-hover:text-[#DAA520] transition-colors">
                                         {promo.title}
                                     </h3>
                                     {promo.subtitle && (
-                                        <p className="text-xs text-zinc-400 font-bold uppercase tracking-wide mb-3">
+                                        <p className="text-xs text-[#DAA520] font-bold uppercase tracking-wide mb-4">
                                             {promo.subtitle}
                                         </p>
                                     )}
-                                    <p className="text-xs text-zinc-500 leading-relaxed line-clamp-3">
+                                    <div className="h-px w-12 bg-white/10 mb-4" />
+                                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
                                         {promo.desc_text}
                                     </p>
                                 </div>
 
                                 {/* Botones de Acción */}
-                                <div className="mt-5 pt-4 border-t border-white/5">
+                                <div className="mt-6 pt-4 border-t border-white/5 pl-2">
                                     {promo.category === "pack" ? (
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-4">
                                             <div className="flex-1">
                                                 <p className="text-[9px] text-zinc-500 uppercase font-bold">Valor Pack</p>
-                                                <p className="text-lg font-black text-[#DAA520]">${promo.price?.toLocaleString('es-CL')}</p>
+                                                <p className="text-2xl font-black text-white">${promo.price?.toLocaleString('es-CL')}</p>
                                             </div>
                                             <button 
                                                 onClick={() => handleAddToCart(promo)}
-                                                className="bg-white text-black h-10 px-4 rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-zinc-200 transition-colors flex items-center gap-2"
+                                                className="bg-white text-black h-12 px-6 rounded-xl text-xs font-bold uppercase tracking-wide hover:bg-[#DAA520] hover:text-black transition-all flex items-center gap-2 shadow-lg"
                                             >
-                                                <ShoppingCart className="w-3 h-3" /> Agregar
+                                                <ShoppingCart className="w-4 h-4" /> Agregar
                                             </button>
                                         </div>
                                     ) : (
                                         <Link href="/reservas" className="block w-full">
-                                            <button className="w-full h-10 bg-zinc-800 text-white border border-white/10 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-[#DAA520] hover:text-black hover:border-[#DAA520] transition-all flex items-center justify-center gap-2 group/btn">
+                                            <button className="w-full h-12 bg-zinc-800 text-white border border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#DAA520] hover:text-black hover:border-[#DAA520] transition-all flex items-center justify-center gap-2 group/btn shadow-lg">
                                                 Reservar Mesa
-                                                <ChevronRight className="w-3 h-3 text-[#DAA520] group-hover/btn:text-black transition-colors" />
+                                                <ChevronRight className="w-4 h-4 text-[#DAA520] group-hover/btn:text-black transition-colors" />
                                             </button>
                                         </Link>
                                     )}
