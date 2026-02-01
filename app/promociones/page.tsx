@@ -5,23 +5,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     ArrowLeft, Calendar, Clock, Gift, Percent, 
     Utensils, Info, Star, Flame, ShoppingCart, 
-    PartyPopper, Loader2
+    PartyPopper, Loader2, MapPin, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
-// Importamos el hook del carrito
 import { useCart } from "@/components/CartContext";
-import { supabase } from "@/lib/supabaseClient"; // Conexión Real
+import { supabase } from "@/lib/supabaseClient";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
 export default function PromocionesPage() {
   const [activeTab, setActiveTab] = useState("semana"); // semana | pack
   const [currentDay, setCurrentDay] = useState("");
-  const [promos, setPromos] = useState<any[]>([]); // Estado para datos de DB
+  
+  // Estados de Datos
+  const [heroPromo, setHeroPromo] = useState<any>(null); // El banner principal
+  const [promos, setPromos] = useState<any[]>([]); // Lista de promos normales
   const [loading, setLoading] = useState(true);
-  const { addItem } = useCart(); // Conexión al carrito
+  
+  const { addItem } = useCart();
 
   useEffect(() => {
     const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -29,24 +32,30 @@ export default function PromocionesPage() {
     fetchPromos();
   }, []);
 
-  // --- FUNCIÓN PARA LEER DE SUPABASE ---
+  // --- LEER DE SUPABASE ---
   const fetchPromos = async () => {
       try {
           const { data, error } = await supabase
             .from('promociones')
             .select('*')
-            .eq('active', true) // Solo mostrar las activas
-            .order('id', { ascending: true }); // Mantener el orden de inserción
+            .eq('active', true)
+            .order('id', { ascending: false }); // Las más nuevas primero
           
           if (error) throw error;
           
           if (data) {
-              // Normalizamos los datos por si acaso (aunque la estructura SQL ya es correcta)
               const normalizedData = data.map(p => ({
                   ...p,
-                  price: Number(p.price) || 0 // Asegurar que price sea número
+                  price: Number(p.price) || 0
               }));
-              setPromos(normalizedData);
+
+              // 1. Separar el Banner (Categoría 'banner')
+              const bannerItem = normalizedData.find(p => p.category === 'banner');
+              // 2. El resto son promos normales
+              const listItems = normalizedData.filter(p => p.category !== 'banner');
+
+              if (bannerItem) setHeroPromo(bannerItem);
+              setPromos(listItems);
           }
       } catch (error) {
           console.error("Error cargando promociones:", error);
@@ -62,178 +71,203 @@ export default function PromocionesPage() {
           price: promo.price || 0,
           quantity: 1,
           image: promo.image_url,
-          detail: "Promo Pack",
+          detail: "Promo Pack Web",
           category: "shop"
       });
   };
 
+  // Filtrado de lista (excluyendo el banner que ya se muestra arriba)
   const filteredPromos = promos.filter(p => p.category === activeTab);
 
   return (
     <main className={`min-h-screen bg-black text-white pb-32 overflow-x-hidden ${montserrat.className}`}>
       
       {/* --- HEADER --- */}
-      <div className="bg-black/90 backdrop-blur-md px-4 py-4 flex items-center justify-between sticky top-0 z-50 border-b border-white/10 shadow-xl">
-        <Link href="/" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+      <div className="bg-black/80 backdrop-blur-xl px-4 py-4 flex items-center justify-between sticky top-0 z-50 border-b border-white/5">
+        <Link href="/" className="p-2 bg-white/5 rounded-full hover:bg-white/20 transition-colors">
             <ArrowLeft className="w-5 h-5 text-white" />
         </Link>
-        
-        {/* LOGO AUMENTADO */}
-        <div className="relative w-60 h-16"> 
+        <div className="relative w-48 h-10"> 
             <Image src="/logo.png" alt="Boulevard Zapallar" fill className="object-contain" priority />
         </div>
-
-        <div className="w-9 h-9 bg-zinc-800 rounded-full flex items-center justify-center border border-white/5">
+        <div className="w-9 h-9 bg-[#DAA520]/10 rounded-full flex items-center justify-center border border-[#DAA520]/30">
             <Gift className="w-4 h-4 text-[#DAA520]" />
         </div>
       </div>
 
-      {/* --- HERO BANNER (Carrusel Automático Visual) --- */}
-      <div className="relative w-full h-72 overflow-hidden bg-zinc-900 mb-6 group">
-        <Image 
-            src="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=1470&auto=format&fit=crop" 
-            alt="Happy Hour" 
-            fill 
-            className="object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000" 
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-        
-        <div className="absolute bottom-0 left-0 p-6 w-full">
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                transition={{ delay: 0.2 }}
-                className="bg-[#DAA520] text-black text-[10px] font-extrabold px-3 py-1 rounded w-fit mb-2 uppercase tracking-widest shadow-lg"
-            >
-                Happy Hour
-            </motion.div>
-            <h1 className="text-4xl font-bold text-white uppercase leading-none mb-2 drop-shadow-lg">
-                2x1 <br/><span className="text-zinc-400">En Tragos</span>
-            </h1>
-            <div className="flex items-center gap-2 text-sm text-zinc-300 bg-black/40 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
-                <Clock className="w-4 h-4 text-[#DAA520]" />
-                <span className="font-medium text-xs">Horario por definir</span>
+      {/* --- HERO BANNER AUTOADMINISTRABLE --- */}
+      {/* Si existe heroPromo en DB lo muestra, si no, muestra un fallback o nada */}
+      {loading ? (
+         <div className="w-full h-72 bg-zinc-900 animate-pulse" />
+      ) : heroPromo ? (
+        <div className="relative w-full h-[60vh] max-h-[500px] overflow-hidden bg-zinc-900 mb-8 group border-b border-[#DAA520]/20">
+            <Image 
+                src={heroPromo.image_url || "/placeholder.jpg"} 
+                alt={heroPromo.title} 
+                fill 
+                className="object-cover opacity-80 group-hover:scale-105 transition-transform duration-1000" 
+            />
+            {/* Gradiente sutil solo abajo para texto */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+            
+            <div className="absolute bottom-0 left-0 p-6 w-full max-w-lg">
+                <motion.div 
+                    initial={{ opacity: 0, x: -20 }} 
+                    animate={{ opacity: 1, x: 0 }} 
+                    className="flex gap-2 mb-3"
+                >
+                    {heroPromo.tag && (
+                        <span className="bg-[#DAA520] text-black text-[10px] font-black px-3 py-1 rounded-sm uppercase tracking-widest shadow-lg">
+                            {heroPromo.tag}
+                        </span>
+                    )}
+                </motion.div>
+                
+                <h1 className="text-4xl md:text-5xl font-black text-white uppercase leading-none mb-2 drop-shadow-xl">
+                    {heroPromo.title}
+                </h1>
+                <p className="text-lg text-zinc-200 mb-4 font-light leading-tight">{heroPromo.subtitle}</p>
+                
+                {heroPromo.desc_text && (
+                    <div className="flex items-center gap-2 text-sm text-zinc-300 bg-black/60 w-fit px-4 py-2 rounded-full backdrop-blur-md border border-white/10">
+                        <Clock className="w-4 h-4 text-[#DAA520]" />
+                        <span className="font-medium text-xs">{heroPromo.desc_text}</span>
+                    </div>
+                )}
             </div>
         </div>
-      </div>
+      ) : (
+        // Fallback por si no hay banner configurado
+        <div className="relative w-full h-48 bg-zinc-900 flex items-center justify-center mb-6">
+            <p className="text-zinc-500 text-xs">Configura una promo categoría 'banner' en el admin</p>
+        </div>
+      )}
 
       {/* --- TABS DE NAVEGACIÓN --- */}
-      <div className="px-4 mb-6">
-        <div className="flex p-1 bg-zinc-900 rounded-xl border border-white/10">
+      <div className="px-4 mb-8 sticky top-20 z-40">
+        <div className="flex p-1.5 bg-zinc-900/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl">
             <button 
                 onClick={() => setActiveTab("semana")}
-                className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === "semana" ? 'bg-[#DAA520] text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === "semana" ? 'bg-[#DAA520] text-black shadow-lg scale-100' : 'text-zinc-500 hover:text-white scale-95'}`}
             >
-                <Calendar className="w-3 h-3" /> Semana
+                <Calendar className="w-4 h-4" /> La Semana
             </button>
             <button 
                 onClick={() => setActiveTab("pack")}
-                className={`flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === "pack" ? 'bg-[#DAA520] text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+                className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${activeTab === "pack" ? 'bg-[#DAA520] text-black shadow-lg scale-100' : 'text-zinc-500 hover:text-white scale-95'}`}
             >
-                <Gift className="w-3 h-3" /> Packs & Regalos
+                <Gift className="w-4 h-4" /> Packs
             </button>
         </div>
       </div>
 
-      {/* --- CONTENIDO DINÁMICO (DESDE DB) --- */}
-      <div className="px-4 space-y-4 pb-8">
+      {/* --- CONTENIDO DINÁMICO (GRID 1080x1080) --- */}
+      <div className="px-4 pb-12 max-w-5xl mx-auto">
         {loading ? (
-            <div className="flex justify-center py-10">
-                <Loader2 className="w-8 h-8 text-[#DAA520] animate-spin" />
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="w-10 h-10 text-[#DAA520] animate-spin" />
+                <p className="text-xs text-zinc-500 uppercase tracking-widest">Cargando promociones...</p>
             </div>
         ) : filteredPromos.length === 0 ? (
-            <p className="text-center text-zinc-500 py-10">No hay promociones disponibles en esta categoría.</p>
+            <div className="text-center py-20 bg-zinc-900/50 rounded-3xl border border-white/5">
+                <Gift className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+                <p className="text-zinc-500 text-sm">No hay promociones activas en esta categoría.</p>
+            </div>
         ) : (
-            <AnimatePresence mode="wait">
-                {filteredPromos.map((promo) => (
-                    <motion.div 
-                        key={promo.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        // Resaltar si es el día actual y es categoría semana
-                        className={`relative overflow-hidden rounded-2xl border transition-all ${
-                            promo.category === "semana" && promo.day === currentDay 
-                            ? 'border-[#DAA520] shadow-[0_0_20px_rgba(218,165,32,0.2)]' 
-                            : 'border-white/10'
-                        } bg-zinc-900`}
-                    >
-                        {/* Imagen de Fondo con Overlay */}
-                        <div className="relative h-32 w-full">
-                            <Image 
-                                src={promo.image_url || "/placeholder.jpg"} 
-                                alt={promo.title} 
-                                fill 
-                                className="object-cover opacity-50" 
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent" />
-                            
-                            {/* Contenido sobre la imagen */}
-                            <div className="absolute inset-0 p-4 flex flex-col justify-center items-start z-10 pl-24">
-                                {promo.tag && (
-                                    <span className="text-[8px] font-extrabold bg-[#DAA520] text-black px-2 py-0.5 rounded mb-1 uppercase tracking-wider shadow-md">
-                                        {promo.tag}
-                                    </span>
-                                )}
-                                <h3 className="text-xl font-bold text-white uppercase leading-none mb-1 drop-shadow-md">
-                                    {promo.title}
-                                </h3>
-                                <p className="text-xs text-[#DAA520] font-medium uppercase tracking-wide mb-2">
-                                    {promo.subtitle}
-                                </p>
-                            </div>
-
-                            {/* Icono del día o Pack (Izquierda) */}
-                            <div className="absolute left-0 top-0 bottom-0 w-20 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center border-r border-white/5 z-20">
-                                {promo.category === "semana" ? (
-                                    <>
-                                        <span className={`text-2xl font-black ${promo.day === currentDay ? 'text-[#DAA520]' : 'text-zinc-600'}`}>
-                                            {promo.day?.substring(0, 3).toUpperCase()}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <AnimatePresence mode="popLayout">
+                    {filteredPromos.map((promo) => (
+                        <motion.div 
+                            key={promo.id}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ duration: 0.3 }}
+                            // Diseño de Tarjeta Limpia
+                            className="bg-zinc-900 rounded-[2rem] overflow-hidden border border-white/5 shadow-2xl flex flex-col"
+                        >
+                            {/* 1. IMAGEN CUADRADA (1080x1080 Aspect Ratio) - SIN DEGRADADOS */}
+                            <div className="relative w-full aspect-square bg-black">
+                                <Image 
+                                    src={promo.image_url || "/placeholder.jpg"} 
+                                    alt={promo.title} 
+                                    fill 
+                                    className="object-cover" // Se muestra tal cual es, sin opacidad
+                                    sizes="(max-width: 768px) 100vw, 50vw"
+                                />
+                                
+                                {/* Badge de Día (Flotante) */}
+                                {promo.category === "semana" && (
+                                    <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-md text-white px-4 py-2 rounded-xl border border-white/10 shadow-xl flex flex-col items-center">
+                                        <span className={`text-2xl font-black uppercase tracking-tighter ${promo.day === currentDay ? 'text-[#DAA520]' : 'text-zinc-400'}`}>
+                                            {promo.day?.substring(0, 3)}
                                         </span>
-                                        {promo.day === currentDay && (
-                                            <span className="text-[8px] text-white bg-red-600 px-1.5 py-0.5 rounded mt-1 animate-pulse font-bold">
-                                                HOY
-                                            </span>
-                                        )}
-                                    </>
-                                ) : (
-                                    <Gift className="w-8 h-8 text-[#DAA520]" />
+                                        {promo.day === currentDay && <span className="text-[8px] text-green-400 font-bold uppercase tracking-widest">Hoy</span>}
+                                    </div>
+                                )}
+
+                                {/* Etiqueta Tag (Flotante) */}
+                                {promo.tag && (
+                                    <div className="absolute top-4 left-4">
+                                        <span className="bg-[#DAA520] text-black text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider shadow-lg">
+                                            {promo.tag}
+                                        </span>
+                                    </div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* Descripción y Acción (Footer de la tarjeta) */}
-                        <div className="p-4 bg-zinc-900 border-t border-white/5">
-                            <p className="text-xs text-zinc-400 leading-relaxed mb-4 line-clamp-2">
-                                {promo.desc_text}
-                            </p>
-                            
-                            {promo.category === "pack" ? (
-                                <button 
-                                    onClick={() => handleAddToCart(promo)}
-                                    className="w-full py-3 bg-white text-black font-bold uppercase text-xs rounded-xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-md"
-                                >
-                                    <ShoppingCart className="w-3 h-3" /> Agregar • ${promo.price?.toLocaleString('es-CL')}
-                                </button>
-                            ) : (
-                                <Link href="/reservas" className="block w-full">
-                                    <button className="w-full py-3 bg-zinc-800 text-[#DAA520] font-bold uppercase text-xs rounded-xl border border-[#DAA520]/30 hover:bg-[#DAA520]/10 transition-colors flex items-center justify-center gap-2 active:scale-95">
-                                        <Calendar className="w-3 h-3" /> Reservar Mesa
-                                    </button>
-                                </Link>
-                            )}
-                        </div>
-                    </motion.div>
-                ))}
-            </AnimatePresence>
+                            {/* 2. CONTENIDO (Panel Inferior Limpio) */}
+                            <div className="p-6 flex flex-col flex-1">
+                                <div className="flex-1">
+                                    <h3 className="text-2xl font-bold text-white uppercase leading-none mb-2">
+                                        {promo.title}
+                                    </h3>
+                                    <p className="text-sm text-[#DAA520] font-medium uppercase tracking-wide mb-4">
+                                        {promo.subtitle}
+                                    </p>
+                                    <div className="h-px w-full bg-white/10 mb-4" />
+                                    <p className="text-xs text-zinc-400 leading-relaxed">
+                                        {promo.desc_text}
+                                    </p>
+                                </div>
+
+                                {/* Botones de Acción */}
+                                <div className="mt-6">
+                                    {promo.category === "pack" ? (
+                                        <div className="flex gap-3 items-center">
+                                            <div className="flex-1">
+                                                <p className="text-[10px] text-zinc-500 uppercase font-bold">Precio Pack</p>
+                                                <p className="text-xl font-bold text-white">${promo.price?.toLocaleString('es-CL')}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleAddToCart(promo)}
+                                                className="flex-1 py-3.5 bg-white text-black font-bold uppercase text-xs rounded-xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                                            >
+                                                <ShoppingCart className="w-4 h-4" /> Comprar
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <Link href="/reservas" className="block w-full">
+                                            <button className="w-full py-4 bg-[#DAA520] text-black font-bold uppercase text-xs rounded-xl hover:bg-[#B8860B] transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-[#DAA520]/10">
+                                                <Calendar className="w-4 h-4" /> Reservar para {promo.day}
+                                                <ChevronRight className="w-4 h-4 opacity-50" />
+                                            </button>
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </div>
         )}
       </div>
 
       {/* --- INFO EXTRA --- */}
       <div className="px-6 text-center pb-8">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 rounded-full border border-white/10">
-            <Info className="w-3 h-3 text-zinc-500" />
-            <span className="text-[10px] text-zinc-500">Promociones no acumulables con otras ofertas.</span>
+        <div className="inline-flex items-center gap-2 px-6 py-3 bg-zinc-900 rounded-full border border-white/5">
+            <Info className="w-4 h-4 text-zinc-600" />
+            <span className="text-[10px] text-zinc-500 font-medium">Imágenes referenciales. Promociones sujetas a disponibilidad.</span>
         </div>
       </div>
 
