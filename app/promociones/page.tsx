@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     Search, Calendar, ArrowLeft, 
     ChevronRight, Gift, Filter, Loader2, 
-    Tag, ShoppingCart, Star, MapPin, Clock 
+    Tag, ShoppingCart, Star, MapPin
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -13,7 +13,7 @@ import { Montserrat } from "next/font/google";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/components/CartContext";
 
-// Configuración de fuente idéntica a Tickets
+// Configuración de fuente (Misma que en Tickets/Shows)
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "800"] });
 
 // Orden lógico de días para ordenar la lista 'semana'
@@ -41,7 +41,7 @@ export default function PromocionesPage() {
   useEffect(() => {
     const fetchPromos = async () => {
         try {
-            // Solicitamos solo promociones activas
+            // Solicitamos solo promociones activas ordenadas por creación
             const { data, error } = await supabase
                 .from('promociones')
                 .select('*')
@@ -51,26 +51,35 @@ export default function PromocionesPage() {
             if (error) throw error;
 
             if (data) {
-                // Normalizamos los datos para que la UI no tenga errores
-                const mappedPromos = data.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    subtitle: p.subtitle || p.desc_text || "Promoción Especial",
-                    image: p.image_url || "/placeholder.jpg",
-                    tag: p.tag || "", 
-                    category: p.category, // 'semana' o 'pack'
-                    day: p.day, // Ej: 'Viernes' o 'todos'
-                    price: Number(p.price) || 0,
-                    description: p.desc_text,
+                const mappedPromos = data.map(p => {
+                    const priceVal = Number(p.price) || 0;
                     
-                    // PRE-CALCULO PARA DISEÑO VISUAL
-                    // CAMBIO: Formato completo chileno ($180.000.-)
-                    displayMain: p.category === 'pack' 
-                        ? `$${Number(p.price).toLocaleString('es-CL')}.-` 
-                        : (p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase()), 
-                    
-                    displaySub: p.category === 'pack' ? 'VALOR' : 'DÍA'
-                }));
+                    // LÓGICA DE FORMATO DE PRECIO
+                    // Si es pack, formatea como $150.000.-
+                    // Si es semana, muestra el día o 'ALL'
+                    let mainDisplay = "";
+                    if (p.category === 'pack') {
+                        mainDisplay = `$${priceVal.toLocaleString('es-CL')}.-`;
+                    } else {
+                        mainDisplay = p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase();
+                    }
+
+                    return {
+                        id: p.id,
+                        title: p.title,
+                        subtitle: p.subtitle || p.desc_text || "Promoción Especial",
+                        image: p.image_url || "/placeholder.jpg",
+                        tag: p.tag || "", 
+                        category: p.category, 
+                        day: p.day, 
+                        price: priceVal,
+                        description: p.desc_text,
+                        
+                        // Propiedades pre-calculadas para la UI
+                        displayMain: mainDisplay,
+                        displaySub: p.category === 'pack' ? 'VALOR' : 'DÍA'
+                    };
+                });
                 setPromos(mappedPromos);
             }
         } catch (error) {
@@ -92,13 +101,13 @@ export default function PromocionesPage() {
       return matchesSearch && matchesTab;
   });
 
-  // Ordenar: Semana por día lógico, Packs por novedad (ID)
   const sortedPromos = [...filteredPromos].sort((a, b) => {
       if (activeTab === "semana") {
           const dayA = dayOrder[a.day] || 99;
           const dayB = dayOrder[b.day] || 99;
           return dayA - dayB;
       }
+      // Packs por ID descendente (más nuevos primero)
       return b.id - a.id;
   });
 
@@ -117,7 +126,7 @@ export default function PromocionesPage() {
 
   const handleAddToCart = (e: React.MouseEvent, promo: any) => {
       e.preventDefault(); 
-      e.stopPropagation(); // Evita navegar si hay un Link padre
+      e.stopPropagation();
       addItem({
           id: `promo-${promo.id}`,
           name: promo.title,
@@ -160,7 +169,7 @@ export default function PromocionesPage() {
             </div>
         ) : promos.length > 0 ? (
             <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-full">
-                {/* Mostramos primero los que tengan tag DESTACADO, luego el resto */}
+                {/* Ordenamos para mostrar primero los DESTACADOS */}
                 {promos
                     .sort((a, b) => (b.tag === 'DESTACADO' ? 1 : -1))
                     .slice(0, 5)
@@ -186,8 +195,7 @@ export default function PromocionesPage() {
                                     
                                     <p className="text-xs text-[#DAA520] flex items-center gap-2 font-bold tracking-wide uppercase">
                                         {promo.category === 'pack' 
-                                            // CAMBIO: Formato precio en Hero también ($150.000.-)
-                                            ? <><Tag className="w-4 h-4"/> Precio Web: ${promo.price.toLocaleString('es-CL')}.-</>
+                                            ? <><Tag className="w-4 h-4"/> Precio Web: {promo.displayMain}</>
                                             : <><Calendar className="w-4 h-4"/> Disponible: {promo.day === 'todos' ? 'Todos los días' : promo.day}</>
                                         }
                                         <span className="text-white mx-2">•</span>
@@ -256,7 +264,7 @@ export default function PromocionesPage() {
         </div>
       </div>
 
-      {/* --- LISTADO PRINCIPAL (CARDS) --- */}
+      {/* --- LISTADO PRINCIPAL (CARDS HORIZONTALES) --- */}
       <div className="px-4 space-y-4 pb-8 max-w-2xl mx-auto">
         {loading ? (
              <div className="text-center py-12 text-zinc-500">
@@ -310,9 +318,9 @@ export default function PromocionesPage() {
                             {/* Footer Card */}
                             <div className="flex items-end justify-between border-t border-white/5 pt-2">
                                 <div className="flex items-center gap-3">
-                                    {/* CAJA DE PRECIO / DÍA (Sin borde derecho, sin texto extra) */}
+                                    {/* CAJA DE PRECIO / DÍA LIMPIA (Sin borde derecho, sin texto extra) */}
                                     <div className="flex flex-col justify-center leading-none">
-                                        <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-sm md:text-base' : 'text-xl'}`}>
+                                        <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-base md:text-lg' : 'text-xl'}`}>
                                             {promo.displayMain}
                                         </span>
                                         <span className="text-[8px] font-bold text-[#DAA520] uppercase mt-0.5">
