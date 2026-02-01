@@ -63,11 +63,11 @@ export default function PromocionesPage() {
                     price: Number(p.price) || 0,
                     description: p.desc_text,
                     
-                    // PRE-CALCULO PARA DISEÑO VISUAL (Card Estilo Ticket)
-                    // CAMBIO: Formato de precio completo (Ej: $150.000.-) en vez de K
+                    // PRE-CALCULO PARA DISEÑO VISUAL
+                    // CAMBIO: Formato completo chileno ($180.000.-)
                     displayMain: p.category === 'pack' 
-                        ? `$${(Number(p.price)).toLocaleString('es-CL')}.-` 
-                        : (p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase()), // Ej: VIE
+                        ? `$${Number(p.price).toLocaleString('es-CL')}.-` 
+                        : (p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase()), 
                     
                     displaySub: p.category === 'pack' ? 'VALOR' : 'DÍA'
                 }));
@@ -186,7 +186,7 @@ export default function PromocionesPage() {
                                     
                                     <p className="text-xs text-[#DAA520] flex items-center gap-2 font-bold tracking-wide uppercase">
                                         {promo.category === 'pack' 
-                                            // CAMBIO: Formato precio en Hero también
+                                            // CAMBIO: Formato precio en Hero también ($150.000.-)
                                             ? <><Tag className="w-4 h-4"/> Precio Web: ${promo.price.toLocaleString('es-CL')}.-</>
                                             : <><Calendar className="w-4 h-4"/> Disponible: {promo.day === 'todos' ? 'Todos los días' : promo.day}</>
                                         }
@@ -207,7 +207,6 @@ export default function PromocionesPage() {
       </div>
 
       {/* --- MARQUEE (Próximos Hits / Packs Populares) --- */}
-      {/* Solo se muestra si hay items cargados */}
       {!loading && promos.length > 0 && (
           <div className="mb-8 overflow-hidden relative">
             <h3 className="px-4 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Tendencias</h3>
@@ -257,7 +256,7 @@ export default function PromocionesPage() {
         </div>
       </div>
 
-      {/* --- LISTADO PRINCIPAL (CARDS HORIZONTALES - ESTILO TICKETS) --- */}
+      {/* --- LISTADO PRINCIPAL (CARDS) --- */}
       <div className="px-4 space-y-4 pb-8 max-w-2xl mx-auto">
         {loading ? (
              <div className="text-center py-12 text-zinc-500">
@@ -275,7 +274,7 @@ export default function PromocionesPage() {
                         exit={{ opacity: 0 }}
                         className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 flex h-36 relative active:scale-[0.98] transition-transform mb-4 shadow-xl group hover:border-[#DAA520]/40"
                     >
-                        {/* TAG SUPERIOR (Ej: NUEVO) */}
+                        {/* TAG SUPERIOR */}
                         {promo.tag && (
                             <div className="absolute top-0 left-0 z-20 bg-[#DAA520] text-black text-[8px] font-extrabold px-3 py-1 rounded-br-lg uppercase tracking-wider shadow-md">
                                 {promo.tag}
@@ -290,7 +289,6 @@ export default function PromocionesPage() {
                                 fill 
                                 className="object-cover opacity-90 group-hover:scale-110 transition-transform duration-700" 
                             />
-                            {/* Gradiente lateral para fundir */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-zinc-900/90" />
                         </div>
 
@@ -309,24 +307,16 @@ export default function PromocionesPage() {
                                 </h3>
                             </div>
 
-                            {/* Footer Card (Línea Divisoria y Datos) */}
+                            {/* Footer Card */}
                             <div className="flex items-end justify-between border-t border-white/5 pt-2">
                                 <div className="flex items-center gap-3">
-                                    {/* CAJA DE DATO PRINCIPAL (Separada por borde derecho) */}
-                                    <div className="flex flex-col items-center justify-center leading-none pr-3 border-r border-white/10 min-w-[3.5rem]">
-                                        {/* Ajustamos el tamaño del texto dependiendo de la pestaña para que quepa el precio largo */}
+                                    {/* CAJA DE PRECIO / DÍA (Sin borde derecho, sin texto extra) */}
+                                    <div className="flex flex-col justify-center leading-none">
                                         <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-sm md:text-base' : 'text-xl'}`}>
                                             {promo.displayMain}
                                         </span>
                                         <span className="text-[8px] font-bold text-[#DAA520] uppercase mt-0.5">
                                             {promo.displaySub}
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Subtexto */}
-                                    <div className="flex flex-col leading-none">
-                                        <span className="text-[10px] text-zinc-500 uppercase font-medium line-clamp-1">
-                                            Boulevard
                                         </span>
                                     </div>
                                 </div>
