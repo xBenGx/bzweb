@@ -22,6 +22,19 @@ export default function TicketsPage() {
   const [visibleCount, setVisibleCount] = useState(4); 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // --- HELPER: Formatear Fecha para UI (YYYY-MM-DD -> Sáb 07 Feb) ---
+  const formatDateForUI = (dateString: string) => {
+    if (!dateString) return "Fecha Pendiente";
+    // Crear fecha asumiendo mediodía para evitar desfases de zona horaria al formatear
+    const date = new Date(dateString + "T12:00:00"); 
+    const dayName = date.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
+    const dayNum = date.getDate().toString().padStart(2, '0');
+    const monthName = date.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '');
+    
+    // Retorna string compatible con el split(" ") de tu diseño: "Sáb 07 Feb"
+    return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${dayNum} ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+  };
+
   // --- CONEXIÓN A BASE DE DATOS (CARGA INICIAL) ---
   useEffect(() => {
     const fetchShows = async () => {
@@ -31,7 +44,8 @@ export default function TicketsPage() {
                 .from('shows')
                 .select('*')
                 .eq('active', true)
-                .order('created_at', { ascending: true }); // Ordenar por creación o fecha
+                // AQUÍ EL CAMBIO CLAVE: Ordenar por fecha del evento (Próximos primero)
+                .order('date_event', { ascending: true }); 
 
             if (error) throw error;
 
@@ -40,17 +54,21 @@ export default function TicketsPage() {
                 const mappedEvents = data.map(evt => ({
                     id: evt.id,
                     title: evt.title,
-                    subtitle: evt.subtitle || "Evento Exclusivo", // Fallback si no hay subtítulo
-                    date: evt.date_event, // Ej: "Sáb 31 Ene"
+                    subtitle: evt.subtitle || "Evento Exclusivo", 
+                    
+                    // Guardamos la fecha cruda para filtrar lógicamente
+                    rawDate: evt.date_event, 
+                    // Guardamos la fecha formateada para mostrar visualmente
+                    date: formatDateForUI(evt.date_event), 
+
                     fullDate: evt.date_event, 
-                    time: evt.time_event, // Ej: "22:00"
+                    time: evt.time_event?.slice(0, 5) || "22:00", // Aseguramos formato HH:MM
                     endTime: "05:00",
-                    location: evt.location,
+                    location: evt.location || "Boulevard Zapallar",
                     address: "Av. Manuel Labra Lillo 430, Curicó",
-                    // Usamos la imagen de la DB o un placeholder si no hay
                     image: evt.image_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1470&auto=format&fit=crop",
-                    tag: evt.tag || "", // Ej: "DESTACADO"
-                    category: "semana", // Puedes guardar esto en DB si quieres filtrar real por día
+                    tag: evt.tag || "", 
+                    category: "semana", 
                     isAdultOnly: evt.is_adult || false,
                     description: evt.description || "Sin descripción disponible.",
                     tickets: evt.tickets || [] 
@@ -67,11 +85,33 @@ export default function TicketsPage() {
     fetchShows();
   }, []);
 
-  // --- LÓGICA DE FILTRADO ---
+  // --- LÓGICA DE FILTRADO REAL (POR FECHA) ---
   const filteredEvents = events.filter(event => {
+      // 1. Filtro por Texto (Buscador)
       const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase());
-      // Lógica de pestañas: 'semana' muestra todo, específicas filtran por categoría exacta
-      const matchesTab = activeTab === "semana" ? true : event.category === activeTab;
+      
+      // 2. Filtro por Pestañas (Fecha)
+      let matchesTab = true;
+      const today = new Date();
+      // Ajustamos a medianoche para comparar solo días
+      today.setHours(0,0,0,0);
+      
+      const evtDate = new Date(event.rawDate + "T00:00:00");
+
+      if (activeTab === "hoy") {
+          // Coincide si la fecha es hoy
+          matchesTab = evtDate.getTime() === today.getTime();
+      } else if (activeTab === "manana") {
+          // Coincide si la fecha es mañana
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          matchesTab = evtDate.getTime() === tomorrow.getTime();
+      } else if (activeTab === "semana") {
+          // Semana muestra TODO lo que viene (o podrías limitar a 7 días)
+          // Por ahora dejamos que muestre todo lo futuro ordenado
+          matchesTab = true; 
+      }
+
       return matchesSearch && matchesTab;
   });
 
@@ -116,19 +156,21 @@ export default function TicketsPage() {
                 {events.slice(0, 3).map((event) => (
                     <div key={event.id} className="snap-center min-w-full relative h-full">
                         <Link href={`/tickets/${event.id}`}>
-                            <Image src={event.image} alt={event.title} fill className="object-cover opacity-80" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-                            <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
-                                {event.tag && (
-                                    <span className="bg-[#DAA520] text-black text-[9px] font-extrabold px-3 py-1 rounded mb-2 inline-block uppercase tracking-widest shadow-lg">
-                                        {event.tag}
-                                    </span>
-                                )}
-                                <h2 className="text-4xl font-bold text-white uppercase leading-none mb-1 drop-shadow-xl">{event.title}</h2>
-                                <p className="text-sm text-zinc-200 font-medium mb-2">{event.subtitle}</p>
-                                <p className="text-xs text-[#DAA520] flex items-center gap-1 font-bold tracking-wide">
-                                    <Calendar className="w-3 h-3"/> {event.date} • {event.location}
-                                </p>
+                            <div className="relative w-full h-full">
+                                <Image src={event.image} alt={event.title} fill className="object-cover opacity-80" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+                                <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
+                                    {event.tag && (
+                                        <span className="bg-[#DAA520] text-black text-[9px] font-extrabold px-3 py-1 rounded mb-2 inline-block uppercase tracking-widest shadow-lg">
+                                            {event.tag}
+                                        </span>
+                                    )}
+                                    <h2 className="text-4xl font-bold text-white uppercase leading-none mb-1 drop-shadow-xl">{event.title}</h2>
+                                    <p className="text-sm text-zinc-200 font-medium mb-2">{event.subtitle}</p>
+                                    <p className="text-xs text-[#DAA520] flex items-center gap-1 font-bold tracking-wide">
+                                        <Calendar className="w-3 h-3"/> {event.date} • {event.location}
+                                    </p>
+                                </div>
                             </div>
                         </Link>
                     </div>
@@ -247,7 +289,7 @@ export default function TicketsPage() {
         ) : (
             <div className="text-center py-10 text-zinc-500">
                 <Filter className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No hay eventos disponibles.</p>
+                <p className="text-sm">No hay eventos disponibles para esta fecha.</p>
             </div>
         )}
 
