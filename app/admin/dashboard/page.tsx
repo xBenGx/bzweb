@@ -9,7 +9,7 @@ import {
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
-    Ticket, Coffee, UserCheck, ChevronRight, AlertCircle
+    Ticket, Coffee, UserCheck
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -138,6 +138,8 @@ export default function DashboardPage() {
 
       // B. Desde Ventas Manuales (Si se especificó cliente en la descripción)
       ventas.forEach(v => {
+          // Intentamos extraer nombre si está en formato "Nombre - Descripcion" o usamos el campo cliente si existe en tu logica futura
+          // Por ahora asumimos que descripcion trae info o es venta mostrador
           const parts = v.descripcion.split('-');
           const possibleName = parts.length > 1 ? parts[0].trim() : (v.tipo === 'entrada_manual' ? 'Venta Entrada' : 'Cliente Caja');
           
@@ -158,29 +160,6 @@ export default function DashboardPage() {
   };
   
   const clientHistory = getClientHistory();
-
-  // 6. LÓGICA DE SHOWS Y RESERVAS CON PEDIDO (NUEVO REQUERIMIENTO)
-  const getShowPerformance = () => {
-    return shows.map(show => {
-        // Filtramos reservas que coincidan con la fecha del show
-        const matchReservas = reservas.filter(r => r.date_reserva === show.date_event);
-        
-        // Métricas
-        const totalPax = matchReservas.reduce((acc, curr) => acc + parseInt(curr.guests || 0), 0);
-        const reservasConPedido = matchReservas.filter(r => r.total_pre_order > 0).length;
-        const totalDineroComida = matchReservas.reduce((acc, curr) => acc + (curr.total_pre_order || 0), 0);
-        
-        return {
-            ...show,
-            paxReal: totalPax,
-            pedidosCount: reservasConPedido,
-            dineroComida: totalDineroComida
-        };
-    });
-  };
-
-  const showPerformance = getShowPerformance();
-  const reservasConPedidoFull = reservas.filter(r => r.total_pre_order > 0);
 
 
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
@@ -782,88 +761,6 @@ export default function DashboardPage() {
                             <p className="text-[10px] text-zinc-500 mt-2">Consumo local + Pedidos anticipados</p>
                         </div>
                     </div>
-
-                    {/* --- NUEVO: RENDIMIENTO POR SHOW Y DETALLE DE PEDIDOS --- */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                        {/* PANEL 1: VENTAS POR SHOW (Entradas y Productos) */}
-                        <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
-                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-bold flex items-center gap-2"><Music className="w-5 h-5 text-zinc-400"/> Ventas por Show</h3>
-                                <span className="text-[10px] bg-zinc-800 px-2 py-1 rounded text-zinc-400">Tickets + Consumo Web</span>
-                            </div>
-                            <div className="overflow-y-auto custom-scrollbar flex-1">
-                                <table className="w-full text-left text-sm text-zinc-400">
-                                    <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                        <tr>
-                                            <th className="px-4 py-3">Show / Evento</th>
-                                            <th className="px-4 py-3 text-center">Entradas</th>
-                                            <th className="px-4 py-3 text-center">Con Pedido</th>
-                                            <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {showPerformance.map((show) => (
-                                            <tr key={show.id} className="hover:bg-white/5 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <p className="font-bold text-white text-xs">{show.title}</p>
-                                                    <p className="text-[10px] text-zinc-500">{show.date_event}</p>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className="bg-zinc-800 text-white px-2 py-1 rounded text-xs font-bold">{show.paxReal} pax</span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                     <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
-                                                        {show.pedidosCount}
-                                                     </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-green-400">
-                                                    ${show.dineroComida.toLocaleString('es-CL')}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* PANEL 2: DETALLE DE PEDIDOS WEB (Reservas con Consumo) */}
-                        <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
-                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-bold flex items-center gap-2"><Utensils className="w-5 h-5 text-zinc-400"/> Detalle Pedidos Web</h3>
-                                <span className="text-[10px] bg-zinc-800 px-2 py-1 rounded text-zinc-400">Solo Reservas c/ Compra</span>
-                            </div>
-                            <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3">
-                                {reservasConPedidoFull.length === 0 ? (
-                                    <p className="text-center text-zinc-600 text-xs py-10">No hay pedidos anticipados activos.</p>
-                                ) : (
-                                    reservasConPedidoFull.map(res => (
-                                        <div key={res.id} className="bg-black/40 border border-white/10 p-3 rounded-xl hover:border-[#DAA520]/30 transition-colors">
-                                            <div className="flex justify-between items-start mb-2 border-b border-white/5 pb-2">
-                                                <div>
-                                                    <p className="text-xs font-bold text-white">{res.name}</p>
-                                                    <p className="text-[10px] text-zinc-500">{res.date_reserva} • {res.zone}</p>
-                                                </div>
-                                                <span className="text-sm font-bold text-[#DAA520]">${res.total_pre_order.toLocaleString()}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                {res.pre_order.map((item: any, i: number) => (
-                                                    <div key={i} className="flex justify-between text-[11px] text-zinc-300">
-                                                        <span className="flex items-center gap-2">
-                                                            <span className="bg-zinc-800 text-white px-1.5 rounded text-[9px]">{item.quantity}x</span> 
-                                                            {item.name}
-                                                        </span>
-                                                        <span className="text-zinc-500">${(item.price * item.quantity).toLocaleString()}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* --- FIN NUEVO CONTENIDO --- */}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         {/* SECCIÓN 2: HISTORIAL DE CLIENTES (NUEVO) */}
