@@ -22,7 +22,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "ventas", label: "Ventas", icon: CreditCard }, // NUEVA PESTAÑA
+    { id: "ventas", label: "Ventas / Pagos", icon: CreditCard }, // NUEVA PESTAÑA AÑADIDA
     { id: "reservas", label: "Reservas", icon: Calendar },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
@@ -421,15 +421,16 @@ export default function DashboardPage() {
         // 2. CREAR ELEMENTO VISUAL DEL TICKET
         // Creamos un div temporal fuera de la pantalla
         const ticketElement = document.createElement("div");
+        // Posicionamos fuera de pantalla pero visible para el render
         ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #000;";
         
         // HTML del Ticket usando el CÓDIGO FINAL
         ticketElement.innerHTML = `
-          <div style="width: 100%; height: 100%; position: relative; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div style="width: 100%; height: 100%; position: relative; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 20px solid #DAA520; box-sizing: border-box; background: radial-gradient(circle, #222 0%, #000 100%);">
               
               <img src="/ticket-bg.png" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; z-index:0; opacity: 0.6;" onerror="this.style.display='none'" />
               
-              <div style="z-index: 10; width: 100%; display: flex; flex-direction: column; align-items: center; border: 20px solid #DAA520; height: 100%; box-sizing: border-box; justify-content: center;">
+              <div style="z-index: 10; width: 100%; display: flex; flex-direction: column; align-items: center;">
                   
                   <h1 style="font-size: 80px; color: #DAA520; margin: 0; letter-spacing: 10px; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">BOULEVARD</h1>
                   <h2 style="font-size: 50px; margin: 10px 0 60px 0; letter-spacing: 10px; color: #fff; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">ZAPALLAR</h2>
