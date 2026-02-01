@@ -19,14 +19,14 @@ export type CartItem = {
   category?: "ticket" | "delivery" | "shop"; 
 };
 
-// Datos Bancarios (Configurables)
+// --- DATOS BANCARIOS ACTUALIZADOS ---
 const BANK_DETAILS = {
-    bank: "Banco de Chile",
-    accountType: "Cuenta Corriente",
-    accountNumber: "123-45678-09",
-    rut: "76.123.456-7",
-    email: "pagos@boulevardzapallar.cl",
-    holder: "Boulevard Zapallar SpA"
+    bank: "Mercado Pago",
+    accountType: "Cuenta Vista",
+    accountNumber: "1058303781",
+    rut: "77.186.391-4", // Formateado para mejor lectura
+    email: "transferenciasbz@gmail.com",
+    holder: "CENTRO GASTRONOMICO BOULEVARD ZAPALLAR SPA"
 };
 
 type CartContextType = {
@@ -56,7 +56,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [clientData, setClientData] = useState({ name: "", phone: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Cargar Menú de Complementos
+  // 1. Cargar Menú de Complementos desde Supabase
   useEffect(() => {
     const fetchMenu = async () => {
       const { data } = await supabase
@@ -68,7 +68,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     };
     fetchMenu();
     
-    // Suscripción Realtime para actualizar precios/menú si cambian en el dashboard
+    // Suscripción Realtime
     const channel = supabase
       .channel('cart-menu-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchMenu())
@@ -93,7 +93,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       return [...prev, newItem];
     });
     setIsOpen(true);
-    setCheckoutStep('cart'); // Resetear al agregar algo nuevo
+    setCheckoutStep('cart');
   };
 
   const removeItem = (id: string) => setItems(p => p.filter(i => i.id !== id));
@@ -145,10 +145,10 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       
       setIsSubmitting(true);
       try {
-          // 1. Subir Comprobante
+          // 1. Subir Comprobante al bucket 'comprobantes'
           const fileName = `proof-${Date.now()}-${clientData.name.replace(/\s+/g, '')}`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('comprobantes') // Asegúrate de crear este bucket en Supabase
+          const { error: uploadError } = await supabase.storage
+              .from('comprobantes') 
               .upload(fileName, paymentProof);
 
           if (uploadError) throw uploadError;
@@ -156,17 +156,15 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const { data: publicUrlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName);
           const proofUrl = publicUrlData.publicUrl;
 
-          // 2. Guardar Reserva en Base de Datos
-          // Aquí adaptas la estructura a tu tabla 'reservas' real
+          // 2. Guardar Reserva en Base de Datos 'reservas'
           const { error: dbError } = await supabase.from('reservas').insert([{
               name: clientData.name,
               phone: clientData.phone,
-              total_pre_order: total, // Usamos este campo para el total del carrito
-              status: 'pendiente_validacion', // Nuevo estado sugerido
+              total_pre_order: total, 
+              status: 'pendiente_validacion', 
               payment_proof_url: proofUrl,
-              details_json: items, // Guardamos el detalle del carrito como JSON
-              date_reserva: new Date().toISOString().split('T')[0], // Fecha hoy por defecto
-              // ... otros campos obligatorios de tu tabla
+              details_json: items, 
+              date_reserva: new Date().toISOString().split('T')[0],
           }]);
 
           if (dbError) throw dbError;
