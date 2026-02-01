@@ -64,9 +64,9 @@ export default function PromocionesPage() {
                     description: p.desc_text,
                     
                     // PRE-CALCULO PARA DISEÑO VISUAL (Card Estilo Ticket)
-                    // Si es Pack: Mostramos Precio. Si es Semana: Mostramos Día.
+                    // CAMBIO: Formato de precio completo (Ej: $150.000.-) en vez de K
                     displayMain: p.category === 'pack' 
-                        ? `$${(Number(p.price) / 1000).toFixed(0)}k` // Ej: $15k
+                        ? `$${(Number(p.price)).toLocaleString('es-CL')}.-` 
                         : (p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase()), // Ej: VIE
                     
                     displaySub: p.category === 'pack' ? 'VALOR' : 'DÍA'
@@ -186,7 +186,8 @@ export default function PromocionesPage() {
                                     
                                     <p className="text-xs text-[#DAA520] flex items-center gap-2 font-bold tracking-wide uppercase">
                                         {promo.category === 'pack' 
-                                            ? <><Tag className="w-4 h-4"/> Precio Web: ${promo.price.toLocaleString('es-CL')}</>
+                                            // CAMBIO: Formato precio en Hero también
+                                            ? <><Tag className="w-4 h-4"/> Precio Web: ${promo.price.toLocaleString('es-CL')}.-</>
                                             : <><Calendar className="w-4 h-4"/> Disponible: {promo.day === 'todos' ? 'Todos los días' : promo.day}</>
                                         }
                                         <span className="text-white mx-2">•</span>
@@ -313,7 +314,8 @@ export default function PromocionesPage() {
                                 <div className="flex items-center gap-3">
                                     {/* CAJA DE DATO PRINCIPAL (Separada por borde derecho) */}
                                     <div className="flex flex-col items-center justify-center leading-none pr-3 border-r border-white/10 min-w-[3.5rem]">
-                                        <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-lg' : 'text-xl'}`}>
+                                        {/* Ajustamos el tamaño del texto dependiendo de la pestaña para que quepa el precio largo */}
+                                        <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-sm md:text-base' : 'text-xl'}`}>
                                             {promo.displayMain}
                                         </span>
                                         <span className="text-[8px] font-bold text-[#DAA520] uppercase mt-0.5">
