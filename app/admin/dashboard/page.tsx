@@ -8,7 +8,8 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote
+    Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
+    Ticket, Coffee, UserCheck
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -104,6 +105,64 @@ export default function DashboardPage() {
       if (ventasData) setVentas(ventasData);
   };
 
+  // --- LÓGICA DE CÁLCULOS FINANCIEROS AVANZADOS ---
+  
+  // 1. Ingresos Totales (Ventas Manuales + Pre-orders de Reservas)
+  const ingresosManuales = ventas.reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  const ingresosPreOrder = reservas.reduce((acc, curr) => acc + (curr.total_pre_order || 0), 0);
+  const totalIngresosGlobal = ingresosManuales + ingresosPreOrder;
+
+  // 2. Desglose Entradas vs Menú
+  // Asumimos que 'entrada_manual' en ventas es ticket.
+  const ventasEntradas = ventas.filter(v => v.tipo === 'entrada_manual').reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  
+  // Asumimos que 'consumo_extra' es menú manual + todos los pre-orders de reservas son menú.
+  const ventasMenuManual = ventas.filter(v => v.tipo === 'consumo_extra' || v.tipo === 'general').reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  const totalVentasMenu = ventasMenuManual + ingresosPreOrder;
+
+  // 3. Generación de Lista de Clientes Compradores (Unificando Reservas y Ventas Nominales)
+  const getClientHistory = () => {
+      const history: any[] = [];
+      
+      // Desde Reservas (Gente que reservó y quizás compró menú anticipado)
+      reservas.forEach(res => {
+          history.push({
+              id: `res-${res.id}`,
+              cliente: res.name,
+              tipo: 'Reserva / Pre-order',
+              detalle: res.pre_order && res.pre_order.length > 0 ? `${res.pre_order.length} items` : 'Solo Reserva',
+              monto: res.total_pre_order || 0,
+              fecha: res.created_at,
+              estado: res.status
+          });
+      });
+
+      // Desde Ventas Manuales (Si se especificó cliente en la descripción)
+      ventas.forEach(v => {
+          // Intentamos extraer nombre si está en formato "Nombre - Descripcion"
+          const parts = v.descripcion.split('-');
+          const possibleName = parts.length > 1 ? parts[0].trim() : "Cliente Casual";
+          
+          history.push({
+              id: `ven-${v.id}`,
+              cliente: possibleName,
+              tipo: v.tipo === 'entrada_manual' ? 'Compra Entrada' : 'Compra Menú',
+              detalle: v.descripcion,
+              monto: v.monto,
+              fecha: v.created_at,
+              estado: 'pagado'
+          });
+      });
+
+      // Ordenar por fecha reciente
+      return history.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  };
+  
+  const clientHistory = getClientHistory();
+
+  // --- KPI SIMPLE PARA EL RESUMEN ---
+  const ticketPromedio = ventas.length > 0 ? ingresosManuales / ventas.length : 0;
+
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
   const [currentPromo, setCurrentPromo] = useState<any>(null);
@@ -160,14 +219,15 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE VENTAS (NUEVO)
+  // LÓGICA GESTIÓN DE VENTAS (MODAL ACTUALIZADO)
   // ---------------------------------------------------------
   const handleOpenVentaModal = () => {
       setCurrentVenta({ 
           descripcion: "", 
+          cliente: "", // Campo nuevo para el nombre
           monto: 0, 
-          tipo: "consumo_extra", // 'entrada_manual', 'consumo_extra', 'general'
-          metodo_pago: "efectivo" // 'efectivo', 'tarjeta', 'transferencia'
+          tipo: "consumo_extra", 
+          metodo_pago: "efectivo" 
       });
       setIsVentaModalOpen(true);
   };
@@ -176,8 +236,12 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
+          // Concatenamos el cliente en la descripción para no modificar la estructura de la base de datos actual si no tiene columna 'cliente'
+          // Si tienes columna cliente, ajusta esto. Aquí asumimos que guardamos "Cliente - Detalle" en descripción.
+          const descFinal = currentVenta.cliente ? `${currentVenta.cliente} - ${currentVenta.descripcion}` : currentVenta.descripcion;
+
           const ventaData = {
-              descripcion: currentVenta.descripcion,
+              descripcion: descFinal,
               monto: currentVenta.monto,
               tipo: currentVenta.tipo,
               metodo_pago: currentVenta.metodo_pago,
@@ -202,13 +266,6 @@ export default function DashboardPage() {
           fetchData();
       }
   };
-
-  // CÁLCULOS DE FINANZAS
-  const totalIngresos = ventas.reduce((acc, curr) => acc + (curr.monto || 0), 0);
-  const ventasEfectivo = ventas.filter(v => v.metodo_pago === 'efectivo').reduce((acc, curr) => acc + (curr.monto || 0), 0);
-  const ventasDigital = ventas.filter(v => ['tarjeta', 'transferencia'].includes(v.metodo_pago)).reduce((acc, curr) => acc + (curr.monto || 0), 0);
-  const ticketPromedio = ventas.length > 0 ? totalIngresos / ventas.length : 0;
-
 
   // ---------------------------------------------------------
   // LÓGICA GESTIÓN DE CLIENTES
@@ -633,7 +690,7 @@ export default function DashboardPage() {
                         {[
                             { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
                             { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
-                            { title: "Ingresos Hoy (Est.)", value: `$${totalIngresos.toLocaleString('es-CL')}`, color: "bg-green-500" },
+                            { title: "Ingresos Global", value: `$${totalIngresosGlobal.toLocaleString('es-CL')}`, color: "bg-green-500" },
                             { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
@@ -672,93 +729,115 @@ export default function DashboardPage() {
                 <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {/* Header de Finanzas */}
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold">Panel Financiero</h3>
+                        <h3 className="text-lg font-bold">Gestión Financiera 360°</h3>
                         <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
-                            <DollarSign className="w-4 h-4" /> Venta Manual / Rápida
+                            <DollarSign className="w-4 h-4" /> Registrar Venta Manual
                         </button>
                     </div>
 
-                    {/* KPIs Financieros */}
+                    {/* SECCIÓN 1: KPIs GLOBALES */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <div className="bg-zinc-900 border border-green-900/30 p-6 rounded-2xl relative overflow-hidden">
+                        {/* INGRESO TOTAL */}
+                        <div className="bg-zinc-900 border border-green-900/30 p-6 rounded-2xl relative overflow-hidden group hover:border-green-500/30 transition-all">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-24 h-24 text-green-500" /></div>
-                            <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Ingresos Totales</p>
-                            <h2 className="text-4xl font-black text-white">${totalIngresos.toLocaleString('es-CL')}</h2>
-                            <div className="mt-4 flex gap-2">
-                                <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-1 rounded flex items-center gap-1"><TrendingUp className="w-3 h-3"/> +12% vs ayer</span>
-                            </div>
+                            <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Ingresos Totales (Global)</p>
+                            <h2 className="text-4xl font-black text-white">${totalIngresosGlobal.toLocaleString('es-CL')}</h2>
+                            <p className="text-[10px] text-zinc-500 mt-2">Incluye Pre-orders web y Ventas en caja</p>
                         </div>
 
-                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl">
-                             <p className="text-xs text-zinc-400 uppercase font-bold mb-4">Desglose por Método</p>
-                             <div className="space-y-4">
-                                <div>
-                                    <div className="flex justify-between text-xs mb-1">
-                                        <span className="flex items-center gap-2"><Banknote className="w-3 h-3 text-[#DAA520]"/> Efectivo</span>
-                                        <span className="font-bold">${ventasEfectivo.toLocaleString('es-CL')}</span>
-                                    </div>
-                                    <div className="w-full h-1.5 bg-zinc-800 rounded-full"><div style={{ width: `${(ventasEfectivo/totalIngresos)*100}%` }} className="h-full bg-[#DAA520] rounded-full"></div></div>
-                                </div>
-                                <div>
-                                    <div className="flex justify-between text-xs mb-1">
-                                        <span className="flex items-center gap-2"><CreditCard className="w-3 h-3 text-blue-500"/> Tarjetas / Transf.</span>
-                                        <span className="font-bold">${ventasDigital.toLocaleString('es-CL')}</span>
-                                    </div>
-                                    <div className="w-full h-1.5 bg-zinc-800 rounded-full"><div style={{ width: `${(ventasDigital/totalIngresos)*100}%` }} className="h-full bg-blue-500 rounded-full"></div></div>
-                                </div>
-                             </div>
+                        {/* VENTA DE ENTRADAS */}
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-[#DAA520]/30 transition-all">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Ticket className="w-24 h-24 text-[#DAA520]" /></div>
+                            <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Entradas</p>
+                            <h2 className="text-3xl font-black text-[#DAA520]">${ventasEntradas.toLocaleString('es-CL')}</h2>
+                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${(ventasEntradas/totalIngresosGlobal)*100}%` }} className="h-full bg-[#DAA520] rounded-full"></div></div>
+                            <p className="text-[10px] text-zinc-500 mt-2">Tickets / Cover / Accesos</p>
                         </div>
 
-                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-center items-center text-center">
-                            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-3">
-                                <DollarSign className="w-8 h-8 text-white"/>
-                            </div>
-                            <h3 className="text-2xl font-bold text-white">${Math.round(ticketPromedio).toLocaleString('es-CL')}</h3>
-                            <p className="text-xs text-zinc-500 uppercase font-bold">Ticket Promedio</p>
+                        {/* VENTA DE MENÚ */}
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/30 transition-all">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-24 h-24 text-blue-500" /></div>
+                            <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Menú / Carta</p>
+                            <h2 className="text-3xl font-black text-blue-400">${totalVentasMenu.toLocaleString('es-CL')}</h2>
+                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${(totalVentasMenu/totalIngresosGlobal)*100}%` }} className="h-full bg-blue-500 rounded-full"></div></div>
+                            <p className="text-[10px] text-zinc-500 mt-2">Consumo local + Pedidos anticipados</p>
                         </div>
                     </div>
 
-                    {/* Tabla de Transacciones */}
-                    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
-                        <h3 className="text-lg font-bold mb-4">Últimas Transacciones</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-zinc-400">
-                                <thead className="text-xs uppercase bg-black/40 text-zinc-500">
-                                    <tr>
-                                        <th className="px-4 py-3">Descripción</th>
-                                        <th className="px-4 py-3">Tipo</th>
-                                        <th className="px-4 py-3">Método</th>
-                                        <th className="px-4 py-3">Fecha</th>
-                                        <th className="px-4 py-3 text-right">Monto</th>
-                                        <th className="px-4 py-3 text-right">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {ventas.map((venta) => (
-                                        <tr key={venta.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="px-4 py-3 font-medium text-white">{venta.descripcion}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${
-                                                    venta.tipo === 'general' ? 'bg-blue-900/30 text-blue-400' : 
-                                                    venta.tipo === 'entrada_manual' ? 'bg-purple-900/30 text-purple-400' : 'bg-orange-900/30 text-orange-400'
-                                                }`}>
-                                                    {venta.tipo.replace('_', ' ')}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 capitalize flex items-center gap-2">
-                                                {venta.metodo_pago === 'efectivo' ? <Banknote className="w-3 h-3 text-[#DAA520]"/> : <CreditCard className="w-3 h-3 text-zinc-500"/>}
-                                                {venta.metodo_pago}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs">{new Date(venta.created_at).toLocaleDateString()}</td>
-                                            <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
-                                            <td className="px-4 py-3 text-right">
-                                                <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                                            </td>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* SECCIÓN 2: REGISTRO DE CLIENTES COMPRADORES (NUEVO) */}
+                        <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-zinc-400"/> Historial de Clientes</h3>
+                                <span className="text-[10px] bg-zinc-800 px-2 py-1 rounded text-zinc-400">Reservas y Manuales</span>
+                            </div>
+                            <div className="overflow-y-auto custom-scrollbar flex-1">
+                                <table className="w-full text-left text-sm text-zinc-400">
+                                    <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
+                                        <tr>
+                                            <th className="px-4 py-3">Cliente</th>
+                                            <th className="px-4 py-3">Origen</th>
+                                            <th className="px-4 py-3 text-right">Consumo</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {ventas.length === 0 && <div className="p-8 text-center text-zinc-600">No hay ventas registradas aún.</div>}
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {clientHistory.map((item) => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-bold text-white text-xs">{item.cliente}</p>
+                                                    <p className="text-[10px] text-zinc-500">{new Date(item.fecha).toLocaleDateString()}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${item.tipo.includes('Reserva') ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>
+                                                        {item.tipo}
+                                                    </span>
+                                                    <p className="text-[9px] text-zinc-500 mt-1 truncate max-w-[120px]">{item.detalle}</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-white">${item.monto.toLocaleString('es-CL')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {clientHistory.length === 0 && <div className="p-8 text-center text-zinc-600 text-xs">No hay historial de clientes aún.</div>}
+                            </div>
+                        </div>
+
+                        {/* SECCIÓN 3: ÚLTIMAS TRANSACCIONES (REGISTRO CRUDO) */}
+                        <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-zinc-400"/> Transacciones en Caja</h3>
+                            <div className="overflow-y-auto custom-scrollbar flex-1">
+                                <table className="w-full text-left text-sm text-zinc-400">
+                                    <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
+                                        <tr>
+                                            <th className="px-4 py-3">Desc.</th>
+                                            <th className="px-4 py-3">Tipo</th>
+                                            <th className="px-4 py-3 text-right">Monto</th>
+                                            <th className="px-4 py-3 text-right"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {ventas.map((venta) => (
+                                            <tr key={venta.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-medium text-white text-xs truncate max-w-[150px]">{venta.descripcion}</p>
+                                                    <p className="text-[10px] text-zinc-500">{venta.metodo_pago}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                                                        venta.tipo === 'entrada_manual' ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'bg-blue-900/30 text-blue-400'
+                                                    }`}>
+                                                        {venta.tipo === 'entrada_manual' ? 'Entrada' : 'Menú'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </motion.div>
@@ -1059,287 +1138,41 @@ export default function DashboardPage() {
 
         {/* --- MODALES --- */}
 
-        {/* MODAL VENTA RÁPIDA (NUEVO) */}
+        {/* MODAL VENTA RÁPIDA (ACTUALIZADO CON CLIENTE Y TIPO) */}
         <AnimatePresence>
             {isVentaModalOpen && (
                  <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsVentaModalOpen(false)} />
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm relative z-70 shadow-2xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-white uppercase flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-500"/> Registrar Venta</h3>
-                            <button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
+                        <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-500"/> Registrar Venta</h3><button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
                         <form onSubmit={handleSaveVenta} className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label>
-                                <input required type="text" placeholder="Ej: Consumo Mesa 4" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label>
-                                <input required type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xl font-bold outline-none focus:border-green-500" value={currentVenta.monto} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} />
-                            </div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Cliente (Opcional)</label><input type="text" placeholder="Ej: Juan Pérez" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.cliente} onChange={e => setCurrentVenta({...currentVenta, cliente: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Concepto / Detalle</label><input required type="text" placeholder="Ej: 2 Entradas VIP" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label><input required type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xl font-bold outline-none focus:border-green-500" value={currentVenta.monto} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} /></div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo</label>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
-                                        <option value="consumo_extra">Consumo Extra</option>
-                                        <option value="entrada_manual">Entrada / Ticket</option>
-                                        <option value="general">Venta General</option>
+                                        <option value="entrada_manual">🎫 Entrada / Ticket</option>
+                                        <option value="consumo_extra">🍽️ Menú / Consumo</option>
+                                        <option value="general">💰 Venta General</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Método Pago</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
                                         <option value="efectivo">Efectivo</option>
-                                        <option value="tarjeta">Tarjeta (Débito/Crédito)</option>
+                                        <option value="tarjeta">Tarjeta</option>
                                         <option value="transferencia">Transferencia</option>
                                     </select>
                                 </div>
                             </div>
-                            <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-900/20">
-                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Confirmar Ingreso</>}
-                            </button>
+                            <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-900/20">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Confirmar Ingreso</>}</button>
                         </form>
                     </motion.div>
                  </div>
             )}
         </AnimatePresence>
-
-        {/* CLIENTES */}
-        <AnimatePresence>
-            {isClientModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsClientModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-white uppercase">{currentClient.id ? "Editar" : "Nuevo"} Cliente</h3>
-                            <button onClick={() => setIsClientModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
-                        <form onSubmit={handleSaveClient} className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Completo</label>
-                                <input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.nombre} onChange={e => setCurrentClient({...currentClient, nombre: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label>
-                                <input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.whatsapp} onChange={e => setCurrentClient({...currentClient, whatsapp: e.target.value})} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha de Nacimiento</label>
-                                <input type="date" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentClient.fecha_nacimiento || ""} onChange={e => setCurrentClient({...currentClient, fecha_nacimiento: e.target.value})} />
-                            </div>
-                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">
-                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Cliente</>}
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
-        <AnimatePresence>
-            {isMenuModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]">
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
-                                {currentMenuItem.image_url ? (
-                                    <>
-                                        <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentMenuItem.id ? "Editar" : "Nuevo"} Producto</h3><button onClick={() => setIsMenuModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
-                            <form onSubmit={handleSaveMenuItem} className="space-y-4">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre del Producto</label><input required type="text" placeholder="Ej: Tabla de Quesos" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentMenuItem.name} onChange={e => setCurrentMenuItem({...currentMenuItem, name: e.target.value})} /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentMenuItem.category} onChange={e => setCurrentMenuItem({...currentMenuItem, category: e.target.value})}><option value="Entradas">Entradas</option><option value="Tablas">Tablas</option><option value="Tragos">Tragos</option><option value="Bebidas">Bebidas</option><option value="General">General</option></select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentMenuItem.price} onChange={e => setCurrentMenuItem({...currentMenuItem, price: parseInt(e.target.value)})} /></div>
-                                </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label><textarea rows={3} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none resize-none" value={currentMenuItem.description || ""} onChange={e => setCurrentMenuItem({...currentMenuItem, description: e.target.value})} /></div>
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Producto</>}</button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* --- MODAL EDICIÓN PROMOCIONES --- */}
-        <AnimatePresence>
-            {isPromoModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsPromoModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[600px]">
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'promo')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
-                                {currentPromo.image_url ? (
-                                    <>
-                                        <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Subir Imagen</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentPromo.id ? "Editar" : "Crear"} Promoción</h3><button onClick={() => setIsPromoModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
-                            <form onSubmit={handleSavePromo} className="space-y-4">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Principal</label><input required type="text" placeholder="Ej: Happy Hour 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}><option value="semana">Semanal</option><option value="pack">Pack / Gift Card</option></select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.price} onChange={e => setCurrentPromo({...currentPromo, price: parseInt(e.target.value)})} /></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Día</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.day} onChange={e => setCurrentPromo({...currentPromo, day: e.target.value})} disabled={currentPromo.category === 'pack'}><option value="">Seleccionar</option>{["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta</label><input type="text" placeholder="Ej: NUEVO" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.tag || ""} onChange={e => setCurrentPromo({...currentPromo, tag: e.target.value})} /></div>
-                                </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.subtitle} onChange={e => setCurrentPromo({...currentPromo, subtitle: e.target.value})} /></div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label><textarea rows={3} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none resize-none" value={currentPromo.desc_text || ""} onChange={e => setCurrentPromo({...currentPromo, desc_text: e.target.value})} /></div>
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar</>}</button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* --- MODAL EDICIÓN SHOWS (AVANZADO) --- */}
-        <AnimatePresence>
-            {isShowModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsShowModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[700px]">
-                        
-                        {/* Panel Izquierdo: Imagen */}
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'show')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full aspect-[3/4] rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
-                                {currentShow.image_url ? <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100" /> : <div className="text-center text-zinc-500"><ImageIcon className="w-8 h-8 mx-auto mb-2"/><p className="text-xs font-bold text-zinc-400 uppercase">Poster Show</p></div>}
-                            </div>
-                        </div>
-
-                        {/* Panel Derecho: Formulario Completo */}
-                        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentShow.id ? "Editar Show" : "Nuevo Show"}</h3><button onClick={() => setIsShowModalOpen(false)}><X className="w-6 h-6 text-zinc-500 hover:text-white"/></button></div>
-                            <form onSubmit={handleSaveShow} className="space-y-6">
-                                
-                                {/* Información Básica */}
-                                <div className="space-y-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título del Evento</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentShow.title} onChange={e => setCurrentShow({...currentShow, title: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo (Corto)</label><input type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.subtitle || ""} onChange={e => setCurrentShow({...currentShow, subtitle: e.target.value})} /></div>
-                                    
-                                    {/* FECHA (CALENDARIO) Y HORA */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label>
-                                            <input 
-                                                type="date" 
-                                                className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                value={currentShow.date_event} 
-                                                onChange={e => setCurrentShow({...currentShow, date_event: e.target.value})} 
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inicio</label>
-                                                <input 
-                                                    type="time" 
-                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                    value={currentShow.time_event} 
-                                                    onChange={e => setCurrentShow({...currentShow, time_event: e.target.value})} 
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Término</label>
-                                                <input 
-                                                    type="time" 
-                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                    value={currentShow.end_time || ""} 
-                                                    onChange={e => setCurrentShow({...currentShow, end_time: e.target.value})} 
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* UBICACIÓN FIJA */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label>
-                                            <input 
-                                                type="text" 
-                                                readOnly 
-                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-zinc-400 text-sm outline-none cursor-not-allowed" 
-                                                value={currentShow.location} 
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta</label><input type="text" placeholder="Ej: DESTACADO" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} />
-                                        </div>
-                                    </div>
-
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Detallada</label><textarea rows={3} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none resize-none" value={currentShow.description || ""} onChange={e => setCurrentShow({...currentShow, description: e.target.value})} /></div>
-                                    
-                                    <div className="flex items-center gap-3 py-2">
-                                        <input type="checkbox" id="adult" checked={currentShow.is_adult || false} onChange={e => setCurrentShow({...currentShow, is_adult: e.target.checked})} className="w-4 h-4 accent-[#DAA520]" />
-                                        <label htmlFor="adult" className="text-xs font-bold text-white uppercase flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-red-500"/> Evento para mayores de 18 años</label>
-                                    </div>
-                                </div>
-
-                                {/* Configuración de Tickets (Dinámico) */}
-                                <div className="border-t border-white/10 pt-4">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <label className="block text-[10px] uppercase font-bold text-[#DAA520]">Configuración de Entradas</label>
-                                        <button type="button" onClick={addTicketType} className="text-[10px] bg-zinc-800 px-3 py-1 rounded hover:bg-white hover:text-black transition-colors font-bold">+ Agregar Tipo</button>
-                                    </div>
-                                    
-                                    <div className="space-y-3">
-                                        {currentShow.tickets && currentShow.tickets.map((ticket: any, index: number) => (
-                                            <div key={index} className="flex gap-2 items-start bg-black/40 p-2 rounded-lg border border-white/5">
-                                                <div className="flex-1 space-y-2">
-                                                    <input type="text" placeholder="Nombre (Ej: General)" className="w-full bg-transparent border-b border-zinc-700 text-xs text-white p-1 outline-none" value={ticket.name} onChange={(e) => updateTicketType(index, 'name', e.target.value)} />
-                                                    <input type="text" placeholder="Descripción (Ej: Ingreso hasta 00:00)" className="w-full bg-transparent border-b border-zinc-700 text-[10px] text-zinc-400 p-1 outline-none" value={ticket.desc} onChange={(e) => updateTicketType(index, 'desc', e.target.value)} />
-                                                </div>
-                                                <div className="w-24">
-                                                    <input 
-                                                        type="number" 
-                                                        placeholder="Precio" 
-                                                        className="w-full bg-transparent border-b border-zinc-700 text-xs text-[#DAA520] font-bold p-1 outline-none" 
-                                                        value={ticket.price} 
-                                                        onChange={(e) => updateTicketType(index, 'price', e.target.value === '' ? 0 : parseInt(e.target.value))} 
-                                                    />
-                                                </div>
-                                                <button type="button" onClick={() => removeTicketType(index)} className="p-2 text-zinc-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                                            </div>
-                                        ))}
-                                        {(!currentShow.tickets || currentShow.tickets.length === 0) && <p className="text-[10px] text-zinc-600 text-center py-2">No hay tickets configurados. Se usará entrada general por defecto.</p>}
-                                    </div>
-                                </div>
-
-                                {/* Totales Generales */}
-                                <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Entradas Vendidas (Manual)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.sold} onChange={e => setCurrentShow({...currentShow, sold: parseInt(e.target.value)})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Capacidad Total</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.total} onChange={e => setCurrentShow({...currentShow, total: parseInt(e.target.value)})} /></div>
-                                </div>
-
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Show</>}</button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
       </main>
     </div>
   );
