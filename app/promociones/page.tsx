@@ -1,340 +1,355 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-    Search, Calendar, Gift, ArrowLeft, 
-    ChevronRight, ShoppingCart, Filter, Loader2, Tag
+    ArrowLeft, Calendar, Clock, Gift, ShoppingCart, 
+    Loader2, MapPin, ChevronRight, Info, Star
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
-import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/components/CartContext";
+import { supabase } from "@/lib/supabaseClient";
 
-const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
+// Configuración de fuente
+const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "800"] });
 
-// Orden para organizar los días de la semana
+// Orden de los días para mostrarlos correctamente
 const dayOrder: { [key: string]: number } = {
-    "todos": 0, "Lunes": 1, "Martes": 2, "Miércoles": 3, 
-    "Jueves": 4, "Viernes": 5, "Sábado": 6, "Domingo": 7
+    "todos": 0,
+    "Lunes": 1,
+    "Martes": 2,
+    "Miércoles": 3,
+    "Jueves": 4,
+    "Viernes": 5,
+    "Sábado": 6,
+    "Domingo": 7
 };
 
 export default function PromocionesPage() {
-  // --- ESTADOS ---
-  const [promos, setPromos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("semana"); // 'semana' | 'pack'
-  const [visibleCount, setVisibleCount] = useState(5); 
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
+  const [currentDay, setCurrentDay] = useState("");
+  
+  // Estados de Datos
+  const [heroPromo, setHeroPromo] = useState<any>(null); // El banner principal
+  const [promos, setPromos] = useState<any[]>([]); // Lista de promos
+  const [loading, setLoading] = useState(true);
+  
   const { addItem } = useCart();
 
-  // --- CONEXIÓN A BASE DE DATOS ---
   useEffect(() => {
-    const fetchPromos = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('promociones')
-                .select('*')
-                .eq('active', true);
-            
-            if (error) throw error;
-
-            if (data) {
-                // Normalizamos los datos para que encajen en el diseño visual de "Shows"
-                const normalizedData = data.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    subtitle: p.subtitle || p.desc_text || "Promoción exclusiva",
-                    // Lógica para mostrar Día o 'Pack'
-                    dateDisplay: p.category === 'pack' ? 'PACK' : (p.day === 'todos' ? 'ALL' : p.day?.substring(0, 3).toUpperCase()),
-                    subDateDisplay: p.category === 'pack' ? 'WEB' : 'DÍA',
-                    price: Number(p.price) || 0,
-                    image: p.image_url || "/placeholder.jpg",
-                    tag: p.tag || "",
-                    category: p.category, // 'semana' o 'pack'
-                    dayFull: p.day,
-                    description: p.desc_text
-                }));
-                setPromos(normalizedData);
-            }
-        } catch (error) {
-            console.error("Error cargando promociones:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    setCurrentDay(days[new Date().getDay()]);
     fetchPromos();
   }, []);
 
-  // --- LÓGICA DE FILTRADO Y ORDEN ---
-  const filteredPromos = promos.filter(p => {
-      const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesTab = p.category === activeTab;
-      return matchesSearch && matchesTab;
-  });
+  // --- LEER DE SUPABASE ---
+  const fetchPromos = async () => {
+      try {
+          const { data, error } = await supabase
+            .from('promociones')
+            .select('*')
+            .eq('active', true);
+          
+          if (error) throw error;
+          
+          if (data) {
+              const normalizedData = data.map(p => ({
+                  ...p,
+                  price: Number(p.price) || 0
+              }));
 
-  // Ordenar: Si es semana por día, si es pack por ID (novedad)
-  const sortedPromos = [...filteredPromos].sort((a, b) => {
-      if (activeTab === "semana") {
-          const dayA = dayOrder[a.dayFull] || 99;
-          const dayB = dayOrder[b.dayFull] || 99;
-          return dayA - dayB;
+              // 1. Extraer el Banner
+              // Busca primero una categoría 'banner', si no, usa la más reciente destacada
+              const bannerItem = normalizedData.find(p => p.category === 'banner');
+              
+              // 2. Filtrar el resto (que no sean banner)
+              const listItems = normalizedData.filter(p => p.category !== 'banner');
+
+              if (bannerItem) setHeroPromo(bannerItem);
+              setPromos(listItems);
+          }
+      } catch (error) {
+          console.error("Error cargando promociones:", error);
+      } finally {
+          setLoading(false);
       }
-      return b.id - a.id;
-  });
-
-  const visiblePromos = sortedPromos.slice(0, visibleCount);
-
-  // --- MANEJADORES ---
-  const handleLoadMore = () => {
-    setIsLoadingMore(true);
-    setTimeout(() => {
-        setVisibleCount(prev => prev + 4);
-        setIsLoadingMore(false);
-    }, 800); 
   };
 
-  const handleAddToCart = (e: any, promo: any) => {
-      e.preventDefault(); // Evitar navegación del Link
+  const handleAddToCart = (promo: any) => {
       addItem({
           id: `promo-${promo.id}`,
           name: promo.title,
-          price: promo.price,
+          price: promo.price || 0,
           quantity: 1,
-          image: promo.image,
+          image: promo.image_url,
           detail: "Promo Pack Web",
           category: "shop"
       });
   };
 
-  return (
-    <main className={`min-h-screen bg-black text-white pb-24 overflow-x-hidden ${montserrat.className}`}>
+  // Filtrar y Ordenar Promociones
+  const getFilteredPromos = () => {
+      let filtered = promos.filter(p => p.category === activeTab);
       
-      {/* --- HEADER --- */}
-      <div className="bg-black/90 backdrop-blur-md px-4 py-4 flex items-center justify-between sticky top-0 z-50 border-b border-white/10 shadow-xl">
-        <Link href="/" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-white" />
-        </Link>
-        
-        {/* LOGO */}
-        <div className="relative w-60 h-16"> 
-            <Image src="/logo.png" alt="Boulevard Zapallar" fill className="object-contain" priority />
-        </div>
+      // Si es semana, ordenar por día
+      if (activeTab === "semana") {
+          filtered.sort((a, b) => {
+              const dayA = dayOrder[a.day] || 99;
+              const dayB = dayOrder[b.day] || 99;
+              return dayA - dayB;
+          });
+      } else {
+          // Si son packs, mostrar los más nuevos primero
+          filtered.sort((a, b) => b.id - a.id);
+      }
+      return filtered;
+  };
 
-        {/* Icono cambiado a Gift/Shopping para diferenciar de tickets */}
-        <Link href="/reservas" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
-            <Gift className="w-5 h-5 text-[#DAA520]" />
-        </Link>
-      </div>
+  const displayPromos = getFilteredPromos();
 
-      {/* --- HERO CARRUSEL (DESTACADOS) --- */}
-      <div className="relative w-full h-80 overflow-hidden bg-black mb-6">
-        {loading ? (
-            <div className="w-full h-full flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-[#DAA520] animate-spin"/>
+  return (
+    <main className={`min-h-screen bg-black text-white pb-32 overflow-x-hidden ${montserrat.className}`}>
+      
+      {/* --- HEADER FLOTANTE --- */}
+      <div className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-md border-b border-white/10 shadow-2xl transition-all duration-300">
+          <div className="px-4 py-3 flex items-center justify-between max-w-7xl mx-auto">
+            <Link href="/" className="p-2 bg-white/5 rounded-full hover:bg-white/20 transition-colors group">
+                <ArrowLeft className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+            </Link>
+            
+            <div className="relative w-32 h-8 md:w-40 md:h-10"> 
+                <Image src="/logo.png" alt="Boulevard Zapallar" fill className="object-contain" priority />
             </div>
-        ) : promos.length > 0 ? (
-            <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-full">
-                {/* Mostramos las primeras 3 promos o las que tengan tag DESTACADO */}
-                {promos.slice(0, 4).map((promo, index) => (
-                    <div key={`${promo.id}-${index}`} className="snap-center min-w-full relative h-full">
-                        <div className="relative w-full h-full">
-                            <Image src={promo.image} alt={promo.title} fill className="object-cover opacity-80" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-                            <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
-                                {promo.tag && (
-                                    <span className="bg-[#DAA520] text-black text-[9px] font-extrabold px-3 py-1 rounded mb-2 inline-block uppercase tracking-widest shadow-lg">
-                                        {promo.tag}
-                                    </span>
-                                )}
-                                <h2 className="text-3xl md:text-4xl font-bold text-white uppercase leading-none mb-1 drop-shadow-xl">{promo.title}</h2>
-                                <p className="text-sm text-zinc-200 font-medium mb-2">{promo.subtitle}</p>
-                                <p className="text-xs text-[#DAA520] flex items-center gap-1 font-bold tracking-wide">
-                                    {promo.category === 'pack' ? (
-                                        <><Tag className="w-3 h-3"/> ${promo.price.toLocaleString('es-CL')} • Compra Web</>
-                                    ) : (
-                                        <><Calendar className="w-3 h-3"/> {promo.dayFull} • Presencial</>
-                                    )}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-500">
-                <p>No hay promociones destacadas</p>
-            </div>
-        )}
-      </div>
 
-      {/* --- MARQUEE INFINITO (Igual que shows) --- */}
-      {!loading && promos.length > 0 && (
-          <div className="mb-8 overflow-hidden relative">
-            <h3 className="px-4 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Más Populares</h3>
-            <div className="flex gap-4 w-[200%] animate-marquee hover:pause">
-                {[...promos, ...promos].slice(0, 10).map((p, index) => (
-                    <div key={`mq-${p.id}-${index}`} className="min-w-[160px] h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0">
-                        <Image src={p.image} alt={p.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
-                        <div className="absolute inset-0 bg-black/50 flex items-end p-3">
-                            <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md">{p.title}</span>
-                        </div>
-                    </div>
-                ))}
+            <div className="w-9 h-9 bg-[#DAA520]/10 rounded-full flex items-center justify-center border border-[#DAA520]/30 animate-pulse">
+                <Gift className="w-4 h-4 text-[#DAA520]" />
             </div>
           </div>
+      </div>
+
+      {/* Espaciador para el header fijo */}
+      <div className="h-20" />
+
+      {/* --- HERO BANNER AUTOADMINISTRABLE (DISEÑO SHOWS) --- */}
+      {loading ? (
+         <div className="w-full h-[50vh] bg-zinc-900 animate-pulse mb-8" />
+      ) : heroPromo ? (
+        <div className="relative w-full h-[60vh] max-h-[600px] overflow-hidden group border-b border-[#DAA520]/20">
+            {/* Imagen Full con Overlay cinemático */}
+            <Image 
+                src={heroPromo.image_url || "/placeholder.jpg"} 
+                alt={heroPromo.title} 
+                fill 
+                className="object-cover transition-transform duration-1000 group-hover:scale-105" 
+                priority
+            />
+            {/* Gradiente oscuro inferior para legibilidad */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+            
+            <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 flex flex-col items-start max-w-5xl mx-auto z-10">
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    className="flex flex-wrap gap-2 mb-4"
+                >
+                    <span className="bg-[#DAA520] text-black text-[10px] md:text-xs font-black px-3 py-1 rounded uppercase tracking-widest shadow-lg flex items-center gap-1">
+                        <Star className="w-3 h-3 fill-black" /> {heroPromo.tag || "DESTACADO"}
+                    </span>
+                </motion.div>
+                
+                <motion.h1 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="text-4xl md:text-6xl font-black text-white uppercase leading-[0.9] mb-3 drop-shadow-2xl"
+                >
+                    {heroPromo.title}
+                </motion.h1>
+                
+                <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-lg md:text-xl text-zinc-200 font-light max-w-xl leading-snug mb-6"
+                >
+                    {heroPromo.subtitle}
+                </motion.p>
+
+                {heroPromo.desc_text && (
+                    <div className="flex items-center gap-3 text-sm text-zinc-300 bg-black/60 px-5 py-2.5 rounded-full backdrop-blur-md border border-white/10">
+                        <Clock className="w-4 h-4 text-[#DAA520]" />
+                        <span className="font-medium tracking-wide text-xs md:text-sm">{heroPromo.desc_text}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+      ) : (
+        <div className="relative w-full h-48 bg-zinc-900 flex items-center justify-center mb-8 border-b border-white/5">
+            <div className="text-center">
+                <Gift className="w-10 h-10 text-zinc-700 mx-auto mb-2"/>
+                <p className="text-zinc-500 text-xs">Configura un 'Banner Principal' en el dashboard.</p>
+            </div>
+        </div>
       )}
 
-      {/* --- BARRA DE BÚSQUEDA --- */}
-      <div className="px-4 mb-5">
-        <div className="relative group">
-            <input 
-                type="text" 
-                placeholder="Buscar sushi, tragos, packs..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#DAA520] focus:ring-1 focus:ring-[#DAA520] transition-all"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
-        </div>
-      </div>
-
-      {/* --- TABS (FILTROS) --- */}
-      <div className="px-4 mb-8">
-        <div className="flex gap-2 p-1 bg-zinc-900 rounded-xl border border-zinc-800">
-            {['semana', 'pack'].map((tab) => (
+      {/* --- BARRA DE NAVEGACIÓN (ESTILO SHOWS) --- */}
+      <div className="sticky top-[60px] z-40 bg-black/95 backdrop-blur-xl border-y border-white/10 shadow-2xl mb-8">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+            <div className="flex gap-2 md:gap-4 overflow-x-auto no-scrollbar justify-center">
                 <button 
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${activeTab === tab ? 'bg-[#DAA520] text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+                    onClick={() => setActiveTab("semana")}
+                    className={`flex-1 max-w-[200px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                        activeTab === "semana" 
+                        ? 'bg-[#DAA520] text-black shadow-[0_0_15px_rgba(218,165,32,0.4)]' 
+                        : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-white/5'
+                    }`}
                 >
-                    {tab === 'semana' ? 'La Semana' : 'Packs & Regalos'}
+                    <Calendar className="w-4 h-4" /> La Semana
                 </button>
-            ))}
+                <button 
+                    onClick={() => setActiveTab("pack")}
+                    className={`flex-1 max-w-[200px] py-3 px-6 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                        activeTab === "pack" 
+                        ? 'bg-[#DAA520] text-black shadow-[0_0_15px_rgba(218,165,32,0.4)]' 
+                        : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-white/5'
+                    }`}
+                >
+                    <Gift className="w-4 h-4" /> Packs & Regalos
+                </button>
+            </div>
         </div>
       </div>
 
-      {/* --- LISTADO (CARDS ESTILO SHOWS) --- */}
-      <div className="px-4 space-y-4 pb-8">
+      {/* --- GRID DE PROMOCIONES (1080x1080 - 2 COLUMNAS) --- */}
+      <div className="px-4 max-w-6xl mx-auto pb-16">
         {loading ? (
-             <div className="text-center py-10 text-zinc-500">
-                <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin text-[#DAA520]" />
-                <p className="text-sm">Cargando promociones...</p>
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+                <Loader2 className="w-10 h-10 text-[#DAA520] animate-spin" />
+                <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Cargando experiencias...</p>
             </div>
-        ) : visiblePromos.length > 0 ? (
-            visiblePromos.map((promo) => (
-                // Usamos un div interactivo o link dependiendo si es pack o reserva
-                <div key={promo.id} className="relative">
-                    <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 flex h-36 relative active:scale-[0.98] transition-transform mb-4 shadow-lg"
-                    >
-                        {/* Tag dorado esquina */}
-                        {promo.tag && (
-                            <div className="absolute top-0 left-0 z-20 bg-[#DAA520] text-black text-[8px] font-extrabold px-3 py-1 rounded-br-lg uppercase tracking-wider shadow-md">
-                                {promo.tag}
-                            </div>
-                        )}
-
-                        {/* Imagen Izquierda (Estilo Shows) */}
-                        <div className="w-36 relative shrink-0">
-                            <Image src={promo.image} alt={promo.title} fill className="object-cover opacity-90" />
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-zinc-900/90" />
-                        </div>
-
-                        {/* Contenido Derecha */}
-                        <div className="flex-1 p-4 pl-2 flex flex-col justify-between relative">
-                            <div>
-                                <div className="flex items-center gap-1 text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">
-                                    {activeTab === 'semana' ? (
-                                        <><Calendar className="w-3 h-3 text-[#DAA520]" /> Disponible: {promo.dayFull}</>
-                                    ) : (
-                                        <><Tag className="w-3 h-3 text-[#DAA520]" /> Pack Web</>
-                                    )}
-                                </div>
-                                <h3 className="text-sm font-bold text-white uppercase leading-snug line-clamp-2 mb-2">
-                                    {promo.title}
-                                </h3>
-                            </div>
-
-                            <div className="flex items-end justify-between border-t border-white/5 pt-2">
-                                <div className="flex items-center gap-3">
-                                    {/* CAJA DE DATO PRINCIPAL (Igual que Fecha/Hora en Shows) */}
-                                    <div className="flex flex-col items-center leading-none pr-3 border-r border-white/10 min-w-[3.5rem]">
-                                        {activeTab === 'pack' ? (
-                                            // SI ES PACK: MUESTRA PRECIO
-                                            <>
-                                                <span className="text-[10px] font-bold text-[#DAA520] uppercase mb-0.5">Valor</span>
-                                                <span className="text-lg font-bold text-white tracking-tight">
-                                                    ${(promo.price/1000).toFixed(0)}k
-                                                </span>
-                                            </>
-                                        ) : (
-                                            // SI ES SEMANA: MUESTRA DÍA CORTO
-                                            <>
-                                                <span className="text-xl font-bold text-white">{promo.dateDisplay}</span>
-                                                <span className="text-[9px] font-bold text-[#DAA520] uppercase">{promo.subDateDisplay}</span>
-                                            </>
-                                        )}
-                                    </div>
-                                    
-                                    {/* Subtexto */}
-                                    <div className="flex flex-col leading-none">
-                                        <span className="text-[10px] text-zinc-400 font-medium line-clamp-1 max-w-[80px]">
-                                            {promo.subtitle}
+        ) : displayPromos.length === 0 ? (
+            <div className="text-center py-24 bg-zinc-900/30 rounded-3xl border border-white/5 border-dashed">
+                <Gift className="w-16 h-16 text-zinc-800 mx-auto mb-4" />
+                <p className="text-zinc-500 text-sm font-medium">No hay promociones activas en esta categoría por el momento.</p>
+            </div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                <AnimatePresence mode="popLayout">
+                    {displayPromos.map((promo, index) => (
+                        <motion.div 
+                            key={promo.id}
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            transition={{ duration: 0.4, delay: index * 0.1 }}
+                            className="bg-zinc-900 rounded-2xl overflow-hidden border border-white/10 shadow-lg hover:border-[#DAA520]/50 transition-all duration-300 group flex flex-col h-full"
+                        >
+                            {/* 1. IMAGEN 1:1 (ASPECT SQUARE) - SIN FILTROS OSCUROS */}
+                            <div className="relative w-full aspect-square bg-zinc-950 overflow-hidden">
+                                <Image 
+                                    src={promo.image_url || "/placeholder.jpg"} 
+                                    alt={promo.title} 
+                                    fill 
+                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                />
+                                
+                                {/* Etiqueta Tag (Top Left) */}
+                                {promo.tag && (
+                                    <div className="absolute top-4 left-4 z-10">
+                                        <span className="bg-[#DAA520] text-black text-[9px] font-black px-2.5 py-1.5 rounded shadow-lg uppercase tracking-wider">
+                                            {promo.tag}
                                         </span>
                                     </div>
-                                </div>
+                                )}
 
-                                {/* BOTÓN DE ACCIÓN */}
-                                {activeTab === 'pack' ? (
-                                    <button 
-                                        onClick={(e) => handleAddToCart(e, promo)}
-                                        className="bg-white text-black p-2 rounded-full hover:bg-[#DAA520] transition-all shadow-[0_0_10px_rgba(255,255,255,0.1)]"
-                                    >
-                                        <ShoppingCart className="w-5 h-5" />
-                                    </button>
-                                ) : (
-                                    <Link href="/reservas" className="bg-white/10 p-2 rounded-full hover:bg-[#DAA520] hover:text-black transition-all">
-                                        <ChevronRight className="w-5 h-5" />
-                                    </Link>
+                                {/* Badge de Día (Top Right) - Solo para 'semana' */}
+                                {promo.category === "semana" && (
+                                    <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
+                                        <span className={`text-[10px] font-black px-3 py-1.5 rounded border shadow-lg backdrop-blur-md uppercase tracking-wider ${
+                                            promo.day === currentDay || promo.day === 'todos'
+                                            ? 'bg-green-600 text-white border-green-500' 
+                                            : 'bg-black/70 text-white border-white/20'
+                                        }`}>
+                                            {promo.day === 'todos' ? 'TODOS LOS DÍAS' : promo.day}
+                                        </span>
+                                    </div>
                                 )}
                             </div>
-                        </div>
-                    </motion.div>
-                </div>
-            ))
-        ) : (
-            <div className="text-center py-10 text-zinc-500">
-                <Filter className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No hay promociones en esta categoría.</p>
-            </div>
-        )}
 
-        {/* --- BOTÓN VER MÁS --- */}
-        {visibleCount < filteredPromos.length && (
-            <div className="mt-8 flex justify-center">
-                <button 
-                    onClick={handleLoadMore}
-                    className="bg-zinc-800 text-white px-8 py-3 rounded-full text-xs font-bold uppercase tracking-widest border border-zinc-700 hover:bg-[#DAA520] hover:text-black transition-all flex items-center gap-2"
-                    disabled={isLoadingMore}
-                >
-                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin"/> : "Ver más"}
-                </button>
+                            {/* 2. CONTENIDO (Panel Inferior) */}
+                            <div className="p-6 flex flex-col flex-1 relative bg-zinc-900">
+                                {/* Decoración dorada sutil lateral */}
+                                <div className="absolute top-6 left-0 w-1 h-12 bg-[#DAA520]" />
+
+                                <div className="flex-1 pl-2">
+                                    <h3 className="text-2xl font-black text-white uppercase leading-none mb-1 group-hover:text-[#DAA520] transition-colors">
+                                        {promo.title}
+                                    </h3>
+                                    {promo.subtitle && (
+                                        <p className="text-xs text-[#DAA520] font-bold uppercase tracking-wide mb-4">
+                                            {promo.subtitle}
+                                        </p>
+                                    )}
+                                    <div className="h-px w-12 bg-white/10 mb-4" />
+                                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3">
+                                        {promo.desc_text}
+                                    </p>
+                                </div>
+
+                                {/* Botones de Acción */}
+                                <div className="mt-6 pt-4 border-t border-white/5 pl-2">
+                                    {promo.category === "pack" ? (
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex-1">
+                                                <p className="text-[9px] text-zinc-500 uppercase font-bold">Valor Pack</p>
+                                                <p className="text-2xl font-black text-white">${promo.price?.toLocaleString('es-CL')}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleAddToCart(promo)}
+                                                className="bg-white text-black h-12 px-6 rounded-xl text-xs font-bold uppercase tracking-wide hover:bg-[#DAA520] hover:text-black transition-all flex items-center gap-2 shadow-lg"
+                                            >
+                                                <ShoppingCart className="w-4 h-4" /> Agregar
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <Link href="/reservas" className="block w-full">
+                                            <button className="w-full h-12 bg-zinc-800 text-white border border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#DAA520] hover:text-black hover:border-[#DAA520] transition-all flex items-center justify-center gap-2 group/btn shadow-lg">
+                                                Reservar Mesa
+                                                <ChevronRight className="w-4 h-4 text-[#DAA520] group-hover/btn:text-black transition-colors" />
+                                            </button>
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
         )}
       </div>
 
-      <style jsx>{`
-        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-        .animate-marquee { animation: marquee 20s linear infinite; }
-      `}</style>
+      {/* --- WHATSAPP FLOTANTE --- */}
+      <a 
+        href="https://wa.me/569XXXXXXXX" // REEMPLAZA CON TU NÚMERO
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 bg-[#25D366] w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(37,211,102,0.4)] hover:scale-110 transition-transform duration-300"
+      >
+        <svg viewBox="0 0 24 24" className="w-8 h-8 text-white fill-current" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+        </svg>
+      </a>
+
+      {/* --- INFO EXTRA --- */}
+      <div className="px-6 text-center pb-8 border-t border-white/5 pt-8 max-w-4xl mx-auto">
+        <div className="inline-flex items-center gap-3 px-6 py-3 bg-zinc-900 rounded-full border border-white/10">
+            <Info className="w-4 h-4 text-zinc-500" />
+            <span className="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">Imágenes referenciales • Sujeto a disponibilidad</span>
+        </div>
+      </div>
+
     </main>
   );
 }
