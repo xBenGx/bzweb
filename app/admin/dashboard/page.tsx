@@ -22,7 +22,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "ventas", label: "Finanzas & Ventas", icon: DollarSign }, // NUEVA SECCIÓN
+    { id: "ventas", label: "Finanzas & Ventas", icon: DollarSign }, // NUEVA SECCIÓN AGREGADA
     { id: "reservas", label: "Reservas", icon: Calendar },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
@@ -136,13 +136,13 @@ export default function DashboardPage() {
         }));
 
     // 2. Ingresos por Entradas (Estimado desde Shows activos)
+    // Nota: Calculamos (vendidos * precio del primer ticket) como estimación si no hay tabla detallada de tickets vendidos
     const ticketSales = shows.map(s => {
-        // Asumimos precio del primer ticket o 0 si no hay
         const avgPrice = s.tickets && s.tickets.length > 0 ? s.tickets[0].price : 0;
         const total = (s.sold || 0) * avgPrice;
         return {
             id: `show-${s.id}`,
-            fecha: s.created_at, // O fecha del evento
+            fecha: s.created_at, 
             descripcion: `Venta Entradas: ${s.title}`,
             monto: total,
             tipo: 'entrada',
