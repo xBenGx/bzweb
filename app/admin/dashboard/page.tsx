@@ -8,7 +8,7 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag, Send
+    Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -19,9 +19,10 @@ import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
-// --- TABS DE NAVEGACIÓN ---
+// --- TABS DE NAVEGACIÓN (ACTUALIZADO CON VENTAS) ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
+    { id: "ventas", label: "Finanzas", icon: DollarSign }, // NUEVO TAB
     { id: "reservas", label: "Reservas", icon: Calendar },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
@@ -46,6 +47,8 @@ export default function DashboardPage() {
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]); 
+  // NUEVO ESTADO PARA VENTAS
+  const [ventas, setVentas] = useState<any[]>([]);
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -63,6 +66,7 @@ export default function DashboardPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) // Escuchar ventas
       .subscribe();
 
     return () => {
@@ -94,6 +98,10 @@ export default function DashboardPage() {
       // 6. Menú Express (Productos que se muestran en la web)
       const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
       if (menuData) setMenuItems(menuData);
+
+      // 7. Ventas Generales (NUEVO)
+      const { data: ventasData } = await supabase.from('ventas_generales').select('*').order('created_at', { ascending: false });
+      if (ventasData) setVentas(ventasData);
   };
 
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
@@ -106,6 +114,10 @@ export default function DashboardPage() {
   // MODAL PARA MENÚ EXPRESS
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
+
+  // MODAL PARA VENTAS MANUALES (NUEVO)
+  const [isVentaModalOpen, setIsVentaModalOpen] = useState(false);
+  const [currentVenta, setCurrentVenta] = useState<any>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -146,6 +158,57 @@ export default function DashboardPage() {
   const triggerFileInput = () => {
       fileInputRef.current?.click();
   };
+
+  // ---------------------------------------------------------
+  // LÓGICA GESTIÓN DE VENTAS (NUEVO)
+  // ---------------------------------------------------------
+  const handleOpenVentaModal = () => {
+      setCurrentVenta({ 
+          descripcion: "", 
+          monto: 0, 
+          tipo: "consumo_extra", // 'entrada_manual', 'consumo_extra', 'general'
+          metodo_pago: "efectivo" // 'efectivo', 'tarjeta', 'transferencia'
+      });
+      setIsVentaModalOpen(true);
+  };
+
+  const handleSaveVenta = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          const ventaData = {
+              descripcion: currentVenta.descripcion,
+              monto: currentVenta.monto,
+              tipo: currentVenta.tipo,
+              metodo_pago: currentVenta.metodo_pago,
+              created_at: new Date().toISOString() // Opcional si la BD lo pone auto
+          };
+
+          const { error } = await supabase.from('ventas_generales').insert([ventaData]);
+          if (error) throw error;
+
+          await fetchData();
+          setIsVentaModalOpen(false);
+      } catch (error: any) {
+          alert("Error al registrar venta: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDeleteVenta = async (id: number) => {
+      if(confirm("¿Eliminar registro de venta? Esto afectará el arqueo.")) {
+          await supabase.from('ventas_generales').delete().eq('id', id);
+          fetchData();
+      }
+  };
+
+  // CÁLCULOS DE FINANZAS
+  const totalIngresos = ventas.reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  const ventasEfectivo = ventas.filter(v => v.metodo_pago === 'efectivo').reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  const ventasDigital = ventas.filter(v => ['tarjeta', 'transferencia'].includes(v.metodo_pago)).reduce((acc, curr) => acc + (curr.monto || 0), 0);
+  const ticketPromedio = ventas.length > 0 ? totalIngresos / ventas.length : 0;
+
 
   // ---------------------------------------------------------
   // LÓGICA GESTIÓN DE CLIENTES
@@ -570,12 +633,12 @@ export default function DashboardPage() {
                         {[
                             { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
                             { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
+                            { title: "Ingresos Hoy (Est.)", value: `$${totalIngresos.toLocaleString('es-CL')}`, color: "bg-green-500" },
                             { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
-                            { title: "Prod. Menú", value: menuItems.length, color: "bg-red-500" }
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
                                 <div className={`w-2 h-2 rounded-full mb-3 ${stat.color}`} />
-                                <p className="text-2xl font-black text-white">{stat.value}</p>
+                                <p className="text-xl md:text-2xl font-black text-white">{stat.value}</p>
                                 <p className="text-xs text-zinc-500 uppercase font-bold">{stat.title}</p>
                             </div>
                         ))}
@@ -599,6 +662,103 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* --- 1.5 VISTA VENTAS / FINANZAS (NUEVO) --- */}
+            {activeTab === "ventas" && (
+                <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    {/* Header de Finanzas */}
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold">Panel Financiero</h3>
+                        <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
+                            <DollarSign className="w-4 h-4" /> Venta Manual / Rápida
+                        </button>
+                    </div>
+
+                    {/* KPIs Financieros */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div className="bg-zinc-900 border border-green-900/30 p-6 rounded-2xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-24 h-24 text-green-500" /></div>
+                            <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Ingresos Totales</p>
+                            <h2 className="text-4xl font-black text-white">${totalIngresos.toLocaleString('es-CL')}</h2>
+                            <div className="mt-4 flex gap-2">
+                                <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-1 rounded flex items-center gap-1"><TrendingUp className="w-3 h-3"/> +12% vs ayer</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl">
+                             <p className="text-xs text-zinc-400 uppercase font-bold mb-4">Desglose por Método</p>
+                             <div className="space-y-4">
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span className="flex items-center gap-2"><Banknote className="w-3 h-3 text-[#DAA520]"/> Efectivo</span>
+                                        <span className="font-bold">${ventasEfectivo.toLocaleString('es-CL')}</span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-zinc-800 rounded-full"><div style={{ width: `${(ventasEfectivo/totalIngresos)*100}%` }} className="h-full bg-[#DAA520] rounded-full"></div></div>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span className="flex items-center gap-2"><CreditCard className="w-3 h-3 text-blue-500"/> Tarjetas / Transf.</span>
+                                        <span className="font-bold">${ventasDigital.toLocaleString('es-CL')}</span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-zinc-800 rounded-full"><div style={{ width: `${(ventasDigital/totalIngresos)*100}%` }} className="h-full bg-blue-500 rounded-full"></div></div>
+                                </div>
+                             </div>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-center items-center text-center">
+                            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-3">
+                                <DollarSign className="w-8 h-8 text-white"/>
+                            </div>
+                            <h3 className="text-2xl font-bold text-white">${Math.round(ticketPromedio).toLocaleString('es-CL')}</h3>
+                            <p className="text-xs text-zinc-500 uppercase font-bold">Ticket Promedio</p>
+                        </div>
+                    </div>
+
+                    {/* Tabla de Transacciones */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
+                        <h3 className="text-lg font-bold mb-4">Últimas Transacciones</h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-zinc-400">
+                                <thead className="text-xs uppercase bg-black/40 text-zinc-500">
+                                    <tr>
+                                        <th className="px-4 py-3">Descripción</th>
+                                        <th className="px-4 py-3">Tipo</th>
+                                        <th className="px-4 py-3">Método</th>
+                                        <th className="px-4 py-3">Fecha</th>
+                                        <th className="px-4 py-3 text-right">Monto</th>
+                                        <th className="px-4 py-3 text-right">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {ventas.map((venta) => (
+                                        <tr key={venta.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-4 py-3 font-medium text-white">{venta.descripcion}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${
+                                                    venta.tipo === 'general' ? 'bg-blue-900/30 text-blue-400' : 
+                                                    venta.tipo === 'entrada_manual' ? 'bg-purple-900/30 text-purple-400' : 'bg-orange-900/30 text-orange-400'
+                                                }`}>
+                                                    {venta.tipo.replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 capitalize flex items-center gap-2">
+                                                {venta.metodo_pago === 'efectivo' ? <Banknote className="w-3 h-3 text-[#DAA520]"/> : <CreditCard className="w-3 h-3 text-zinc-500"/>}
+                                                {venta.metodo_pago}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs">{new Date(venta.created_at).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {ventas.length === 0 && <div className="p-8 text-center text-zinc-600">No hay ventas registradas aún.</div>}
                         </div>
                     </div>
                 </motion.div>
@@ -898,6 +1058,53 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {/* --- MODALES --- */}
+
+        {/* MODAL VENTA RÁPIDA (NUEVO) */}
+        <AnimatePresence>
+            {isVentaModalOpen && (
+                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsVentaModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm relative z-70 shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white uppercase flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-500"/> Registrar Venta</h3>
+                            <button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={handleSaveVenta} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label>
+                                <input required type="text" placeholder="Ej: Consumo Mesa 4" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label>
+                                <input required type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xl font-bold outline-none focus:border-green-500" value={currentVenta.monto} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
+                                        <option value="consumo_extra">Consumo Extra</option>
+                                        <option value="entrada_manual">Entrada / Ticket</option>
+                                        <option value="general">Venta General</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Método Pago</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
+                                        <option value="efectivo">Efectivo</option>
+                                        <option value="tarjeta">Tarjeta (Débito/Crédito)</option>
+                                        <option value="transferencia">Transferencia</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-900/20">
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Confirmar Ingreso</>}
+                            </button>
+                        </form>
+                    </motion.div>
+                 </div>
+            )}
+        </AnimatePresence>
+
         {/* CLIENTES */}
         <AnimatePresence>
             {isClientModalOpen && (
