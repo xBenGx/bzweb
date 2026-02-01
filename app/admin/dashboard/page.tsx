@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     LayoutDashboard, Calendar, Music, FileText, Users, 
@@ -8,7 +8,7 @@ import {
     Image as ImageIcon, Flame, Gift, Upload, X, Save, 
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
-    Utensils, ShoppingBag, Send
+    Utensils, ShoppingBag, Send, DollarSign, Receipt, TrendingUp
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +22,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
+    { id: "ventas", label: "Finanzas & Ventas", icon: DollarSign }, // NUEVA SECCIÓN
     { id: "reservas", label: "Reservas", icon: Calendar },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
@@ -46,6 +47,7 @@ export default function DashboardPage() {
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]); 
+  const [ventasGenerales, setVentasGenerales] = useState<any[]>([]); // NUEVO: Ventas Manuales
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -63,6 +65,7 @@ export default function DashboardPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) // Escuchar nueva tabla
       .subscribe();
 
     return () => {
@@ -94,6 +97,10 @@ export default function DashboardPage() {
       // 6. Menú Express (Productos que se muestran en la web)
       const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
       if (menuData) setMenuItems(menuData);
+
+      // 7. Ventas Generales (Tabla Manual)
+      const { data: ventasData } = await supabase.from('ventas_generales').select('*').order('created_at', { ascending: false });
+      if (ventasData) setVentasGenerales(ventasData);
   };
 
   // --- ESTADOS DE MODALES Y ARCHIVOS ---
@@ -107,8 +114,63 @@ export default function DashboardPage() {
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
 
+  // MODAL PARA NUEVA VENTA (NUEVO)
+  const [isVentaModalOpen, setIsVentaModalOpen] = useState(false);
+  const [currentVenta, setCurrentVenta] = useState<any>({ descripcion: "", monto: 0, tipo: "general", metodo_pago: "efectivo" });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // --- LÓGICA DE CÁLCULO DE VENTAS (MÓDULO FINANCIERO INTEGRADO) ---
+  const salesData = useMemo(() => {
+    // 1. Ingresos por Menú (Desde Reservas confirmadas o pendientes con pago)
+    const menuSales = reservas
+        .filter(r => r.total_pre_order > 0)
+        .map(r => ({
+            id: `res-${r.id}`,
+            fecha: r.created_at,
+            descripcion: `Menú Reserva: ${r.name}`,
+            monto: r.total_pre_order,
+            tipo: 'menu',
+            origen: 'web'
+        }));
+
+    // 2. Ingresos por Entradas (Estimado desde Shows activos)
+    const ticketSales = shows.map(s => {
+        // Asumimos precio del primer ticket o 0 si no hay
+        const avgPrice = s.tickets && s.tickets.length > 0 ? s.tickets[0].price : 0;
+        const total = (s.sold || 0) * avgPrice;
+        return {
+            id: `show-${s.id}`,
+            fecha: s.created_at, // O fecha del evento
+            descripcion: `Venta Entradas: ${s.title}`,
+            monto: total,
+            tipo: 'entrada',
+            origen: 'taquilla/web'
+        };
+    }).filter(s => s.monto > 0);
+
+    // 3. Ventas Generales (Tabla dedicada)
+    const generalSales = ventasGenerales.map(v => ({
+        id: `gen-${v.id}`,
+        fecha: v.created_at,
+        descripcion: v.descripcion,
+        monto: v.monto,
+        tipo: v.tipo, // 'entrada_manual' o 'general'
+        origen: 'manual'
+    }));
+
+    // Unificar y ordenar por fecha
+    const all = [...menuSales, ...ticketSales, ...generalSales].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    
+    // Totales
+    const totalMenu = menuSales.reduce((acc, curr) => acc + curr.monto, 0);
+    const totalEntradas = ticketSales.reduce((acc, curr) => acc + curr.monto, 0) + generalSales.filter(v => v.tipo === 'entrada_manual').reduce((acc,curr) => acc + curr.monto, 0);
+    const totalGeneral = all.reduce((acc, curr) => acc + curr.monto, 0);
+
+    return { all, totalMenu, totalEntradas, totalGeneral };
+  }, [reservas, shows, ventasGenerales]);
+
 
   // --- MANEJADOR DE IMAGEN (Unificado para todos los módulos) ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
@@ -348,6 +410,25 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
+  // LÓGICA DE VENTAS MANUALES (NUEVO)
+  // ---------------------------------------------------------
+  const handleSaveVenta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+        const { error } = await supabase.from('ventas_generales').insert([currentVenta]);
+        if(error) throw error;
+        await fetchData();
+        setIsVentaModalOpen(false);
+        setCurrentVenta({ descripcion: "", monto: 0, tipo: "general", metodo_pago: "efectivo" });
+    } catch (error: any) {
+        alert("Error al registrar venta: " + error.message);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------
   // LÓGICA GESTIÓN DE SHOWS
   // ---------------------------------------------------------
   const handleOpenShowModal = (show: any = null) => {
@@ -563,7 +644,97 @@ export default function DashboardPage() {
         </header>
 
         <AnimatePresence mode="wait">
-            {/* 1. VISTA RESUMEN */}
+            
+            {/* --- SECCIÓN NUEVA: FINANZAS Y VENTAS --- */}
+            {activeTab === "ventas" && (
+                <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                    
+                    {/* KPI CARDS */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-gradient-to-br from-zinc-900 to-black border border-[#DAA520]/30 p-6 rounded-2xl relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 bg-[#DAA520]/10 w-24 h-24 rounded-full group-hover:bg-[#DAA520]/20 transition-all"></div>
+                            <div className="relative z-10">
+                                <p className="text-xs font-bold text-[#DAA520] uppercase mb-1 flex items-center gap-2"><DollarSign className="w-4 h-4"/> Ingresos Totales</p>
+                                <h2 className="text-4xl font-black text-white">${salesData.totalGeneral.toLocaleString()}</h2>
+                                <p className="text-[10px] text-zinc-500 mt-2">Acumulado histórico</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-blue-400 uppercase mb-1 flex items-center gap-2"><Receipt className="w-4 h-4"/> Ventas Entradas</p>
+                                <h2 className="text-2xl font-bold text-white">${salesData.totalEntradas.toLocaleString()}</h2>
+                            </div>
+                            <div className="w-full bg-zinc-800 h-1 mt-4 rounded-full overflow-hidden">
+                                <div className="bg-blue-500 h-full" style={{ width: `${(salesData.totalEntradas / (salesData.totalGeneral || 1)) * 100}%` }}></div>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl flex flex-col justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-green-400 uppercase mb-1 flex items-center gap-2"><Utensils className="w-4 h-4"/> Ventas Menú</p>
+                                <h2 className="text-2xl font-bold text-white">${salesData.totalMenu.toLocaleString()}</h2>
+                            </div>
+                            <div className="w-full bg-zinc-800 h-1 mt-4 rounded-full overflow-hidden">
+                                <div className="bg-green-500 h-full" style={{ width: `${(salesData.totalMenu / (salesData.totalGeneral || 1)) * 100}%` }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ACTIONS BAR */}
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold text-white">Registro de Transacciones</h3>
+                        <div className="flex gap-2">
+                             <button onClick={() => { setCurrentVenta({...currentVenta, tipo: "general"}); setIsVentaModalOpen(true); }} className="bg-zinc-800 border border-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase hover:bg-zinc-700 transition-colors">
+                                + Venta General
+                            </button>
+                            <button onClick={() => { setCurrentVenta({...currentVenta, tipo: "entrada_manual"}); setIsVentaModalOpen(true); }} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase hover:bg-[#B8860B] transition-colors shadow-lg">
+                                + Venta Entrada Manual
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* TABLE */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-3xl overflow-hidden">
+                        <table className="w-full text-left text-sm text-zinc-400">
+                            <thead className="bg-black/50 text-xs uppercase text-zinc-500 font-bold">
+                                <tr>
+                                    <th className="px-6 py-4">Fecha</th>
+                                    <th className="px-6 py-4">Descripción / Concepto</th>
+                                    <th className="px-6 py-4">Tipo</th>
+                                    <th className="px-6 py-4">Origen</th>
+                                    <th className="px-6 py-4 text-right">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {salesData.all.length === 0 ? (
+                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-zinc-600">No hay movimientos registrados.</td></tr>
+                                ) : (
+                                    salesData.all.map((sale) => (
+                                        <tr key={sale.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 text-xs font-mono">{new Date(sale.fecha).toLocaleDateString()} <span className="text-zinc-600">{new Date(sale.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></td>
+                                            <td className="px-6 py-4 font-medium text-white">{sale.descripcion}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${
+                                                    sale.tipo === 'menu' ? 'bg-green-900/30 text-green-400 border border-green-900' :
+                                                    sale.tipo === 'entrada' || sale.tipo === 'entrada_manual' ? 'bg-blue-900/30 text-blue-400 border border-blue-900' :
+                                                    'bg-zinc-800 text-zinc-300'
+                                                }`}>
+                                                    {sale.tipo.replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-xs capitalize">{sale.origen}</td>
+                                            <td className="px-6 py-4 text-right font-bold text-[#DAA520]">+${sale.monto.toLocaleString()}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* 1. VISTA RESUMEN (ACTUALIZADA) */}
             {activeTab === "resumen" && (
                 <motion.div key="resumen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -571,7 +742,7 @@ export default function DashboardPage() {
                             { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
                             { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
                             { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
-                            { title: "Prod. Menú", value: menuItems.length, color: "bg-red-500" }
+                            { title: "Caja Actual ($)", value: `$${salesData.totalGeneral.toLocaleString()}`, color: "bg-green-500" } // KPI ACTUALIZADO
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
                                 <div className={`w-2 h-2 rounded-full mb-3 ${stat.color}`} />
@@ -726,9 +897,9 @@ export default function DashboardPage() {
                             <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
                                 {birthdays.length > 0 ? birthdays.map(c => (
                                     <div key={c.id} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                        <span className="text-xs font-bold text-white">{c.nombre}</span>
-                                        <span className="text-[10px] text-zinc-400 ml-auto">{c.whatsapp}</span>
+                                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                            <span className="text-xs font-bold text-white">{c.nombre}</span>
+                                            <span className="text-[10px] text-zinc-400 ml-auto">{c.whatsapp}</span>
                                     </div>
                                 )) : <p className="text-xs text-zinc-500">No hay cumpleaños registrados para esta fecha.</p>}
                             </div>
@@ -898,6 +1069,55 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {/* --- MODALES --- */}
+        
+        {/* MODAL NUEVA VENTA MANUAL (NUEVO) */}
+        <AnimatePresence>
+            {isVentaModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsVentaModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white uppercase">Registrar Venta</h3>
+                            <button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={handleSaveVenta} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción</label>
+                                <input required type="text" placeholder="Ej: Venta 2 Entradas Puerta" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label>
+                                    <input required type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentVenta.monto} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
+                                        <option value="general">Venta General</option>
+                                        <option value="entrada_manual">Entrada (Puerta)</option>
+                                        <option value="consumo_extra">Consumo Extra</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Método de Pago</label>
+                                <div className="flex gap-2">
+                                    {['efectivo', 'tarjeta', 'transferencia'].map(m => (
+                                        <button type="button" key={m} onClick={() => setCurrentVenta({...currentVenta, metodo_pago: m})} className={`flex-1 py-2 rounded-lg text-xs uppercase font-bold border ${currentVenta.metodo_pago === m ? 'bg-[#DAA520] text-black border-[#DAA520]' : 'bg-transparent text-zinc-500 border-zinc-800'}`}>
+                                            {m}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-3 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Registrar Ingreso</>}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
         {/* CLIENTES */}
         <AnimatePresence>
             {isClientModalOpen && (
