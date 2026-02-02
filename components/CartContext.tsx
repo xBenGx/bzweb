@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
     Plus, Trash2, ShoppingBag, X, ChevronLeft, 
-    CreditCard, Upload, Copy, CheckCircle, Loader2 
+    CreditCard, Upload, Copy, CheckCircle, Loader2, Globe 
 } from "lucide-react";
 import Image from "next/image";
 
@@ -19,15 +19,17 @@ export type CartItem = {
   category?: "ticket" | "delivery" | "shop"; 
 };
 
-// --- DATOS BANCARIOS ACTUALIZADOS ---
+// --- DATOS BANCARIOS (Se mantienen intactos) ---
 const BANK_DETAILS = {
     bank: "Mercado Pago",
     accountType: "Cuenta Vista",
     accountNumber: "1058303781",
-    rut: "77.186.391-4", // Formateado para mejor lectura
+    rut: "77.186.391-4",
     email: "transferenciasbz@gmail.com",
     holder: "CENTRO GASTRONOMICO BOULEVARD ZAPALLAR SPA"
 };
+
+type PaymentMethod = 'manual' | 'getnet';
 
 type CartContextType = {
   items: CartItem[];
@@ -49,10 +51,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   
   // --- ESTADOS DEL CHECKOUT ---
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'payment'>('cart');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('getnet'); // Por defecto GetNet para modernizar
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Datos del cliente para la reserva rápida
+  // Datos del cliente
   const [clientData, setClientData] = useState({ name: "", phone: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -68,7 +71,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     };
     fetchMenu();
     
-    // Suscripción Realtime
     const channel = supabase
       .channel('cart-menu-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchMenu())
@@ -111,6 +113,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       setCheckoutStep('cart');
       setPaymentProof(null);
       setClientData({ name: "", phone: "" });
+      setIsSubmitting(false);
   };
 
   const toggleCart = () => setIsOpen(!isOpen);
@@ -127,7 +130,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       });
   };
 
-  // --- LÓGICA DE SUBIDA Y FINALIZACIÓN ---
+  // --- LÓGICA DE SUBIDA (MANUAL) ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           setPaymentProof(e.target.files[0]);
@@ -139,13 +142,14 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       alert("Copiado al portapapeles"); 
   };
 
-  const handleFinalizeReservation = async () => {
+  // --- LÓGICA DE PAGO 1: TRANSFERENCIA MANUAL ---
+  const handleFinalizeReservationManual = async () => {
       if (!paymentProof) return alert("Debes subir el comprobante de transferencia.");
       if (!clientData.name || !clientData.phone) return alert("Completa tus datos de contacto.");
       
       setIsSubmitting(true);
       try {
-          // 1. Subir Comprobante al bucket 'comprobantes'
+          // 1. Subir Comprobante
           const fileName = `proof-${Date.now()}-${clientData.name.replace(/\s+/g, '')}`;
           const { error: uploadError } = await supabase.storage
               .from('comprobantes') 
@@ -156,7 +160,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const { data: publicUrlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName);
           const proofUrl = publicUrlData.publicUrl;
 
-          // 2. Guardar Reserva en Base de Datos 'reservas'
+          // 2. Guardar Reserva
           const { error: dbError } = await supabase.from('reservas').insert([{
               name: clientData.name,
               phone: clientData.phone,
@@ -164,21 +168,54 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               status: 'pendiente_validacion', 
               payment_proof_url: proofUrl,
               details_json: items, 
+              payment_method: 'manual', // Nuevo campo recomendado
               date_reserva: new Date().toISOString().split('T')[0],
           }]);
 
           if (dbError) throw dbError;
 
-          alert("✅ ¡Reserva enviada! Validaremos tu pago y te enviaremos el ticket.");
+          alert("✅ ¡Reserva enviada! Validaremos tu pago manual.");
           clearCart();
           toggleCart();
 
       } catch (error: any) {
-          console.error("Error checkout:", error);
+          console.error("Error checkout manual:", error);
           alert("Hubo un error al procesar: " + error.message);
       } finally {
           setIsSubmitting(false);
       }
+  };
+
+  // --- LÓGICA DE PAGO 2: GETNET (ONLINE) ---
+  const handleGetNetPayment = async () => {
+    if (!clientData.name || !clientData.phone) return alert("Por favor, completa tus datos de contacto antes de pagar.");
+    
+    setIsSubmitting(true);
+    try {
+        const response = await fetch('/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cart: items,
+                total: total,
+                customerDetails: clientData
+            }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.url) {
+            // Redirigir a GetNet
+            window.location.href = data.url;
+        } else {
+            throw new Error(data.error || "Error iniciando pago");
+        }
+
+    } catch (error: any) {
+        console.error("Error GetNet:", error);
+        alert("Error al conectar con el banco: " + error.message);
+        setIsSubmitting(false);
+    }
   };
 
   return (
@@ -241,8 +278,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                                 
                                                 <div className="flex justify-between items-center">
                                                     <p className="text-white font-bold text-sm">${(item.price * item.quantity).toLocaleString("es-CL")}</p>
-                                                    
-                                                    {/* Control Cantidad Compacto */}
                                                     <div className="flex items-center gap-3 bg-black rounded-lg border border-white/10 px-2 py-1">
                                                         <button onClick={() => updateQuantity(item.id, -1)} className="text-zinc-400 hover:text-white transition-colors"><div className="w-4 text-center">-</div></button>
                                                         <span className="text-xs text-white font-bold">{item.quantity}</span>
@@ -302,41 +337,13 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             
                             {/* A. Resumen rápido */}
                             <div className="bg-zinc-900 rounded-xl p-4 border border-white/10 text-center">
-                                <p className="text-zinc-400 text-xs uppercase mb-1">Total a Transferir</p>
+                                <p className="text-zinc-400 text-xs uppercase mb-1">Total a Pagar</p>
                                 <p className="text-3xl font-black text-[#DAA520]">${total.toLocaleString("es-CL")}</p>
                             </div>
 
-                            {/* B. Datos Bancarios */}
+                            {/* B. Datos del Cliente (Requerido para ambos) */}
                             <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                    <CreditCard className="w-4 h-4 text-[#DAA520]" /> Datos de Transferencia
-                                </h4>
-                                <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 text-xs text-zinc-300 space-y-2 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-2 opacity-10">
-                                        <Image src="/logo.png" width={80} height={40} alt="Watermark" />
-                                    </div>
-                                    <div className="grid grid-cols-[100px_1fr] gap-y-1">
-                                        <span className="text-zinc-500">Banco:</span> <span className="font-bold text-white">{BANK_DETAILS.bank}</span>
-                                        <span className="text-zinc-500">Tipo:</span> <span className="font-bold text-white">{BANK_DETAILS.accountType}</span>
-                                        <span className="text-zinc-500">N° Cuenta:</span> 
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-white">{BANK_DETAILS.accountNumber}</span>
-                                            <button onClick={() => copyToClipboard(BANK_DETAILS.accountNumber)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
-                                        </div>
-                                        <span className="text-zinc-500">RUT:</span> 
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-white">{BANK_DETAILS.rut}</span>
-                                            <button onClick={() => copyToClipboard(BANK_DETAILS.rut)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
-                                        </div>
-                                        <span className="text-zinc-500">Correo:</span> <span className="font-bold text-white truncate">{BANK_DETAILS.email}</span>
-                                        <span className="text-zinc-500">Titular:</span> <span className="font-bold text-white">{BANK_DETAILS.holder}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* C. Datos del Cliente */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Tus Datos</h4>
+                                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Tus Datos de Contacto</h4>
                                 <div className="space-y-2">
                                     <input 
                                         type="text" 
@@ -355,32 +362,96 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                 </div>
                             </div>
 
-                            {/* D. Subir Comprobante */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                    <Upload className="w-4 h-4 text-[#DAA520]" /> Subir Comprobante
-                                </h4>
-                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf" className="hidden" />
-                                
-                                <div 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${paymentProof ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-700 hover:border-[#DAA520] hover:bg-zinc-900'}`}
+                            {/* C. Selector de Método de Pago */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <button 
+                                    onClick={() => setPaymentMethod('getnet')}
+                                    className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${paymentMethod === 'getnet' ? 'bg-[#DAA520]/20 border-[#DAA520] text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
                                 >
-                                    {paymentProof ? (
-                                        <>
-                                            <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
-                                            <p className="text-xs font-bold text-green-500">{paymentProof.name}</p>
-                                            <p className="text-[10px] text-zinc-500 mt-1">Click para cambiar</p>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload className="w-8 h-8 text-zinc-500 mb-2" />
-                                            <p className="text-xs font-bold text-zinc-400">Adjuntar Comprobante</p>
-                                            <p className="text-[10px] text-zinc-600 mt-1">Imagen o PDF</p>
-                                        </>
-                                    )}
-                                </div>
+                                    <Globe className="w-5 h-5" />
+                                    <span className="text-xs font-bold uppercase">Pago Online</span>
+                                </button>
+                                <button 
+                                    onClick={() => setPaymentMethod('manual')}
+                                    className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${paymentMethod === 'manual' ? 'bg-[#DAA520]/20 border-[#DAA520] text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
+                                >
+                                    <CreditCard className="w-5 h-5" />
+                                    <span className="text-xs font-bold uppercase">Transferencia</span>
+                                </button>
                             </div>
+
+                            {/* D. Contenido según Método */}
+                            {paymentMethod === 'getnet' ? (
+                                <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-4 space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <div className="bg-green-500/10 p-2 rounded-full">
+                                            <CheckCircle className="w-5 h-5 text-green-500" />
+                                        </div>
+                                        <div>
+                                            <h5 className="text-sm font-bold text-white">Pago Seguro con GetNet</h5>
+                                            <p className="text-xs text-zinc-400 mt-1">Paga con tarjetas de débito, crédito o prepago de forma instantánea. Tu reserva se confirmará automáticamente.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 justify-center pt-2 grayscale opacity-50">
+                                        {/* Puedes poner íconos de tarjetas aquí si tienes */}
+                                        <div className="h-6 w-10 bg-white/10 rounded"></div>
+                                        <div className="h-6 w-10 bg-white/10 rounded"></div>
+                                        <div className="h-6 w-10 bg-white/10 rounded"></div>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* BLOQUE MANUAL (Existente) */
+                                <>
+                                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                            <CreditCard className="w-4 h-4 text-[#DAA520]" /> Datos Bancarios
+                                        </h4>
+                                        <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 text-xs text-zinc-300 space-y-2 relative overflow-hidden">
+                                            <div className="grid grid-cols-[100px_1fr] gap-y-1">
+                                                <span className="text-zinc-500">Banco:</span> <span className="font-bold text-white">{BANK_DETAILS.bank}</span>
+                                                <span className="text-zinc-500">Tipo:</span> <span className="font-bold text-white">{BANK_DETAILS.accountType}</span>
+                                                <span className="text-zinc-500">N° Cuenta:</span> 
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-white">{BANK_DETAILS.accountNumber}</span>
+                                                    <button onClick={() => copyToClipboard(BANK_DETAILS.accountNumber)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
+                                                </div>
+                                                <span className="text-zinc-500">RUT:</span> 
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-white">{BANK_DETAILS.rut}</span>
+                                                    <button onClick={() => copyToClipboard(BANK_DETAILS.rut)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
+                                                </div>
+                                                <span className="text-zinc-500">Correo:</span> <span className="font-bold text-white truncate">{BANK_DETAILS.email}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4">
+                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                            <Upload className="w-4 h-4 text-[#DAA520]" /> Subir Comprobante
+                                        </h4>
+                                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf" className="hidden" />
+                                        
+                                        <div 
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${paymentProof ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-700 hover:border-[#DAA520] hover:bg-zinc-900'}`}
+                                        >
+                                            {paymentProof ? (
+                                                <>
+                                                    <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
+                                                    <p className="text-xs font-bold text-green-500">{paymentProof.name}</p>
+                                                    <p className="text-[10px] text-zinc-500 mt-1">Click para cambiar</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Upload className="w-8 h-8 text-zinc-500 mb-2" />
+                                                    <p className="text-xs font-bold text-zinc-400">Adjuntar Comprobante</p>
+                                                    <p className="text-[10px] text-zinc-600 mt-1">Imagen o PDF</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                         </div>
                     )}
@@ -405,12 +476,13 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             IR AL PAGO <ChevronLeft className="w-4 h-4 rotate-180" />
                         </button>
                     ) : (
+                        // BOTÓN DE ACCIÓN FINAL (Cambia según método)
                         <button 
-                            onClick={handleFinalizeReservation}
+                            onClick={paymentMethod === 'getnet' ? handleGetNetPayment : handleFinalizeReservationManual}
                             disabled={isSubmitting}
-                            className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={`w-full font-black py-4 rounded-xl uppercase tracking-widest transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${paymentMethod === 'getnet' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}
                         >
-                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : "FINALIZAR Y RESERVAR"}
+                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : (paymentMethod === 'getnet' ? "IR A PAGAR AHORA" : "ENVIAR COMPROBANTE")}
                         </button>
                     )}
                 </div>
