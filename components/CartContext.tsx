@@ -186,17 +186,29 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       }
   };
 
-  // --- LÓGICA DE PAGO 2: GETNET (ONLINE) ---
+  // --- LÓGICA DE PAGO 2: GETNET (ONLINE) - ACTUALIZADA ---
   const handleGetNetPayment = async () => {
     if (!clientData.name || !clientData.phone) return alert("Por favor, completa tus datos de contacto antes de pagar.");
     
     setIsSubmitting(true);
     try {
+        // --- CORRECCIÓN ERROR 413: Limpiamos el carrito ---
+        // Creamos una versión ligera del carrito sin las imágenes (que pueden ser muy pesadas)
+        // Solo enviamos ID, Nombre, Precio, Cantidad y Categoría.
+        const cartLite = items.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            category: item.category
+            // NOTA: Excluimos explícitamente 'image' y 'detail' para evitar enviar Base64
+        }));
+
         const response = await fetch('/api/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                cart: items,
+                cart: cartLite, // Usamos la versión ligera aquí
                 total: total,
                 customerDetails: clientData
             }),
