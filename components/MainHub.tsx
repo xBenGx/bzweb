@@ -1,17 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, Variants, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   Utensils, CalendarCheck, Ticket, ShoppingBag, 
   MapPin, Instagram, Facebook, ArrowUpRight, Music,
-  ChevronRight, Sparkles, Clock
+  ChevronRight, Sparkles, Clock, Flame, Loader2
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
-// IMPORTANTE: Asegúrate de tener tu cliente de supabase configurado en lib/supabase
-// import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+// --- 1. CONFIGURACIÓN SUPABASE (Cliente Directo para evitar errores) ---
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = (supabaseUrl && supabaseKey) 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;
 
 // Configuramos la fuente
 const montserrat = Montserrat({ 
@@ -19,7 +26,33 @@ const montserrat = Montserrat({
   weight: ["300", "400", "500", "600", "700"]
 });
 
-// --- 1. ICONOS PERSONALIZADOS (SVG) ---
+// --- 2. TIPOS DE DATOS ---
+type CarouselItem = {
+  id: string;
+  type: 'promo' | 'show';
+  title: string;
+  subtitle: string;
+  image: string;
+  link: string;
+  color: string;
+  tag?: string;
+};
+
+// Datos de respaldo (se muestran si no hay conexión o datos)
+const FALLBACK_DATA: CarouselItem[] = [
+  {
+    id: "f1",
+    type: "promo",
+    title: "BIENVENIDOS",
+    subtitle: "Vive la experiencia Boulevard",
+    image: "/fondo-boulevard.jpg", 
+    link: "/reservas",
+    color: "#DAA520",
+    tag: "DESTACADO"
+  }
+];
+
+// --- 3. ICONOS PERSONALIZADOS ---
 const CustomBadgePercentIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="M3.85 8.62a4 4 0 0 1 4.77-4.77 4 4 0 0 1 6.76 0 4 4 0 0 1 4.77 4.77 4 4 0 0 1 0 6.76 4 4 0 0 1-4.77 4.77 4 4 0 0 1-6.76 0 4 4 0 0 1-4.77-4.77 4 4 0 0 1 0-6.76Z" />
@@ -35,7 +68,7 @@ const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-// --- 2. CONFIGURACIÓN ESTÁTICA ---
+// --- 4. CONFIGURACIÓN DE LINKS ESTÁTICOS ---
 const LARGE_LINKS = [
   { 
     id: "carta", 
@@ -81,84 +114,131 @@ const LARGE_LINKS = [
 ];
 
 const BENTO_LINKS = [
-  { id: "delivery", title: "Delivery", href: "/delivery", image: "/delivery.jpeg", overlay: "from-[#F3722C]/80 via-black/50 via-40% to-transparent" },
-  { id: "eventos", title: "Cotiza tu Evento", href: "/eventos", image: "/cotizatuevento.jpeg", overlay: "from-[#B8860B]/90 via-black/80 via-40% to-transparent" },
-  { id: "trabajo", title: "Únete al Equipo", href: "/trabajo", image: "/unetealequipo.jpg", overlay: "from-[#2A9D8F]/90 via-black/80 via-40% to-transparent" },
-  { id: "ubicacion", title: "Ubicación", href: "/ubicacion", image: "https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1474&auto=format&fit=crop", overlay: "from-zinc-900/90 via-black/80 via-40% to-transparent" },
-];
-
-// --- 3. NUEVA ESTRUCTURA DEL CARRUSEL ---
-// Tipos de datos para el carrusel
-type CarouselItem = {
-  id: string;
-  type: 'promo' | 'show';
-  title: string;
-  subtitle: string;
-  image: string;
-  link: string;
-  color: string;
-};
-
-// Datos MOCK iniciales (se reemplazarán con DB)
-const MOCK_CAROUSEL_DATA: CarouselItem[] = [
-  {
-    id: "1",
-    type: "promo",
-    title: "2x1 EN MOJITOS",
-    subtitle: "Todos los Jueves | 18:00 - 21:00",
-    image: "/promos.jpeg", // Asegúrate de que esta imagen exista
-    link: "/promociones",
-    color: "#FFCC00"
+  { 
+    id: "delivery", 
+    title: "Delivery", 
+    href: "/delivery", 
+    image: "/delivery.jpeg",
+    overlay: "from-[#F3722C]/80 via-black/50 via-40% to-transparent",
+    colorClass: "text-[#F3722C] bg-[#F3722C]/20 border-[#F3722C]/30"
   },
-  {
-    id: "2",
-    type: "show",
-    title: "NOCHE DE JAZZ",
-    subtitle: "Este Sábado | En Vivo",
-    image: "/shows.jpeg",
-    link: "/tickets",
-    color: "#8338EC"
+  { 
+    id: "eventos", 
+    title: "Cotiza tu Evento", 
+    href: "/eventos", 
+    image: "/cotizatuevento.jpeg",
+    overlay: "from-[#B8860B]/90 via-black/80 via-40% to-transparent", 
+    colorClass: "text-[#B8860B] bg-[#B8860B]/20 border-[#B8860B]/30"
   },
-  {
-    id: "3",
-    type: "promo",
-    title: "TABLA BOULEVARD",
-    subtitle: "20% DSCTO al Reservar",
-    image: "/menu.jpeg",
-    link: "/reservas",
-    color: "#FF4500"
-  }
+  { 
+    id: "trabajo", 
+    title: "Únete al Equipo", 
+    href: "/trabajo", 
+    image: "/unetealequipo.jpg",
+    overlay: "from-[#2A9D8F]/90 via-black/80 via-40% to-transparent",
+    colorClass: "text-[#2A9D8F] bg-[#2A9D8F]/20 border-[#2A9D8F]/30"
+  },
+  { 
+    id: "ubicacion", 
+    title: "Ubicación", 
+    href: "/ubicacion", 
+    image: "https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1474&auto=format&fit=crop",
+    overlay: "from-zinc-900/90 via-black/80 via-40% to-transparent",
+    colorClass: "text-white bg-white/20 border-white/30"
+  },
 ];
 
 export default function MainHub() {
-  // Estado para el carrusel
-  const [carouselItems, setCarouselItems] = useState<CarouselItem[]>(MOCK_CAROUSEL_DATA);
+  // Estados para el carrusel dinámico
+  const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // EFECTO: Cargar datos de Supabase (Lógica preparada)
+  // --- LOGICA DE CARGA DE DATOS (SUPABASE) ---
   useEffect(() => {
-    const fetchDynamicData = async () => {
-        // const supabase = createClientComponentClient();
-        
-        // 1. Traer Shows activos
-        // const { data: shows } = await supabase.from('eventos').select('*').eq('activo', true);
-        
-        // 2. Traer Promos activas
-        // const { data: promos } = await supabase.from('promociones').select('*').eq('activo', true);
+    const fetchData = async () => {
+      try {
+        if (!supabase) {
+          console.warn("Supabase no configurado, usando datos fallback.");
+          setCarouselItems(FALLBACK_DATA);
+          setIsLoading(false);
+          return;
+        }
 
-        // 3. Formatear y mezclar (Aquí iría la lógica de mapeo)
-        // Por ahora usamos el MOCK para que veas el diseño
+        setIsLoading(true);
+
+        // 1. Obtener Promociones Activas
+        const { data: promosData } = await supabase
+          .from('promociones')
+          .select('*')
+          .eq('active', true)
+          .order('created_at', { ascending: false });
+
+        // 2. Obtener Shows Activos
+        const { data: showsData } = await supabase
+          .from('shows')
+          .select('*')
+          .eq('active', true)
+          .order('date_event', { ascending: true });
+
+        // 3. Formatear y Unificar
+        let formattedItems: CarouselItem[] = [];
+
+        if (promosData) {
+          formattedItems = formattedItems.concat(promosData.map((p: any) => ({
+            id: `promo-${p.id}`,
+            type: 'promo',
+            title: p.title,
+            subtitle: p.subtitle || "Promoción Especial",
+            image: p.image_url || "/promos.jpeg",
+            link: "/promociones",
+            color: "#FFCC00",
+            tag: p.tag || "OFERTA"
+          })));
+        }
+
+        if (showsData) {
+          formattedItems = formattedItems.concat(showsData.map((s: any) => ({
+            id: `show-${s.id}`,
+            type: 'show',
+            title: s.title,
+            subtitle: s.date_event ? `${s.date_event} | ${s.time_event}` : "Próximamente",
+            image: s.image_url || "/shows.jpeg",
+            link: "/tickets", // O el link que corresponda a tus shows
+            color: "#8338EC",
+            tag: s.tag || "EN VIVO"
+          })));
+        }
+
+        // Si no hay nada, usar fallback
+        if (formattedItems.length === 0) {
+          setCarouselItems(FALLBACK_DATA);
+        } else {
+          setCarouselItems(formattedItems);
+        }
+
+      } catch (error) {
+        console.error("Error al cargar carrusel:", error);
+        setCarouselItems(FALLBACK_DATA);
+      } finally {
+        setIsLoading(false);
+      }
     };
-    fetchDynamicData();
+
+    fetchData();
   }, []);
 
-  // EFECTO: Auto-avance del carrusel
+  // --- AUTO-PLAY DEL CARRUSEL ---
   useEffect(() => {
+    if (isPaused || carouselItems.length <= 1) return;
+    
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % carouselItems.length);
-    }, 5000); // Cambia cada 5 segundos
+    }, 5000); // 5 segundos por slide
+
     return () => clearInterval(timer);
-  }, [carouselItems.length]);
+  }, [carouselItems.length, isPaused]);
 
   return (
     <main className={`min-h-screen w-full bg-black relative flex flex-col items-center pb-16 overflow-x-hidden ${montserrat.className}`}>
@@ -195,86 +275,97 @@ export default function MainHub() {
         </motion.div>
 
         {/* ========================================================= */}
-        {/* 🔥 NUEVO COMPONENTE: CARRUSEL DESTACADO (PROMOS & SHOWS) 🔥 */}
+        {/* 🔥 CARRUSEL DINÁMICO (SHOWS & PROMOS) 🔥 */}
         {/* ========================================================= */}
         <motion.div 
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
            className="w-full mb-8 relative"
+           onMouseEnter={() => setIsPaused(true)}
+           onMouseLeave={() => setIsPaused(false)}
         >
-          <div className="relative w-full h-[160px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 group">
+          <div className="relative w-full h-[180px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 group bg-zinc-900">
             
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentIndex}
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -50 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
-                className="absolute inset-0 w-full h-full"
-              >
-                {/* Imagen de Fondo */}
-                <Image 
-                  src={carouselItems[currentIndex].image} 
-                  alt={carouselItems[currentIndex].title}
-                  fill
-                  className="object-cover"
-                />
-                
-                {/* Overlay Gradiente Dinámico según el tipo */}
-                <div 
-                    className="absolute inset-0 bg-gradient-to-r via-black/60 to-transparent"
-                    style={{ 
-                        backgroundImage: `linear-gradient(to right, black 30%, ${carouselItems[currentIndex].color}90 100%)`,
-                        opacity: 0.8
-                    }} 
-                />
-                <div className="absolute inset-0 bg-black/40" />
+            {isLoading ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-white/30 animate-spin" />
+                </div>
+            ) : (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentIndex}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="absolute inset-0 w-full h-full"
+                  >
+                    {/* Link Global a la sección correspondiente */}
+                    <Link href={carouselItems[currentIndex].link} className="block w-full h-full relative">
+                        {/* Imagen de Fondo */}
+                        <Image 
+                          src={carouselItems[currentIndex].image} 
+                          alt={carouselItems[currentIndex].title}
+                          fill
+                          className="object-cover transition-transform duration-[6s] ease-in-out group-hover:scale-105"
+                        />
+                        
+                        {/* Overlay Gradiente Dinámico */}
+                        <div 
+                            className="absolute inset-0 bg-gradient-to-r via-black/50 to-transparent"
+                            style={{ 
+                                backgroundImage: `linear-gradient(to right, black 20%, ${carouselItems[currentIndex].color}90 100%)`,
+                                opacity: 0.75,
+                                mixBlendMode: 'multiply'
+                            }} 
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90" />
 
-                {/* Contenido del Slide */}
-                <Link href={carouselItems[currentIndex].link} className="absolute inset-0 p-6 flex flex-col justify-center items-start z-10">
-                   
-                   {/* Etiqueta Superior */}
-                   <div className="flex items-center gap-2 mb-2">
-                      <span 
-                        className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-black bg-white flex items-center gap-1"
-                        style={{ backgroundColor: carouselItems[currentIndex].color }}
-                      >
-                         {carouselItems[currentIndex].type === 'show' ? <Music className="w-3 h-3"/> : <Sparkles className="w-3 h-3"/>}
-                         {carouselItems[currentIndex].type === 'show' ? 'Show En Vivo' : 'Destacado'}
-                      </span>
-                   </div>
+                        {/* Contenido del Slide */}
+                        <div className="absolute inset-0 p-6 flex flex-col justify-center items-start z-10">
+                           
+                           {/* Etiqueta Superior */}
+                           <div className="flex items-center gap-2 mb-2">
+                              <span 
+                                className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-black bg-white flex items-center gap-1 shadow-lg"
+                                style={{ color: carouselItems[currentIndex].color, backgroundColor: 'white' }}
+                              >
+                                 {carouselItems[currentIndex].type === 'show' ? <Music className="w-3 h-3"/> : <Flame className="w-3 h-3"/>}
+                                 {carouselItems[currentIndex].tag || (carouselItems[currentIndex].type === 'show' ? 'EN VIVO' : 'DESTACADO')}
+                              </span>
+                           </div>
 
-                   {/* Título y Subtítulo */}
-                   <h2 className="text-2xl font-bold text-white leading-none uppercase italic drop-shadow-lg max-w-[80%]">
-                      {carouselItems[currentIndex].title}
-                   </h2>
-                   <p className="text-sm text-gray-200 font-medium mt-1 flex items-center gap-1">
-                      {carouselItems[currentIndex].type === 'show' ? <Clock className="w-3 h-3"/> : null}
-                      {carouselItems[currentIndex].subtitle}
-                   </p>
+                           {/* Título y Subtítulo */}
+                           <h2 className="text-2xl font-bold text-white leading-none uppercase italic drop-shadow-lg max-w-[85%] mb-1">
+                              {carouselItems[currentIndex].title}
+                           </h2>
+                           <p className="text-xs text-gray-200 font-medium flex items-center gap-1 opacity-90">
+                              {carouselItems[currentIndex].type === 'show' ? <Clock className="w-3 h-3"/> : <Sparkles className="w-3 h-3"/>}
+                              {carouselItems[currentIndex].subtitle}
+                           </p>
 
-                   {/* Botón CTA Falso */}
-                   <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-white/80 uppercase tracking-widest group-hover:text-white transition-colors">
-                      Ver Detalles <ChevronRight className="w-3 h-3" />
-                   </div>
-                </Link>
-              </motion.div>
-            </AnimatePresence>
+                           {/* Botón CTA Simulado */}
+                           <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-white uppercase tracking-widest bg-white/10 px-3 py-1.5 rounded-full border border-white/10 group-hover:bg-white group-hover:text-black transition-all">
+                              Ver Detalles <ChevronRight className="w-3 h-3" />
+                           </div>
+                        </div>
+                    </Link>
+                  </motion.div>
+                </AnimatePresence>
+            )}
 
             {/* Barra de Progreso Inferior */}
-            <div className="absolute bottom-3 left-0 w-full flex justify-center gap-1 z-20">
+            <div className="absolute bottom-3 left-0 w-full flex justify-center gap-1.5 z-20 px-4">
                {carouselItems.map((_, idx) => (
                  <div 
                    key={idx} 
-                   className={`h-1 rounded-full transition-all duration-500 ${idx === currentIndex ? 'w-6 bg-white' : 'w-2 bg-white/30'}`}
+                   className={`h-1 rounded-full transition-all duration-500 shadow-sm ${idx === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/30'}`}
                  />
                ))}
             </div>
           </div>
         </motion.div>
         {/* ========================================================= */}
-
 
         {/* 2. SECCIÓN TOP 4 (TARJETAS GRANDES) */}
         <motion.div 
@@ -307,7 +398,7 @@ export default function MainHub() {
           ))}
         </motion.div>
 
-        {/* 3. SECCIÓN BENTO GRID */}
+        {/* 3. SECCIÓN BENTO GRID (CUADRITOS PEQUEÑOS CENTRADOS) */}
         <motion.div variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } }} initial="hidden" animate="show" className="w-full grid grid-cols-2 gap-3 pb-8">
             {BENTO_LINKS.map((widget) => (
                 <motion.div key={widget.id} variants={{ hidden: { y: 30, opacity: 0 }, show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 80 } } }}>
@@ -316,6 +407,7 @@ export default function MainHub() {
                             <Image src={widget.image} alt={widget.title} fill className="object-cover opacity-50 group-hover:scale-110 transition-transform duration-[2s]"/>
                             <div className={`absolute inset-0 bg-gradient-to-t ${widget.overlay}`} />
                         </div>
+                        
                         <div className="relative z-10 p-4 h-full flex flex-col justify-center items-center text-center">
                             <h3 className="text-xs font-medium text-white leading-tight uppercase drop-shadow-sm whitespace-nowrap">{widget.title}</h3>
                         </div>
@@ -342,7 +434,11 @@ export default function MainHub() {
             </div>
             
             <div className="relative w-full h-[420px] rounded-3xl overflow-hidden border border-white/10 bg-zinc-900/50 backdrop-blur-xl">
-                <iframe src="https://www.instagram.com/boulevardzapallar/embed" className="w-full h-full border-none" loading="lazy"></iframe>
+                <iframe 
+                    src="https://www.instagram.com/boulevardzapallar/embed" 
+                    className="w-full h-full border-none" 
+                    loading="lazy"
+                ></iframe>
             </div>
         </motion.div>
 
@@ -361,6 +457,7 @@ export default function MainHub() {
                 <Link href="/admin/login" className="text-[9px] text-zinc-600 hover:text-zinc-400 uppercase tracking-[0.2em] transition-colors border border-white/5 px-4 py-1.5 rounded-full hover:bg-white/5">
                     Staff Access
                 </Link>
+                
                 <p className="text-[10px] text-zinc-500 font-bold tracking-[0.3em] uppercase">
                     Powered By <span className="text-boulevard-red glow-text">BAYX</span>
                 </p>
@@ -371,10 +468,15 @@ export default function MainHub() {
 
       {/* --- GLOBO FLOTANTE DE WHATSAPP --- */}
       <motion.a
-        href="https://wa.me/56995051248?text=Hola%20Boulevard%20Zapallar%2C%20me%20gustaría%20hacer%20un%20pedido."
-        target="_blank" rel="noopener noreferrer"
-        initial={{ scale: 0, rotate: 180 }} animate={{ scale: 1, rotate: 0 }} whileHover={{ scale: 1.1, rotate: 10 }} whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-6 z-50 p-4 bg-[#25D366] rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.4)] border border-white/10"
+        href="https://wa.me/56995051248?text=Hola%20Boulevard%20Zapallar%2C%20tengo%20una%20consulta%20o%20pedido."
+        target="_blank"
+        rel="noopener noreferrer"
+        initial={{ scale: 0, rotate: 180 }}
+        animate={{ scale: 1, rotate: 0 }}
+        whileHover={{ scale: 1.1, rotate: 10 }}
+        whileTap={{ scale: 0.9 }}
+        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+        className="fixed bottom-8 right-6 z-50 p-4 bg-[#25D366] rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.4)] hover:shadow-[0_6px_25px_rgba(37,211,102,0.6)] transition-shadow group flex items-center justify-center border border-white/10"
       >
         <WhatsAppIcon className="w-8 h-8 text-white drop-shadow-md" />
         <div className="absolute inset-0 rounded-full bg-white opacity-20 animate-ping" />
