@@ -371,7 +371,7 @@ export default function MainHub() {
 
       {/* --- GLOBO FLOTANTE DE WHATSAPP --- */}
       <motion.a
-        href="https://wa.me/56995051248?text=Hola%20Boulevard%20Zapallar%2C%20tengo%20una%20consulta%20o%20pedido."
+        href="https://wa.me/56995051248?text=Hola%20Boulevard%20Zapallar%2C%20me%20gustaría%20hacer%20un%20pedido."
         target="_blank" rel="noopener noreferrer"
         initial={{ scale: 0, rotate: 180 }} animate={{ scale: 1, rotate: 0 }} whileHover={{ scale: 1.1, rotate: 10 }} whileTap={{ scale: 0.9 }}
         className="fixed bottom-8 right-6 z-50 p-4 bg-[#25D366] rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.4)] border border-white/10"
