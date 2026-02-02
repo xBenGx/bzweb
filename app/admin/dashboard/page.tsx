@@ -9,7 +9,8 @@ import {
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
-    Ticket, Coffee, UserCheck, ChevronRight, AlertCircle
+    Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
+    Presentation, Eye, EyeOff, MonitorPlay // <--- NUEVOS ICONOS PARA EL CARRUSEL
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -23,13 +24,14 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "ventas", label: "Finanzas", icon: DollarSign }, // NUEVO TAB
+    { id: "ventas", label: "Finanzas", icon: DollarSign }, 
     { id: "reservas", label: "Reservas", icon: Calendar },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
     { id: "clientes", label: "Clientes VIP", icon: UserPlus },
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
+    { id: "carrusel", label: "Carrusel", icon: Presentation }, // <--- NUEVA PESTAÑA AGREGADA AQUÍ
     { id: "rrhh", label: "Equipo", icon: Users },
 ];
 
@@ -68,6 +70,8 @@ export default function DashboardPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) // Escuchar ventas
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData()) // <--- ESCUCHAR PROMOS
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData()) // <--- ESCUCHAR SHOWS
       .subscribe();
 
     return () => {
@@ -103,6 +107,26 @@ export default function DashboardPage() {
       // 7. Ventas Generales (NUEVO)
       const { data: ventasData } = await supabase.from('ventas_generales').select('*').order('created_at', { ascending: false });
       if (ventasData) setVentas(ventasData);
+  };
+
+  // --- LÓGICA CARRUSEL UNIFICADO (NUEVA) ---
+  // Fusiona Shows y Promos para visualizarlos en el panel de control del Carrusel
+  const getCarouselItems = () => {
+      // Mapeamos para añadir tipo y normalizar datos
+      const mappedPromos = promos.map(p => ({...p, type: 'promo', sourceId: p.id}));
+      const mappedShows = shows.map(s => ({...s, type: 'show', sourceId: s.id}));
+      // Retornamos todo (activo e inactivo) ordenado por creación para gestión
+      return [...mappedShows, ...mappedPromos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  };
+  const carouselItems = getCarouselItems();
+  // Contamos solo los activos para el KPI
+  const carouselItemsActiveCount = carouselItems.filter(i => i.active).length;
+
+  // Toggle rápido para activar/desactivar del carrusel
+  const toggleVisibility = async (item: any) => {
+      const table = item.type === 'promo' ? 'promociones' : 'shows';
+      await supabase.from(table).update({ active: !item.active }).eq('id', item.sourceId);
+      // El fetch se hace automático por la suscripción realtime
   };
 
   // --- CALCULOS FINANCIEROS (LÓGICA NUEVA INTEGRADA) ---
@@ -968,52 +992,52 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
                                     <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto justify-end items-end">
-                                        {res.status === "pendiente" ? (
-                                            <div className="flex gap-2">
-                                                <button 
-                                                    onClick={() => handleConfirmReservation(res)} 
-                                                    disabled={processingId === res.id}
-                                                    className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
-                                                >
-                                                    {processingId === res.id ? (
-                                                        <><Loader2 className="w-3 h-3 animate-spin" /> Generando...</>
-                                                    ) : (
-                                                        "Aceptar y Enviar"
-                                                    )}
-                                                </button>
-                                                <button 
-                                                    onClick={() => updateReservaStatus(res.id, 'rechazada')} 
-                                                    disabled={!!processingId}
-                                                    className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50"
-                                                >
-                                                    Rechazar
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400 border-green-900' : 'bg-zinc-800 text-red-400 border-red-900'}`}>
-                                                {res.status === 'confirmada' ? 'Confirmado ✅' : res.status}
-                                            </span>
-                                        )}
+                                            {res.status === "pendiente" ? (
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        onClick={() => handleConfirmReservation(res)} 
+                                                        disabled={processingId === res.id}
+                                                        className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
+                                                    >
+                                                        {processingId === res.id ? (
+                                                            <><Loader2 className="w-3 h-3 animate-spin" /> Generando...</>
+                                                        ) : (
+                                                            "Aceptar y Enviar"
+                                                        )}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => updateReservaStatus(res.id, 'rechazada')} 
+                                                        disabled={!!processingId}
+                                                        className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50"
+                                                    >
+                                                        Rechazar
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400 border-green-900' : 'bg-zinc-800 text-red-400 border-red-900'}`}>
+                                                    {res.status === 'confirmada' ? 'Confirmado ✅' : res.status}
+                                                </span>
+                                            )}
                                     </div>
                                 </div>
 
                                 {/* SECCIÓN DE PEDIDO ANTICIPADO */}
                                 {res.pre_order && res.pre_order.length > 0 && (
                                     <div className="mt-4 bg-black/40 rounded-lg p-3 border border-[#DAA520]/20">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <p className="text-xs font-bold text-[#DAA520] uppercase flex items-center gap-2">
-                                                    <ShoppingBag className="w-3 h-3" /> Pedido Anticipado
-                                                </p>
-                                                <span className="text-sm font-bold text-white">${res.total_pre_order?.toLocaleString() || 0}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                {res.pre_order.map((item: any, idx: number) => (
-                                                    <div key={idx} className="flex justify-between text-[11px] text-zinc-400 border-b border-white/5 pb-1 last:border-0">
-                                                        <span>{item.quantity}x {item.name}</span>
-                                                        <span>${(item.price * item.quantity).toLocaleString()}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <p className="text-xs font-bold text-[#DAA520] uppercase flex items-center gap-2">
+                                                        <ShoppingBag className="w-3 h-3" /> Pedido Anticipado
+                                                    </p>
+                                                    <span className="text-sm font-bold text-white">${res.total_pre_order?.toLocaleString() || 0}</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {res.pre_order.map((item: any, idx: number) => (
+                                                        <div key={idx} className="flex justify-between text-[11px] text-zinc-400 border-b border-white/5 pb-1 last:border-0">
+                                                            <span>{item.quantity}x {item.name}</span>
+                                                            <span>${(item.price * item.quantity).toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                     </div>
                                 )}
                             </div>
@@ -1045,11 +1069,11 @@ export default function DashboardPage() {
                                     </div>
                                     <p className="text-xs text-zinc-400 mt-1 line-clamp-2 min-h-[2.5em]">{item.description}</p>
                                     <div className="flex justify-between items-center border-t border-white/10 pt-4 mt-2">
-                                        <button onClick={() => toggleMenuStatus(item.id, item.active)} className={`text-[10px] font-bold uppercase ${item.active ? 'text-green-500' : 'text-zinc-500'}`}>{item.active ? "Disponible" : "Oculto"}</button>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleOpenMenuModal(item)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
-                                            <button onClick={() => handleDeleteMenuItem(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                        </div>
+                                            <button onClick={() => toggleMenuStatus(item.id, item.active)} className={`text-[10px] font-bold uppercase ${item.active ? 'text-green-500' : 'text-zinc-500'}`}>{item.active ? "Disponible" : "Oculto"}</button>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleOpenMenuModal(item)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteMenuItem(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                            </div>
                                     </div>
                                 </div>
                             </div>
@@ -1071,9 +1095,9 @@ export default function DashboardPage() {
                             <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
                                 {birthdays.length > 0 ? birthdays.map(c => (
                                     <div key={c.id} className="flex items-center gap-2 bg-white/5 p-2 rounded-lg">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                        <span className="text-xs font-bold text-white">{c.nombre}</span>
-                                        <span className="text-[10px] text-zinc-400 ml-auto">{c.whatsapp}</span>
+                                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                            <span className="text-xs font-bold text-white">{c.nombre}</span>
+                                            <span className="text-[10px] text-zinc-400 ml-auto">{c.whatsapp}</span>
                                     </div>
                                 )) : <p className="text-xs text-zinc-500">No hay cumpleaños registrados para esta fecha.</p>}
                             </div>
@@ -1185,11 +1209,11 @@ export default function DashboardPage() {
                                     <h3 className="text-lg font-bold text-white line-clamp-1">{promo.title}</h3>
                                     <p className="text-xs text-zinc-400">{promo.subtitle}</p>
                                     <div className="flex justify-between items-center border-t border-white/10 pt-4 mt-2">
-                                        <button onClick={() => togglePromoStatus(promo.id, promo.active)} className={`text-[10px] font-bold uppercase ${promo.active ? 'text-green-500' : 'text-zinc-500'}`}>{promo.active ? "Visible" : "Oculto"}</button>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleOpenPromoModal(promo)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
-                                            <button onClick={() => handleDeletePromo(promo.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                        </div>
+                                            <button onClick={() => togglePromoStatus(promo.id, promo.active)} className={`text-[10px] font-bold uppercase ${promo.active ? 'text-green-500' : 'text-zinc-500'}`}>{promo.active ? "Visible" : "Oculto"}</button>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleOpenPromoModal(promo)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeletePromo(promo.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                            </div>
                                     </div>
                                 </div>
                             </div>
@@ -1219,6 +1243,81 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* ================================================================================== */}
+            {/* 🔥 NUEVA SECCIÓN: GESTIÓN DE CARRUSEL 🔥 */}
+            {/* ================================================================================== */}
+            {activeTab === "carrusel" && (
+                <motion.div key="carrusel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h3 className="text-lg font-bold">Contenido del Carrusel Principal</h3>
+                            <p className="text-xs text-zinc-500">Lo que actives aquí aparecerá en la pantalla gigante del inicio. ({carouselItemsActiveCount} Activos)</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <Plus className="w-4 h-4" /> Nueva Promo
+                            </button>
+                            <button onClick={() => handleOpenShowModal()} className="bg-[#8338EC] text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#6c2bd9] transition-colors shadow-lg">
+                                <Plus className="w-4 h-4" /> Nuevo Show
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* VISTA PREVIA DEL CARRUSEL (GRID) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {carouselItems.length === 0 ? (
+                            <div className="col-span-full py-20 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-3xl">
+                                <MonitorPlay className="w-16 h-16 mx-auto mb-4 opacity-50"/>
+                                <p>No hay contenido activo en el carrusel.</p>
+                                <p className="text-xs mt-2">Agrega un Show o Promoción y asegúrate de que esté "Activo".</p>
+                            </div>
+                        ) : (
+                            carouselItems.map((item) => (
+                                <div key={item.id} className={`group relative bg-zinc-900 border ${item.active ? 'border-[#DAA520]/50' : 'border-white/5 opacity-60 grayscale'} rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]`}>
+                                    
+                                    {/* Etiqueta de Tipo */}
+                                    <div className="absolute top-3 left-3 z-20">
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase shadow-sm ${item.type === 'show' ? 'bg-[#8338EC] text-white' : 'bg-[#DAA520] text-black'}`}>
+                                            {item.type === 'show' ? 'Show / Evento' : 'Promoción'}
+                                        </span>
+                                    </div>
+
+                                    {/* Controles Rápidos */}
+                                    <div className="absolute top-3 right-3 z-20 flex gap-1">
+                                        <button onClick={() => toggleVisibility(item)} className="p-1.5 bg-black/50 hover:bg-white text-white hover:text-black rounded-lg backdrop-blur-sm transition-all" title={item.active ? "Ocultar del Carrusel" : "Mostrar en Carrusel"}>
+                                            {item.active ? <Eye className="w-4 h-4"/> : <EyeOff className="w-4 h-4"/>}
+                                        </button>
+                                        <button onClick={() => item.type === 'show' ? handleOpenShowModal(shows.find(s => s.id === item.sourceId)) : handleOpenPromoModal(promos.find(p => p.id === item.sourceId))} className="p-1.5 bg-black/50 hover:bg-white text-white hover:text-black rounded-lg backdrop-blur-sm transition-all">
+                                            <Edit2 className="w-4 h-4"/>
+                                        </button>
+                                    </div>
+
+                                    {/* Imagen (Simulando Aspecto Carrusel) */}
+                                    <div className="relative w-full aspect-video bg-black">
+                                        <Image src={item.image_url || "/placeholder.jpg"} alt={item.title} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                        
+                                        {/* Overlay de Texto (Simulación) */}
+                                        <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
+                                            <h3 className="text-lg font-bold text-white uppercase italic leading-none mb-1">{item.title}</h3>
+                                            <p className="text-xs text-zinc-300 line-clamp-1">{item.subtitle}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer Tarjeta */}
+                                    <div className="p-3 flex justify-between items-center bg-black/40">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${item.active ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                                            <span className="text-[10px] font-bold uppercase text-zinc-500">{item.active ? 'Visible en Web' : 'Oculto'}</span>
+                                        </div>
+                                        <span className="text-[10px] text-zinc-600">{new Date(item.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </motion.div>
             )}
@@ -1323,8 +1422,8 @@ export default function DashboardPage() {
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                                 {currentMenuItem.image_url ? (
                                     <>
-                                        <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                            <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
                                     </>
                                 ) : (
                                     <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
@@ -1359,8 +1458,8 @@ export default function DashboardPage() {
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                                 {currentPromo.image_url ? (
                                     <>
-                                        <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                            <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
                                     </>
                                 ) : (
                                     <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Subir Imagen</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
@@ -1373,9 +1472,9 @@ export default function DashboardPage() {
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Principal</label><input required type="text" placeholder="Ej: Happy Hour 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}>
-                                        <option value="semana">Semanal</option>
-                                        <option value="pack">Pack / Gift Card</option>
-                                        <option value="banner">Banner Principal</option>
+                                            <option value="semana">Semanal</option>
+                                            <option value="pack">Pack / Gift Card</option>
+                                            <option value="banner">Banner Principal</option>
                                     </select></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.price} onChange={e => setCurrentPromo({...currentPromo, price: parseInt(e.target.value)})} /></div>
                                 </div>
