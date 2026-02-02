@@ -214,7 +214,7 @@ export default function BookingPage() {
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // --- GUARDAR RESERVA COMPLETA (CON PEDIDO) ---
+  // --- GUARDAR RESERVA Y PROCESAR PAGO O FINALIZAR ---
   const handleConfirmReservation = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -223,7 +223,7 @@ export default function BookingPage() {
       const zoneDetails = ZONES.find(z => z.id === selectedZone);
 
       try {
-          // Construimos el objeto de datos a enviar
+          // 1. Construimos el objeto de la reserva
           const payload = {
               name: userData.name,
               email: userData.email,
@@ -233,23 +233,66 @@ export default function BookingPage() {
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
               code: generatedCode,
-              status: 'pendiente',
-              // Aquí integramos el pedido directamente en la reserva
+              status: cart.length > 0 ? 'pendiente_pago' : 'pendiente', // Cambiamos estado si hay pago pendiente
               pre_order: cart.length > 0 ? cart : null, 
               total_pre_order: cartTotal
           };
 
+          // 2. Guardar en Supabase SIEMPRE primero
           const { error } = await supabase.from('reservas').insert([payload]);
 
           if (error) throw error;
 
-          setBookingCode(generatedCode);
-          setStep(4); // Éxito: Ir al ticket final
+          // 3. DECISIÓN: ¿Hay productos en el carrito?
+          if (cart.length > 0) {
+              // --- CAMINO A: CON PAGO (GETNET) ---
+              // Si hay items, llamamos a la API de pago para generar el link
+              console.log("Iniciando pago por pre-orden...");
+              
+              // Limpiamos el carrito para enviar solo lo esencial a la API (evitar Payload Too Large)
+              const cartLite = cart.map(item => ({
+                  id: item.id,
+                  name: item.name,
+                  price: item.price,
+                  quantity: item.quantity,
+                  category: item.category
+              }));
 
-      } catch (error) {
+              const response = await fetch('/api/checkout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      cart: cartLite, // Enviamos items ligeros
+                      total: cartTotal,
+                      customerDetails: {
+                        name: userData.name,
+                        email: userData.email,
+                        phone: userData.phone,
+                        reservation_code: generatedCode // Enviamos código para referencia
+                      }
+                  }),
+              });
+
+              const paymentData = await response.json();
+
+              if (response.ok && paymentData.url) {
+                  // Redirigimos al usuario a GetNet
+                  window.location.href = paymentData.url;
+                  // Nota: No hacemos setBookingCode ni setStep(4) aquí porque el usuario se va de la página
+              } else {
+                  throw new Error(paymentData.error || "No se pudo generar el link de pago");
+              }
+
+          } else {
+              // --- CAMINO B: SOLO RESERVA (SIN PAGO) ---
+              setBookingCode(generatedCode);
+              setStep(4); // Éxito: Ir al ticket final
+              setIsSubmitting(false);
+          }
+
+      } catch (error: any) {
           console.error("Error reservando:", error);
-          alert("Hubo un problema al procesar tu reserva. Por favor verifica tu conexión.");
-      } finally {
+          alert("Hubo un problema: " + (error.message || "Error desconocido"));
           setIsSubmitting(false);
       }
   };
