@@ -16,10 +16,10 @@ export type CartItem = {
   quantity: number;
   image?: string;
   detail?: string;
-  category?: "ticket" | "delivery" | "shop"; 
+  category?: "ticket" | "delivery" | "shop" | "promo"; 
 };
 
-// --- DATOS BANCARIOS (Se mantienen intactos) ---
+// --- DATOS BANCARIOS ---
 const BANK_DETAILS = {
     bank: "Mercado Pago",
     accountType: "Cuenta Vista",
@@ -51,7 +51,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   
   // --- ESTADOS DEL CHECKOUT ---
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'payment'>('cart');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('getnet'); // Por defecto GetNet para modernizar
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('getnet'); 
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -168,7 +168,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               status: 'pendiente_validacion', 
               payment_proof_url: proofUrl,
               details_json: items, 
-              payment_method: 'manual', // Nuevo campo recomendado
+              payment_method: 'manual', 
               date_reserva: new Date().toISOString().split('T')[0],
           }]);
 
@@ -186,29 +186,25 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       }
   };
 
-  // --- LÓGICA DE PAGO 2: GETNET (ONLINE) - ACTUALIZADA ---
+  // --- LÓGICA DE PAGO 2: GETNET (ONLINE) ---
   const handleGetNetPayment = async () => {
     if (!clientData.name || !clientData.phone) return alert("Por favor, completa tus datos de contacto antes de pagar.");
     
     setIsSubmitting(true);
     try {
-        // --- CORRECCIÓN ERROR 413: Limpiamos el carrito ---
-        // Creamos una versión ligera del carrito sin las imágenes (que pueden ser muy pesadas)
-        // Solo enviamos ID, Nombre, Precio, Cantidad y Categoría.
         const cartLite = items.map(item => ({
             id: item.id,
             name: item.name,
             price: item.price,
             quantity: item.quantity,
             category: item.category
-            // NOTA: Excluimos explícitamente 'image' y 'detail' para evitar enviar Base64
         }));
 
         const response = await fetch('/api/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                cart: cartLite, // Usamos la versión ligera aquí
+                cart: cartLite, 
                 total: total,
                 customerDetails: clientData
             }),
@@ -217,7 +213,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         const data = await response.json();
 
         if (response.ok && data.url) {
-            // Redirigir a GetNet
             window.location.href = data.url;
         } else {
             throw new Error(data.error || "Error iniciando pago");
@@ -268,8 +263,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             <div className="p-5 space-y-4">
                                 {items.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-12 text-zinc-600 border-2 border-dashed border-white/5 rounded-2xl bg-zinc-900/30">
-                                        <ShoppingBag className="w-12 h-12 mb-3 opacity-30" />
-                                        <p className="text-sm">Tu carrito está vacío.</p>
+                                            <ShoppingBag className="w-12 h-12 mb-3 opacity-30" />
+                                            <p className="text-sm">Tu carrito está vacío.</p>
                                     </div>
                                 ) : (
                                     items.map((item) => (
@@ -303,40 +298,43 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                 )}
                             </div>
 
-                            {/* SECCIÓN COMPLEMENTA (MENÚ) */}
+                            {/* SECCIÓN COMPLEMENTA (MENÚ) - TEXTO ACTUALIZADO */}
                             {menuExtras.length > 0 && (
                                 <div className="px-5 pb-8">
                                     <div className="flex items-center gap-3 mb-5">
                                         <div className="h-px bg-gradient-to-r from-transparent via-[#DAA520]/50 to-transparent flex-1"></div>
-                                        <span className="text-[10px] font-bold text-[#DAA520] uppercase tracking-widest bg-[#DAA520]/10 px-3 py-1 rounded-full border border-[#DAA520]/20">Complementa tu reserva</span>
+                                        {/* --- CAMBIO AQUÍ --- */}
+                                        <span className="text-[10px] font-bold text-[#DAA520] uppercase tracking-widest bg-[#DAA520]/10 px-3 py-1 rounded-full border border-[#DAA520]/20">
+                                            ¡AGREGAR A TU COMPRA!
+                                        </span>
                                         <div className="h-px bg-gradient-to-r from-transparent via-[#DAA520]/50 to-transparent flex-1"></div>
                                     </div>
                                     
                                     <div className="space-y-3">
-                                        {menuExtras.map((product) => (
-                                            <div key={product.id} className="flex items-center gap-3 bg-zinc-900/40 hover:bg-zinc-900 p-2.5 rounded-2xl border border-white/5 hover:border-[#DAA520]/30 transition-all cursor-pointer group" onClick={() => handleAddFromMenu(product)}>
-                                                <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-white/5">
-                                                    {product.image_url ? (
-                                                        <Image src={product.image_url} alt={product.name} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-zinc-600"/></div>
-                                                    )}
-                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                                        <Plus className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity scale-50 group-hover:scale-100" />
+                                            {menuExtras.map((product) => (
+                                                <div key={product.id} className="flex items-center gap-3 bg-zinc-900/40 hover:bg-zinc-900 p-2.5 rounded-2xl border border-white/5 hover:border-[#DAA520]/30 transition-all cursor-pointer group" onClick={() => handleAddFromMenu(product)}>
+                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-white/5">
+                                                        {product.image_url ? (
+                                                            <Image src={product.image_url} alt={product.name} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                        ) : (
+                                                            <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-zinc-600"/></div>
+                                                        )}
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                            <Plus className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity scale-50 group-hover:scale-100" />
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between items-start">
-                                                        <h5 className="text-xs font-bold text-white line-clamp-1 group-hover:text-[#DAA520] transition-colors">{product.name}</h5>
-                                                        <span className="text-xs font-bold text-[#DAA520] ml-2">${product.price.toLocaleString("es-CL")}</span>
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between items-start">
+                                                            <h5 className="text-xs font-bold text-white line-clamp-1 group-hover:text-[#DAA520] transition-colors">{product.name}</h5>
+                                                            <span className="text-xs font-bold text-[#DAA520] ml-2">${product.price.toLocaleString("es-CL")}</span>
+                                                        </div>
+                                                        <p className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5 leading-tight">{product.description || "Sin descripción"}</p>
                                                     </div>
-                                                    <p className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5 leading-tight">{product.description || "Sin descripción"}</p>
+                                                    <button className="bg-zinc-800 text-zinc-400 group-hover:bg-[#DAA520] group-hover:text-black w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm">
+                                                        <Plus className="w-4 h-4" />
+                                                    </button>
                                                 </div>
-                                                <button className="bg-zinc-800 text-zinc-400 group-hover:bg-[#DAA520] group-hover:text-black w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm">
-                                                    <Plus className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ))}
+                                            ))}
                                     </div>
                                 </div>
                             )}
@@ -353,23 +351,23 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                 <p className="text-3xl font-black text-[#DAA520]">${total.toLocaleString("es-CL")}</p>
                             </div>
 
-                            {/* B. Datos del Cliente (Requerido para ambos) */}
+                            {/* B. Datos del Cliente */}
                             <div className="space-y-3">
                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">Tus Datos de Contacto</h4>
                                 <div className="space-y-2">
                                     <input 
-                                        type="text" 
-                                        placeholder="Nombre Completo" 
-                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
-                                        value={clientData.name}
-                                        onChange={(e) => setClientData({...clientData, name: e.target.value})}
+                                            type="text" 
+                                            placeholder="Nombre Completo" 
+                                            className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
+                                            value={clientData.name}
+                                            onChange={(e) => setClientData({...clientData, name: e.target.value})}
                                     />
                                     <input 
-                                        type="tel" 
-                                        placeholder="Teléfono / WhatsApp" 
-                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
-                                        value={clientData.phone}
-                                        onChange={(e) => setClientData({...clientData, phone: e.target.value})}
+                                            type="tel" 
+                                            placeholder="Teléfono / WhatsApp" 
+                                            className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
+                                            value={clientData.phone}
+                                            onChange={(e) => setClientData({...clientData, phone: e.target.value})}
                                     />
                                 </div>
                             </div>
@@ -405,62 +403,61 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 justify-center pt-2 grayscale opacity-50">
-                                        {/* Puedes poner íconos de tarjetas aquí si tienes */}
                                         <div className="h-6 w-10 bg-white/10 rounded"></div>
                                         <div className="h-6 w-10 bg-white/10 rounded"></div>
                                         <div className="h-6 w-10 bg-white/10 rounded"></div>
                                     </div>
                                 </div>
                             ) : (
-                                /* BLOQUE MANUAL (Existente) */
+                                /* BLOQUE MANUAL */
                                 <>
                                     <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                            <CreditCard className="w-4 h-4 text-[#DAA520]" /> Datos Bancarios
-                                        </h4>
-                                        <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 text-xs text-zinc-300 space-y-2 relative overflow-hidden">
-                                            <div className="grid grid-cols-[100px_1fr] gap-y-1">
-                                                <span className="text-zinc-500">Banco:</span> <span className="font-bold text-white">{BANK_DETAILS.bank}</span>
-                                                <span className="text-zinc-500">Tipo:</span> <span className="font-bold text-white">{BANK_DETAILS.accountType}</span>
-                                                <span className="text-zinc-500">N° Cuenta:</span> 
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-white">{BANK_DETAILS.accountNumber}</span>
-                                                    <button onClick={() => copyToClipboard(BANK_DETAILS.accountNumber)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
+                                            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                                <CreditCard className="w-4 h-4 text-[#DAA520]" /> Datos Bancarios
+                                            </h4>
+                                            <div className="bg-zinc-900 border border-white/10 rounded-xl p-4 text-xs text-zinc-300 space-y-2 relative overflow-hidden">
+                                                <div className="grid grid-cols-[100px_1fr] gap-y-1">
+                                                    <span className="text-zinc-500">Banco:</span> <span className="font-bold text-white">{BANK_DETAILS.bank}</span>
+                                                    <span className="text-zinc-500">Tipo:</span> <span className="font-bold text-white">{BANK_DETAILS.accountType}</span>
+                                                    <span className="text-zinc-500">N° Cuenta:</span> 
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-white">{BANK_DETAILS.accountNumber}</span>
+                                                        <button onClick={() => copyToClipboard(BANK_DETAILS.accountNumber)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
+                                                    </div>
+                                                    <span className="text-zinc-500">RUT:</span> 
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-white">{BANK_DETAILS.rut}</span>
+                                                        <button onClick={() => copyToClipboard(BANK_DETAILS.rut)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
+                                                    </div>
+                                                    <span className="text-zinc-500">Correo:</span> <span className="font-bold text-white truncate">{BANK_DETAILS.email}</span>
                                                 </div>
-                                                <span className="text-zinc-500">RUT:</span> 
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-white">{BANK_DETAILS.rut}</span>
-                                                    <button onClick={() => copyToClipboard(BANK_DETAILS.rut)} className="text-[#DAA520] hover:text-white"><Copy className="w-3 h-3"/></button>
-                                                </div>
-                                                <span className="text-zinc-500">Correo:</span> <span className="font-bold text-white truncate">{BANK_DETAILS.email}</span>
                                             </div>
-                                        </div>
                                     </div>
 
                                     <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4">
-                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                            <Upload className="w-4 h-4 text-[#DAA520]" /> Subir Comprobante
-                                        </h4>
-                                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf" className="hidden" />
-                                        
-                                        <div 
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${paymentProof ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-700 hover:border-[#DAA520] hover:bg-zinc-900'}`}
-                                        >
-                                            {paymentProof ? (
-                                                <>
-                                                    <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
-                                                    <p className="text-xs font-bold text-green-500">{paymentProof.name}</p>
-                                                    <p className="text-[10px] text-zinc-500 mt-1">Click para cambiar</p>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Upload className="w-8 h-8 text-zinc-500 mb-2" />
-                                                    <p className="text-xs font-bold text-zinc-400">Adjuntar Comprobante</p>
-                                                    <p className="text-[10px] text-zinc-600 mt-1">Imagen o PDF</p>
-                                                </>
-                                            )}
-                                        </div>
+                                            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                                <Upload className="w-4 h-4 text-[#DAA520]" /> Subir Comprobante
+                                            </h4>
+                                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf" className="hidden" />
+                                            
+                                            <div 
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${paymentProof ? 'border-green-500/50 bg-green-900/10' : 'border-zinc-700 hover:border-[#DAA520] hover:bg-zinc-900'}`}
+                                            >
+                                                {paymentProof ? (
+                                                    <>
+                                                        <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
+                                                        <p className="text-xs font-bold text-green-500">{paymentProof.name}</p>
+                                                        <p className="text-[10px] text-zinc-500 mt-1">Click para cambiar</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Upload className="w-8 h-8 text-zinc-500 mb-2" />
+                                                        <p className="text-xs font-bold text-zinc-400">Adjuntar Comprobante</p>
+                                                        <p className="text-[10px] text-zinc-600 mt-1">Imagen o PDF</p>
+                                                    </>
+                                                )}
+                                            </div>
                                     </div>
                                 </>
                             )}
@@ -488,7 +485,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                             IR AL PAGO <ChevronLeft className="w-4 h-4 rotate-180" />
                         </button>
                     ) : (
-                        // BOTÓN DE ACCIÓN FINAL (Cambia según método)
+                        // BOTÓN DE ACCIÓN FINAL
                         <button 
                             onClick={paymentMethod === 'getnet' ? handleGetNetPayment : handleFinalizeReservationManual}
                             disabled={isSubmitting}
