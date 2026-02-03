@@ -121,6 +121,9 @@ export default function BookingPage() {
   const [time, setTime] = useState("");
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   
+  // Nuevo estado para controlar el mes visualizado (Importante para navegar meses)
+  const [currentDateObj, setCurrentDateObj] = useState(new Date()); 
+
   // Nuevo estado para los horarios dinámicos
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
 
@@ -136,40 +139,52 @@ export default function BookingPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   
-  // Utilidades de fecha
-  const currentDate = new Date();
-  const currentMonth = MONTHS[currentDate.getMonth()];
-  const currentYear = currentDate.getFullYear();
-  const daysInMonth = new Date(currentYear, currentDate.getMonth() + 1, 0).getDate();
+  // Utilidades de fecha basadas en currentDateObj (para poder cambiar de mes)
+  const currentMonthIndex = currentDateObj.getMonth();
+  const currentMonthName = MONTHS[currentMonthIndex];
+  const currentYear = currentDateObj.getFullYear();
+  
+  // Cantidad de días en el mes actual
+  const daysInMonth = new Date(currentYear, currentMonthIndex + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // --- LÓGICA DE CALENDARIO ALINEADO ---
+  // --- LÓGICA DE CALENDARIO ALINEADO (CORREGIDA) ---
   // Calculamos qué día de la semana cae el día 1 del mes (0=Dom, 1=Lun...)
-  // Queremos que el calendario empiece en Lunes (Index 0 en el grid)
-  const firstDayOfMonth = new Date(currentYear, currentDate.getMonth(), 1).getDay();
-  // Ajuste para que Lunes sea 0 y Domingo sea 6
+  const firstDayOfMonth = new Date(currentYear, currentMonthIndex, 1).getDay();
+  // Ajuste para que Lunes sea 0 y Domingo sea 6 en la grilla visual
+  // Si firstDayOfMonth es 0 (Domingo), necesitamos 6 espacios vacíos. Si es 1 (Lunes), 0 espacios.
   const startingEmptySlots = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
   const emptySlotsArray = Array.from({ length: startingEmptySlots }, (_, i) => i);
 
   // Funciones de navegación
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
+  
+  // Función para cambiar de mes
+  const changeMonth = (delta: number) => {
+      const newDate = new Date(currentDateObj.setMonth(currentDateObj.getMonth() + delta));
+      setCurrentDateObj(new Date(newDate));
+      setSelectedDate(1); // Resetear al día 1 al cambiar mes para evitar bugs
+      setTime(""); // Resetear hora
+  };
 
   // --- EFECTO: GENERAR HORARIOS SEGÚN REGLAS ---
   useEffect(() => {
-    if (!selectedDate) return;
+    if (!selectedDate) {
+        setAvailableTimeSlots([]);
+        return;
+    }
 
     // Crear fecha seleccionada para ver qué día de la semana es
-    const dateObj = new Date(currentYear, currentDate.getMonth(), selectedDate);
+    const dateObj = new Date(currentYear, currentMonthIndex, selectedDate);
     const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 1 = Lunes, ... 6 = Sábado
 
     let slots: string[] = [];
 
     // Función auxiliar para generar rangos de hora
-    const addSlots = (startH: number, startM: number, endH: number, endM: number, isNextDay: boolean = false) => {
+    const addSlots = (startH: number, startM: number, endH: number, endM: number) => {
         let h = startH;
         let m = startM;
-        
         while (h < endH || (h === endH && m <= endM)) {
             const hStr = h.toString().padStart(2, '0');
             const mStr = m.toString().padStart(2, '0');
@@ -183,27 +198,40 @@ export default function BookingPage() {
         }
     };
 
-    // LÓGICA DE HORARIOS
+    // Función auxiliar para horarios de madrugada (día siguiente)
+    const addNextDaySlots = (endH: number, endM: number) => {
+        let h = 0;
+        let m = 0;
+        while (h < endH || (h === endH && m <= endM)) {
+            const hStr = h.toString().padStart(2, '0');
+            const mStr = m.toString().padStart(2, '0');
+            slots.push(`${hStr}:${mStr}`);
+            m += 15;
+            if (m >= 60) { m = 0; h++; }
+        }
+    }
+
+    // LÓGICA DE HORARIOS DE ATENCIÓN
     // Lunes (1) a Jueves (4): 05:00pm (17:00) a 12:30am (00:30)
     if (dayOfWeek >= 1 && dayOfWeek <= 4) {
         addSlots(17, 0, 23, 45); // Hasta medianoche
-        addSlots(0, 0, 0, 30);   // Trasnoche hasta 00:30
+        addNextDaySlots(0, 30);  // Hasta 00:30
     }
     // Viernes (5) y Sábado (6): 05:00pm (17:00) a 02:30am
     else if (dayOfWeek === 5 || dayOfWeek === 6) {
-        addSlots(17, 0, 23, 45);
-        addSlots(0, 0, 2, 30);   // Trasnoche hasta 02:30
+        addSlots(17, 0, 23, 45); // Hasta medianoche
+        addNextDaySlots(2, 30);  // Hasta 02:30
     }
     // Domingo (0): 04:00pm (16:00) a 12:00am (00:00)
     else if (dayOfWeek === 0) {
-        addSlots(16, 0, 23, 45); // El cierre es a las 00:00, cubrimos hasta 23:45 para reservar
-        addSlots(0, 0, 0, 0);    // 00:00 exacto
+        addSlots(16, 0, 23, 45); // Hasta 23:45
+        slots.push("00:00");     // Cierre exacto
     }
 
     setAvailableTimeSlots(slots);
     setTime(""); // Resetear hora seleccionada al cambiar de día
 
-  }, [selectedDate, currentYear, currentDate]); // Dependencias corregidas
+  }, [selectedDate, currentYear, currentMonthIndex]);
 
   // --- EFECTO: CARGAR PRODUCTOS ---
   useEffect(() => {
@@ -218,7 +246,7 @@ export default function BookingPage() {
             if (!error && data && data.length > 0) {
                 setProducts(data);
             } else {
-                console.log("Usando datos Mock porque no se encontraron productos o hubo error.");
+                console.log("Usando datos Mock por defecto.");
                 setProducts(MOCK_PRODUCTS); 
             }
         } catch (err) {
@@ -251,11 +279,10 @@ export default function BookingPage() {
     });
   };
 
-  // Cálculos del carrito
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // --- GUARDAR RESERVA Y PROCESAR PAGO O FINALIZAR ---
+  // --- GUARDAR RESERVA Y PROCESAR PAGO ---
   const handleConfirmReservation = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsSubmitting(true);
@@ -268,7 +295,7 @@ export default function BookingPage() {
               name: userData.name,
               email: userData.email,
               phone: userData.phone,
-              date_reserva: `${selectedDate} de ${currentMonth}`,
+              date_reserva: `${selectedDate} de ${currentMonthName}`,
               time_reserva: time,
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
@@ -283,6 +310,7 @@ export default function BookingPage() {
           if (error) throw error;
 
           if (cart.length > 0) {
+              // --- CAMINO A: CON PAGO (GETNET) ---
               console.log("Iniciando pago por pre-orden...");
               
               const cartLite = cart.map(item => ({
@@ -303,7 +331,7 @@ export default function BookingPage() {
                         name: userData.name,
                         email: userData.email,
                         phone: userData.phone,
-                        reservation_code: generatedCode 
+                        reservation_code: generatedCode
                       }
                   }),
               });
@@ -317,6 +345,7 @@ export default function BookingPage() {
               }
 
           } else {
+              // --- CAMINO B: SOLO RESERVA ---
               setBookingCode(generatedCode);
               setStep(4); 
               setIsSubmitting(false);
@@ -329,7 +358,7 @@ export default function BookingPage() {
       }
   };
 
-  // --- ANIMACIONES ---
+  // --- ANIMACIONES (FRAMER MOTION) ---
   const slideVariants = {
     enter: (direction: number) => ({ x: direction > 0 ? 20 : -20, opacity: 0 }),
     center: { x: 0, opacity: 1 },
@@ -370,12 +399,15 @@ export default function BookingPage() {
 
       {/* --- HEADER SUPERIOR --- */}
       <div className="relative h-64 w-full flex flex-col justify-between p-6 z-10">
+        
+        {/* Botón Atrás */}
         <div className="absolute top-6 left-6 z-20">
             <Link href="/" className="p-3 bg-black/50 backdrop-blur-md rounded-full border border-white/10 hover:bg-black/80 transition-colors inline-block group">
                 <ArrowLeft className="w-5 h-5 text-white group-hover:-translate-x-1 transition-transform" />
             </Link>
         </div>
 
+        {/* TÍTULO PRINCIPAL */}
         <div className="absolute bottom-4 left-0 right-0 z-10 text-center flex flex-col items-center">
             <motion.div 
                 initial={{ y: 20, opacity: 0 }} 
@@ -427,10 +459,10 @@ export default function BookingPage() {
               {/* Calendario */}
               <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-lg">
                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-white">{currentMonth} {currentYear}</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white">{currentMonthName} {currentYear}</h3>
                     <div className="flex gap-1">
-                        <button className="p-1 hover:bg-white/10 rounded"><ChevronLeft className="w-5 h-5 text-zinc-500" /></button>
-                        <button className="p-1 hover:bg-white/10 rounded"><ChevronRight className="w-5 h-5 text-white" /></button>
+                        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-white/10 rounded"><ChevronLeft className="w-5 h-5 text-zinc-500" /></button>
+                        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-white/10 rounded"><ChevronRight className="w-5 h-5 text-white" /></button>
                     </div>
                  </div>
                  
@@ -461,7 +493,7 @@ export default function BookingPage() {
                  </div>
               </div>
 
-              {/* Horarios Grid Dinámico */}
+              {/* Horarios Grid */}
               <div>
                   <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3 tracking-widest pl-2">Horarios Disponibles</p>
                   <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
@@ -476,7 +508,9 @@ export default function BookingPage() {
                             </button>
                         ))
                     ) : (
-                        <p className="text-xs text-zinc-600 col-span-4 text-center py-4">Selecciona un día para ver horarios</p>
+                        <p className="text-xs text-zinc-600 col-span-4 text-center py-8 border border-dashed border-zinc-800 rounded-xl">
+                            {selectedDate ? "No hay horarios disponibles" : "Selecciona un día"}
+                        </p>
                     )}
                   </div>
               </div>
@@ -552,7 +586,7 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* ================= PASO 3: FORMULARIO + MENÚ ================= */}
+          {/* ================= PASO 3: FORMULARIO + MENÚ EXPRESS CARRUSEL ================= */}
           {step === 3 && (
             <motion.div 
                 key="step3"
@@ -595,7 +629,7 @@ export default function BookingPage() {
                           {/* --- SECCIÓN CARRUSEL AUTOMÁTICO DE PRODUCTOS --- */}
                           <div className="pt-6 border-t border-white/5 mt-4">
                               <div className="flex items-center justify-between mb-4 px-1">
-                                {/* CAMBIO DE NOMBRE AQUÍ */}
+                                {/* TEXTO ACTUALIZADO */}
                                 <label className="text-[10px] uppercase font-bold text-[#DAA520] tracking-widest flex items-center gap-1">
                                     <Sparkles className="w-3 h-3"/> ANTICIPA TU PEDIDO
                                 </label>
@@ -606,7 +640,7 @@ export default function BookingPage() {
                               
                               {/* Contenedor Carrusel */}
                               <div className="relative w-full overflow-hidden rounded-xl bg-black/20 border border-white/5 py-3 group cursor-pointer" onClick={() => setShowMenu(true)}>
-                                  {/* Gradientes laterales */}
+                                  {/* Gradientes laterales para efecto fade */}
                                   <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-zinc-900 to-transparent z-10 pointer-events-none"/>
                                   <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-900 to-transparent z-10 pointer-events-none"/>
                                   
@@ -621,6 +655,7 @@ export default function BookingPage() {
                                         }}
                                         style={{ width: "max-content" }}
                                     >
+                                        {/* Duplicamos los productos para crear el efecto de bucle infinito */}
                                         {[...products, ...products].map((item, idx) => (
                                             <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
                                                 <div className="relative h-20 w-full bg-zinc-800">
@@ -641,7 +676,7 @@ export default function BookingPage() {
                                   )}
                               </div>
 
-                              {/* Preview del Carrito */}
+                              {/* Preview del Carrito si hay items seleccionados */}
                               <AnimatePresence>
                                 {cart.length > 0 && (
                                     <motion.div 
@@ -722,7 +757,7 @@ export default function BookingPage() {
                         <div className="space-y-3 mb-6">
                             <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
                                 <span className="text-xs font-bold text-zinc-400 uppercase">Fecha y Hora</span>
-                                <span className="text-xs font-bold text-black">{selectedDate} {currentMonth}, {time}</span>
+                                <span className="text-xs font-bold text-black">{selectedDate} {currentMonthName}, {time}</span>
                             </div>
                             <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
                                 <span className="text-xs font-bold text-zinc-400 uppercase">Zona</span>
