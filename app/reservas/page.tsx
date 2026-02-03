@@ -100,25 +100,6 @@ const ZONES = [
     }
 ];
 
-// --- 2. GENERADOR DE HORARIOS ---
-const generateTimeSlots = () => {
-    const times = [];
-    let startHour = 12; 
-    let endHour = 23;   
-    
-    for (let h = startHour; h <= endHour; h++) {
-        for (let m = 0; m < 60; m += 15) {
-            // Evitar horarios antes de apertura real si es necesario
-            if (h === 12 && m < 30) continue; 
-            const hourStr = h.toString().padStart(2, '0');
-            const minStr = m.toString().padStart(2, '0');
-            times.push(`${hourStr}:${minStr}`);
-        }
-    }
-    return times;
-};
-
-const TIME_SLOTS = generateTimeSlots();
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 // --- DATOS DE EJEMPLO (FALLBACK SI FALLA SUPABASE) ---
@@ -140,6 +121,9 @@ export default function BookingPage() {
   const [time, setTime] = useState("");
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   
+  // Nuevo estado para los horarios dinámicos
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+
   // Estados de Datos del Cliente
   const [userData, setUserData] = useState({ name: "", email: "", phone: "" });
 
@@ -153,26 +137,83 @@ export default function BookingPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   
   // Utilidades de fecha
-  const currentMonth = MONTHS[new Date().getMonth()];
-  const currentYear = new Date().getFullYear();
-  const daysInMonth = new Date(currentYear, new Date().getMonth() + 1, 0).getDate();
+  const currentDate = new Date();
+  const currentMonth = MONTHS[currentDate.getMonth()];
+  const currentYear = currentDate.getFullYear();
+  const daysInMonth = new Date(currentYear, currentDate.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  // --- LÓGICA DE CALENDARIO ALINEADO ---
+  // Calculamos qué día de la semana cae el día 1 del mes (0=Dom, 1=Lun...)
+  // Queremos que el calendario empiece en Lunes (Index 0 en el grid)
+  const firstDayOfMonth = new Date(currentYear, currentDate.getMonth(), 1).getDay();
+  // Ajuste para que Lunes sea 0 y Domingo sea 6
+  const startingEmptySlots = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+  const emptySlotsArray = Array.from({ length: startingEmptySlots }, (_, i) => i);
 
   // Funciones de navegación
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
+  // --- EFECTO: GENERAR HORARIOS SEGÚN REGLAS ---
+  useEffect(() => {
+    if (!selectedDate) return;
+
+    // Crear fecha seleccionada para ver qué día de la semana es
+    const dateObj = new Date(currentYear, currentDate.getMonth(), selectedDate);
+    const dayOfWeek = dateObj.getDay(); // 0 = Domingo, 1 = Lunes, ... 6 = Sábado
+
+    let slots: string[] = [];
+
+    // Función auxiliar para generar rangos de hora
+    const addSlots = (startH: number, startM: number, endH: number, endM: number, isNextDay: boolean = false) => {
+        let h = startH;
+        let m = startM;
+        
+        while (h < endH || (h === endH && m <= endM)) {
+            const hStr = h.toString().padStart(2, '0');
+            const mStr = m.toString().padStart(2, '0');
+            slots.push(`${hStr}:${mStr}`);
+            
+            m += 15; // Intervalos de 15 min
+            if (m >= 60) {
+                m = 0;
+                h++;
+            }
+        }
+    };
+
+    // LÓGICA DE HORARIOS
+    // Lunes (1) a Jueves (4): 05:00pm (17:00) a 12:30am (00:30)
+    if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+        addSlots(17, 0, 23, 45); // Hasta medianoche
+        addSlots(0, 0, 0, 30);   // Trasnoche hasta 00:30
+    }
+    // Viernes (5) y Sábado (6): 05:00pm (17:00) a 02:30am
+    else if (dayOfWeek === 5 || dayOfWeek === 6) {
+        addSlots(17, 0, 23, 45);
+        addSlots(0, 0, 2, 30);   // Trasnoche hasta 02:30
+    }
+    // Domingo (0): 04:00pm (16:00) a 12:00am (00:00)
+    else if (dayOfWeek === 0) {
+        addSlots(16, 0, 23, 45); // El cierre es a las 00:00, cubrimos hasta 23:45 para reservar
+        addSlots(0, 0, 0, 0);    // 00:00 exacto
+    }
+
+    setAvailableTimeSlots(slots);
+    setTime(""); // Resetear hora seleccionada al cambiar de día
+
+  }, [selectedDate, currentYear, currentDate]); // Dependencias corregidas
+
   // --- EFECTO: CARGAR PRODUCTOS ---
   useEffect(() => {
     const fetchProducts = async () => {
         try {
-            // Intentamos cargar de Supabase
-            // IMPORTANTE: Asegúrate de tener la tabla 'productos_reserva' creada
             const { data, error } = await supabase
                 .from('productos_reserva') 
                 .select('*')
                 .eq('active', true)
-                .order('category', { ascending: true }); // Ordenar por categoría
+                .order('category', { ascending: true }); 
             
             if (!error && data && data.length > 0) {
                 setProducts(data);
@@ -223,7 +264,6 @@ export default function BookingPage() {
       const zoneDetails = ZONES.find(z => z.id === selectedZone);
 
       try {
-          // 1. Construimos el objeto de la reserva
           const payload = {
               name: userData.name,
               email: userData.email,
@@ -233,23 +273,18 @@ export default function BookingPage() {
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
               code: generatedCode,
-              status: cart.length > 0 ? 'pendiente_pago' : 'pendiente', // Cambiamos estado si hay pago pendiente
+              status: cart.length > 0 ? 'pendiente_pago' : 'pendiente', 
               pre_order: cart.length > 0 ? cart : null, 
               total_pre_order: cartTotal
           };
 
-          // 2. Guardar en Supabase SIEMPRE primero
           const { error } = await supabase.from('reservas').insert([payload]);
 
           if (error) throw error;
 
-          // 3. DECISIÓN: ¿Hay productos en el carrito?
           if (cart.length > 0) {
-              // --- CAMINO A: CON PAGO (GETNET) ---
-              // Si hay items, llamamos a la API de pago para generar el link
               console.log("Iniciando pago por pre-orden...");
               
-              // Limpiamos el carrito para enviar solo lo esencial a la API (evitar Payload Too Large)
               const cartLite = cart.map(item => ({
                   id: item.id,
                   name: item.name,
@@ -262,13 +297,13 @@ export default function BookingPage() {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                      cart: cartLite, // Enviamos items ligeros
+                      cart: cartLite, 
                       total: cartTotal,
                       customerDetails: {
                         name: userData.name,
                         email: userData.email,
                         phone: userData.phone,
-                        reservation_code: generatedCode // Enviamos código para referencia
+                        reservation_code: generatedCode 
                       }
                   }),
               });
@@ -276,17 +311,14 @@ export default function BookingPage() {
               const paymentData = await response.json();
 
               if (response.ok && paymentData.url) {
-                  // Redirigimos al usuario a GetNet
                   window.location.href = paymentData.url;
-                  // Nota: No hacemos setBookingCode ni setStep(4) aquí porque el usuario se va de la página
               } else {
                   throw new Error(paymentData.error || "No se pudo generar el link de pago");
               }
 
           } else {
-              // --- CAMINO B: SOLO RESERVA (SIN PAGO) ---
               setBookingCode(generatedCode);
-              setStep(4); // Éxito: Ir al ticket final
+              setStep(4); 
               setIsSubmitting(false);
           }
 
@@ -297,14 +329,13 @@ export default function BookingPage() {
       }
   };
 
-  // --- ANIMACIONES (FRAMER MOTION) ---
+  // --- ANIMACIONES ---
   const slideVariants = {
     enter: (direction: number) => ({ x: direction > 0 ? 20 : -20, opacity: 0 }),
     center: { x: 0, opacity: 1 },
     exit: (direction: number) => ({ x: direction < 0 ? 20 : -20, opacity: 0 })
   };
 
-  // Animación para el overlay del menú
   const menuOverlayVariants = {
       hidden: { y: "100%", opacity: 0 },
       visible: { 
@@ -315,14 +346,11 @@ export default function BookingPage() {
       exit: { y: "100%", opacity: 0 }
   };
 
-  // Animación escalonada (Stagger) para los productos
   const listContainerVariants = {
       hidden: { opacity: 0 },
       show: {
           opacity: 1,
-          transition: {
-              staggerChildren: 0.1
-          }
+          transition: { staggerChildren: 0.1 }
       }
   };
 
@@ -334,7 +362,7 @@ export default function BookingPage() {
   return (
     <main className={`min-h-screen bg-black text-white pb-20 relative overflow-x-hidden ${montserrat.className}`}>
       
-      {/* FONDO DECORATIVO ANIMADO SUAVEMENTE */}
+      {/* FONDO DECORATIVO */}
       <div className="fixed inset-0 z-0 pointer-events-none">
          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#DAA520]/10 rounded-full blur-[120px] animate-pulse" style={{animationDuration: '4s'}} />
          <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-red-900/10 rounded-full blur-[100px]" />
@@ -342,15 +370,12 @@ export default function BookingPage() {
 
       {/* --- HEADER SUPERIOR --- */}
       <div className="relative h-64 w-full flex flex-col justify-between p-6 z-10">
-        
-        {/* Botón Atrás */}
         <div className="absolute top-6 left-6 z-20">
             <Link href="/" className="p-3 bg-black/50 backdrop-blur-md rounded-full border border-white/10 hover:bg-black/80 transition-colors inline-block group">
                 <ArrowLeft className="w-5 h-5 text-white group-hover:-translate-x-1 transition-transform" />
             </Link>
         </div>
 
-        {/* TÍTULO PRINCIPAL */}
         <div className="absolute bottom-4 left-0 right-0 z-10 text-center flex flex-col items-center">
             <motion.div 
                 initial={{ y: 20, opacity: 0 }} 
@@ -416,7 +441,9 @@ export default function BookingPage() {
                  </div>
 
                  <div className="grid grid-cols-7 gap-y-3 gap-x-1">
-                    {[1,2,3].map(i => <div key={`empty-${i}`} />)}
+                    {/* Espaciadores dinámicos para alinear el día 1 */}
+                    {emptySlotsArray.map(i => <div key={`empty-${i}`} />)}
+                    
                     {days.map(d => (
                         <button 
                             key={d}
@@ -434,19 +461,23 @@ export default function BookingPage() {
                  </div>
               </div>
 
-              {/* Horarios Grid */}
+              {/* Horarios Grid Dinámico */}
               <div>
                   <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3 tracking-widest pl-2">Horarios Disponibles</p>
                   <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                    {TIME_SLOTS.map(t => (
-                        <button 
-                            key={t} 
-                            onClick={() => setTime(t)}
-                            className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${time === t ? 'bg-white text-black border-white shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}
-                        >
-                            {t}
-                        </button>
-                    ))}
+                    {availableTimeSlots.length > 0 ? (
+                        availableTimeSlots.map(t => (
+                            <button 
+                                key={t} 
+                                onClick={() => setTime(t)}
+                                className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${time === t ? 'bg-white text-black border-white shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}
+                            >
+                                {t}
+                            </button>
+                        ))
+                    ) : (
+                        <p className="text-xs text-zinc-600 col-span-4 text-center py-4">Selecciona un día para ver horarios</p>
+                    )}
                   </div>
               </div>
 
@@ -521,7 +552,7 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* ================= PASO 3: FORMULARIO + MENÚ EXPRESS CARRUSEL ================= */}
+          {/* ================= PASO 3: FORMULARIO + MENÚ ================= */}
           {step === 3 && (
             <motion.div 
                 key="step3"
@@ -564,8 +595,9 @@ export default function BookingPage() {
                           {/* --- SECCIÓN CARRUSEL AUTOMÁTICO DE PRODUCTOS --- */}
                           <div className="pt-6 border-t border-white/5 mt-4">
                               <div className="flex items-center justify-between mb-4 px-1">
+                                {/* CAMBIO DE NOMBRE AQUÍ */}
                                 <label className="text-[10px] uppercase font-bold text-[#DAA520] tracking-widest flex items-center gap-1">
-                                    <Sparkles className="w-3 h-3"/> Experiencia Gourmet
+                                    <Sparkles className="w-3 h-3"/> ANTICIPA TU PEDIDO
                                 </label>
                                 <button type="button" onClick={() => setShowMenu(true)} className="text-[10px] text-zinc-400 font-bold hover:text-white flex items-center gap-1 transition-colors">
                                     Ver todo el menú <ChevronRight className="w-3 h-3"/>
@@ -574,7 +606,7 @@ export default function BookingPage() {
                               
                               {/* Contenedor Carrusel */}
                               <div className="relative w-full overflow-hidden rounded-xl bg-black/20 border border-white/5 py-3 group cursor-pointer" onClick={() => setShowMenu(true)}>
-                                  {/* Gradientes laterales para efecto fade */}
+                                  {/* Gradientes laterales */}
                                   <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-zinc-900 to-transparent z-10 pointer-events-none"/>
                                   <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-900 to-transparent z-10 pointer-events-none"/>
                                   
@@ -589,7 +621,6 @@ export default function BookingPage() {
                                         }}
                                         style={{ width: "max-content" }}
                                     >
-                                        {/* Duplicamos los productos para crear el efecto de bucle infinito */}
                                         {[...products, ...products].map((item, idx) => (
                                             <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
                                                 <div className="relative h-20 w-full bg-zinc-800">
@@ -610,7 +641,7 @@ export default function BookingPage() {
                                   )}
                               </div>
 
-                              {/* Preview del Carrito si hay items seleccionados */}
+                              {/* Preview del Carrito */}
                               <AnimatePresence>
                                 {cart.length > 0 && (
                                     <motion.div 
