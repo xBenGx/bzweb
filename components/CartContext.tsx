@@ -1,10 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
     Plus, Trash2, ShoppingBag, X, ChevronLeft, 
-    CreditCard, Upload, Copy, CheckCircle, Loader2, Globe 
+    CreditCard, Upload, Copy, CheckCircle, Loader2, Globe, Tag 
 } from "lucide-react";
 import Image from "next/image";
 
@@ -66,7 +66,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         .from('productos_reserva')
         .select('*')
         .eq('active', true)
-        .order('category', { ascending: true });
+        .order('category', { ascending: true }); // Ordenamos por categoría para agrupar mejor
       if (data) setMenuExtras(data);
     };
     fetchMenu();
@@ -80,6 +80,19 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // --- AGRUPAR MENÚ POR CATEGORÍAS ---
+  const groupedMenu = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    menuExtras.forEach((item) => {
+        const cat = item.category || 'Otros';
+        if (!groups[cat]) {
+            groups[cat] = [];
+        }
+        groups[cat].push(item);
+    });
+    return groups;
+  }, [menuExtras]);
 
   const total = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
@@ -259,7 +272,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                     {/* VISTA 1: CARRITO Y MENÚ */}
                     {checkoutStep === 'cart' && (
                         <>
-                            {/* LISTA DE ITEMS */}
+                            {/* LISTA DE ITEMS SELECCIONADOS */}
                             <div className="p-5 space-y-4">
                                 {items.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-12 text-zinc-600 border-2 border-dashed border-white/5 rounded-2xl bg-zinc-900/30">
@@ -280,7 +293,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                             <div className="flex-1 flex flex-col justify-between py-1">
                                                 <div>
                                                     <h4 className="text-sm font-bold text-white leading-tight line-clamp-2">{item.name}</h4>
-                                                    <p className="text-[10px] text-[#DAA520] mt-1">{item.category === 'ticket' ? 'Entrada' : 'Producto'}</p>
+                                                    <p className="text-[10px] text-[#DAA520] mt-1">{item.category === 'ticket' ? 'Entrada' : (item.category === 'promo' ? 'Promoción' : 'Producto')}</p>
                                                 </div>
                                                 
                                                 <div className="flex justify-between items-center">
@@ -298,43 +311,52 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                 )}
                             </div>
 
-                            {/* SECCIÓN COMPLEMENTA (MENÚ) - TEXTO ACTUALIZADO */}
+                            {/* SECCIÓN MENÚ CLASIFICADO */}
                             {menuExtras.length > 0 && (
                                 <div className="px-5 pb-8">
                                     <div className="flex items-center gap-3 mb-5">
                                         <div className="h-px bg-gradient-to-r from-transparent via-[#DAA520]/50 to-transparent flex-1"></div>
-                                        {/* --- CAMBIO AQUÍ --- */}
                                         <span className="text-[10px] font-bold text-[#DAA520] uppercase tracking-widest bg-[#DAA520]/10 px-3 py-1 rounded-full border border-[#DAA520]/20">
                                             ¡AGREGAR A TU COMPRA!
                                         </span>
                                         <div className="h-px bg-gradient-to-r from-transparent via-[#DAA520]/50 to-transparent flex-1"></div>
                                     </div>
                                     
-                                    <div className="space-y-3">
-                                            {menuExtras.map((product) => (
-                                                <div key={product.id} className="flex items-center gap-3 bg-zinc-900/40 hover:bg-zinc-900 p-2.5 rounded-2xl border border-white/5 hover:border-[#DAA520]/30 transition-all cursor-pointer group" onClick={() => handleAddFromMenu(product)}>
-                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-white/5">
-                                                        {product.image_url ? (
-                                                            <Image src={product.image_url} alt={product.name} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
-                                                        ) : (
-                                                            <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-zinc-600"/></div>
-                                                        )}
-                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                                            <Plus className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity scale-50 group-hover:scale-100" />
+                                    {/* Iteramos por categorías */}
+                                    <div className="space-y-6">
+                                        {Object.entries(groupedMenu).map(([category, products]) => (
+                                            <div key={category}>
+                                                <h4 className="text-xs font-black text-white uppercase mb-3 ml-1 tracking-wider flex items-center gap-2">
+                                                    <Tag className="w-3 h-3 text-[#DAA520]" /> {category}
+                                                </h4>
+                                                <div className="space-y-3">
+                                                    {products.map((product) => (
+                                                        <div key={product.id} className="flex items-center gap-3 bg-zinc-900/40 hover:bg-zinc-900 p-2.5 rounded-2xl border border-white/5 hover:border-[#DAA520]/30 transition-all cursor-pointer group" onClick={() => handleAddFromMenu(product)}>
+                                                            <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-white/5">
+                                                                {product.image_url ? (
+                                                                    <Image src={product.image_url} alt={product.name} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                                ) : (
+                                                                    <div className="w-full h-full bg-zinc-800 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-zinc-600"/></div>
+                                                                )}
+                                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                                    <Plus className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity scale-50 group-hover:scale-100" />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <div className="flex justify-between items-start">
+                                                                    <h5 className="text-xs font-bold text-white line-clamp-1 group-hover:text-[#DAA520] transition-colors">{product.name}</h5>
+                                                                    <span className="text-xs font-bold text-[#DAA520] ml-2">${product.price.toLocaleString("es-CL")}</span>
+                                                                </div>
+                                                                <p className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5 leading-tight">{product.description || "Sin descripción"}</p>
+                                                            </div>
+                                                            <button className="bg-zinc-800 text-zinc-400 group-hover:bg-[#DAA520] group-hover:text-black w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm">
+                                                                <Plus className="w-4 h-4" />
+                                                            </button>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between items-start">
-                                                            <h5 className="text-xs font-bold text-white line-clamp-1 group-hover:text-[#DAA520] transition-colors">{product.name}</h5>
-                                                            <span className="text-xs font-bold text-[#DAA520] ml-2">${product.price.toLocaleString("es-CL")}</span>
-                                                        </div>
-                                                        <p className="text-[10px] text-zinc-500 line-clamp-2 mt-0.5 leading-tight">{product.description || "Sin descripción"}</p>
-                                                    </div>
-                                                    <button className="bg-zinc-800 text-zinc-400 group-hover:bg-[#DAA520] group-hover:text-black w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm">
-                                                        <Plus className="w-4 h-4" />
-                                                    </button>
+                                                    ))}
                                                 </div>
-                                            ))}
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}
