@@ -175,7 +175,8 @@ export default function PromocionesPage() {
                     .slice(0, 5)
                     .map((promo, index) => (
                     <div key={`hero-${promo.id}-${index}`} className="snap-center min-w-full relative h-full">
-                        <Link href={promo.category === 'pack' ? '#' : '/reservas'}>
+                        {/* ENLACE CORREGIDO: LLEVA AL DETALLE DE LA PROMOCIÓN */}
+                        <Link href={`/promociones/${promo.id}`}>
                             <div className="relative w-full h-full">
                                 <Image src={promo.image} alt={promo.title} fill className="object-cover opacity-80" priority={index === 0} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
@@ -220,12 +221,14 @@ export default function PromocionesPage() {
             <h3 className="px-4 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Tendencias</h3>
             <div className="flex gap-4 w-[200%] animate-marquee hover:pause px-4">
                 {[...promos, ...promos].slice(0, 10).map((p, index) => (
-                    <div key={`mq-${p.id}-${index}`} className="min-w-[160px] h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0 cursor-pointer">
-                        <Image src={p.image} alt={p.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
-                        <div className="absolute inset-0 bg-black/50 flex items-end p-3">
-                            <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md">{p.title}</span>
+                    <Link key={`mq-${p.id}-${index}`} href={`/promociones/${p.id}`}>
+                        <div className="min-w-[160px] h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0 cursor-pointer">
+                            <Image src={p.image} alt={p.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                            <div className="absolute inset-0 bg-black/50 flex items-end p-3">
+                                <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md">{p.title}</span>
+                            </div>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
           </div>
@@ -289,8 +292,8 @@ export default function PromocionesPage() {
                             </div>
                         )}
 
-                        {/* --- 1. IMAGEN IZQUIERDA (W-36) --- */}
-                        <div className="w-36 md:w-40 relative shrink-0 overflow-hidden">
+                        {/* --- 1. IMAGEN IZQUIERDA (W-36) - AHORA CON LINK --- */}
+                        <Link href={`/promociones/${promo.id}`} className="w-36 md:w-40 relative shrink-0 overflow-hidden block h-full">
                             <Image 
                                 src={promo.image} 
                                 alt={promo.title} 
@@ -298,11 +301,11 @@ export default function PromocionesPage() {
                                 className="object-cover opacity-90 group-hover:scale-110 transition-transform duration-700" 
                             />
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-zinc-900/90" />
-                        </div>
+                        </Link>
 
                         {/* --- 2. CONTENIDO DERECHA --- */}
                         <div className="flex-1 p-4 pl-2 flex flex-col justify-between relative">
-                            {/* Header Card */}
+                            {/* Header Card (CON LINK EN TITULO) */}
                             <div>
                                 <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-bold uppercase tracking-wider mb-1">
                                     {activeTab === 'semana' 
@@ -310,15 +313,17 @@ export default function PromocionesPage() {
                                       : <><Tag className="w-3 h-3 text-[#DAA520]" /> Oferta Online</>
                                     }
                                 </div>
-                                <h3 className="text-sm font-black text-white uppercase leading-snug line-clamp-2 mb-1 group-hover:text-[#DAA520] transition-colors">
-                                    {promo.title}
-                                </h3>
+                                <Link href={`/promociones/${promo.id}`}>
+                                    <h3 className="text-sm font-black text-white uppercase leading-snug line-clamp-2 mb-1 group-hover:text-[#DAA520] transition-colors">
+                                        {promo.title}
+                                    </h3>
+                                </Link>
                             </div>
 
                             {/* Footer Card */}
                             <div className="flex items-end justify-between border-t border-white/5 pt-2">
                                 <div className="flex items-center gap-3">
-                                    {/* CAJA DE PRECIO / DÍA LIMPIA (Sin borde derecho, sin texto extra) */}
+                                    {/* CAJA DE PRECIO / DÍA LIMPIA */}
                                     <div className="flex flex-col justify-center leading-none">
                                         <span className={`font-black text-white tracking-tight ${activeTab === 'pack' ? 'text-base md:text-lg' : 'text-xl'}`}>
                                             {promo.displayMain}
@@ -331,6 +336,7 @@ export default function PromocionesPage() {
                                 
                                 {/* BOTÓN ACCIÓN */}
                                 {activeTab === 'pack' ? (
+                                    // Botón de carrito rápido para packs (opcional, o podrías cambiarlo a Link también)
                                     <button 
                                         onClick={(e) => handleAddToCart(e, promo)}
                                         className="bg-white text-black w-10 h-10 rounded-full hover:bg-[#DAA520] transition-all flex items-center justify-center shadow-[0_0_10px_rgba(255,255,255,0.1)] group/btn"
@@ -338,7 +344,8 @@ export default function PromocionesPage() {
                                         <ShoppingCart className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                                     </button>
                                 ) : (
-                                    <Link href="/reservas" className="bg-zinc-800 border border-white/10 text-white w-10 h-10 rounded-full hover:bg-[#DAA520] hover:text-black hover:border-[#DAA520] transition-all flex items-center justify-center group/btn">
+                                    // ENLACE CORREGIDO: AHORA VA AL DETALLE DE LA PROMO
+                                    <Link href={`/promociones/${promo.id}`} className="bg-zinc-800 border border-white/10 text-white w-10 h-10 rounded-full hover:bg-[#DAA520] hover:text-black hover:border-[#DAA520] transition-all flex items-center justify-center group/btn">
                                         <ChevronRight className="w-5 h-5 group-hover/btn:translate-x-0.5 transition-transform" />
                                     </Link>
                                 )}
