@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     ArrowLeft, Calendar, MapPin, Clock, Minus, Plus, 
     ShoppingCart, Share2, AlertCircle, 
-    Tag, CheckCircle, X, Loader2, AlertTriangle, Shield, Utensils, Star
+    Tag, CheckCircle, X, Loader2, AlertTriangle, Shield, Utensils, Star,
+    Armchair // Icono para la reserva
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Montserrat } from "next/font/google";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/components/CartContext"; 
@@ -19,6 +20,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 export default function PromotionDetailPage() {
   const params = useParams();
   const id = params?.id; 
+  const router = useRouter();
   
   const { addItem } = useCart();
 
@@ -87,8 +89,16 @@ export default function PromotionDetailPage() {
           category: "delivery" // Usamos 'delivery' o 'shop' para que entre en la lógica del carrito
       });
       
-      // Feedback visual opcional (puedes quitarlo si prefieres que solo se actualice el icono)
+      // Feedback visual opcional
       // alert("Agregado al carrito");
+  };
+
+  // --- LÓGICA PARA RESERVAR ---
+  const handleReserve = () => {
+      // Redirigir a la página de reservas
+      // Opcional: Podrías pasar el ID de la promo por query param si quisieras pre-seleccionarla
+      // router.push(`/reservas?promo=${promo.id}`);
+      router.push('/reservas');
   };
 
   // --- RENDERIZADO DE CARGA / ERROR ---
@@ -183,6 +193,17 @@ export default function PromotionDetailPage() {
                     </button>
                 </div>
             </div>
+
+            {/* AVISO VISUAL */}
+            <div className="bg-[#DAA520]/10 p-4 flex items-start gap-3 border-t border-[#DAA520]/20">
+                <Tag className="w-5 h-5 text-[#DAA520] shrink-0 mt-0.5" />
+                <div>
+                    <h4 className="text-xs font-bold text-[#DAA520] uppercase mb-1">Oferta Web</h4>
+                    <p className="text-[10px] text-zinc-400 leading-relaxed">
+                        Compra ahora online y asegura tu promoción al llegar al local.
+                    </p>
+                </div>
+            </div>
         </div>
       </div>
 
@@ -246,20 +267,27 @@ export default function PromotionDetailPage() {
       </div>
 
       {/* --- BARRA INFERIOR DE ACCIÓN (FIXED) --- */}
-      <div className="fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 pb-6 shadow-[0_-5px_30px_rgba(0,0,0,0.5)] z-50 flex items-center justify-between safe-area-bottom">
+      <div className="fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 pb-6 shadow-[0_-5px_30px_rgba(0,0,0,0.5)] z-50 flex items-center gap-3 safe-area-bottom">
         
-        <div className="flex flex-col">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Total a Pagar</span>
-            <span className="text-2xl font-black text-white">${total.toLocaleString('es-CL')}</span>
-        </div>
-        
+        {/* BOTÓN RESERVAR (NUEVO) */}
+        <button 
+            onClick={handleReserve}
+            className="flex-1 bg-zinc-800 text-white px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 border border-zinc-700 hover:bg-zinc-700 hover:border-[#DAA520]"
+        >
+            Reservar <Armchair className="w-4 h-4" />
+        </button>
+
+        {/* BOTÓN AGREGAR (CON PRECIO) */}
         <button 
             onClick={handleAddToCart}
             disabled={total === 0}
-            className={`px-8 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 transition-all active:scale-95 ${total > 0 ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+            className={`flex-[2] px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex flex-col items-center justify-center transition-all active:scale-95 ${total > 0 ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
         >
-            Agregar <ShoppingCart className="w-4 h-4" />
-            {quantity > 0 && <span className="bg-black text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">{quantity}</span>}
+            <div className="flex items-center gap-2">
+                <span>Agregar</span>
+                <ShoppingCart className="w-4 h-4" />
+            </div>
+            <span className="text-[10px] font-normal opacity-80">${total.toLocaleString('es-CL')}</span>
         </button>
       </div>
 
