@@ -10,12 +10,13 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay 
+    Presentation, Eye, EyeOff, MonitorPlay // <--- NUEVOS ICONOS PARA EL CARRUSEL
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { supabase } from "@/lib/supabaseClient";
+// IMPORTANTE: Esta librería es la clave para generar la imagen en el cliente
 import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
@@ -30,7 +31,7 @@ const TABS = [
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
-    { id: "carrusel", label: "Carrusel", icon: Presentation }, 
+    { id: "carrusel", label: "Carrusel", icon: Presentation }, // <--- NUEVA PESTAÑA AGREGADA AQUÍ
     { id: "rrhh", label: "Equipo", icon: Users },
 ];
 
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]); 
+  // NUEVO ESTADO: VENTAS
   const [ventas, setVentas] = useState<any[]>([]);
 
   // --- ESTADOS PARA CLIENTES ---
@@ -61,14 +63,15 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
 
+    // Suscripción a cambios en tiempo real en las tablas críticas
     const channel = supabase
       .channel('realtime-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) 
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData()) 
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData()) 
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) // Escuchar ventas
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData()) // <--- ESCUCHAR PROMOS
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData()) // <--- ESCUCHAR SHOWS
       .subscribe();
 
     return () => {
@@ -408,15 +411,11 @@ export default function DashboardPage() {
   const birthdays = getBirthdays();
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE PROMOCIONES (ACTUALIZADA: SELECTOR DE TIPO)
+  // LÓGICA GESTIÓN DE PROMOCIONES
   // ---------------------------------------------------------
   const handleOpenPromoModal = (promo: any = null) => {
       setSelectedFile(null);
-      // Inicializamos con todos los campos necesarios, incluido 'type'
-      setCurrentPromo(promo || { 
-          title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", 
-          active: true, desc_text: "", image_url: "", type: "venta" 
-      });
+      setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" });
       setIsPromoModalOpen(true);
   };
 
@@ -430,16 +429,9 @@ export default function DashboardPage() {
               if (uploadedUrl) finalImageUrl = uploadedUrl;
           }
           const promoData = {
-              title: currentPromo.title, 
-              subtitle: currentPromo.subtitle, 
-              category: currentPromo.category,
-              day: currentPromo.day, 
-              price: currentPromo.price, 
-              tag: currentPromo.tag,
-              desc_text: currentPromo.desc_text, 
-              active: currentPromo.active, 
-              image_url: finalImageUrl,
-              type: currentPromo.type // <--- AQUÍ GUARDAMOS SI ES VENTA O SOLO AVISO
+              title: currentPromo.title, subtitle: currentPromo.subtitle, category: currentPromo.category,
+              day: currentPromo.day, price: currentPromo.price, tag: currentPromo.tag,
+              desc_text: currentPromo.desc_text, active: currentPromo.active, image_url: finalImageUrl
           };
           if (currentPromo.id) await supabase.from('promociones').update(promoData).eq('id', currentPromo.id);
           else await supabase.from('promociones').insert([promoData]);
@@ -780,7 +772,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 1.5 VISTA VENTAS / FINANZAS */}
+            {/* --- 1.5 VISTA VENTAS / FINANZAS (NUEVO & EXTENDIDO) --- */}
             {activeTab === "ventas" && (
                 <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {/* Header de Finanzas */}
@@ -791,7 +783,7 @@ export default function DashboardPage() {
                         </button>
                     </div>
 
-                    {/* SECCIÓN 1: KPIs GLOBALES */}
+                    {/* SECCIÓN 1: KPIs GLOBALES (NO SE HA TOCADO) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                         {/* INGRESO TOTAL */}
                         <div className="bg-zinc-900 border border-green-900/30 p-6 rounded-2xl relative overflow-hidden group hover:border-green-500/30 transition-all">
@@ -820,8 +812,9 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* --- NUEVO: RENDIMIENTO POR SHOW Y DETALLE DE PEDIDOS (INSERTADO AQUÍ) --- */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                        {/* PANEL 1: VENTAS POR SHOW */}
+                        {/* PANEL 1: VENTAS POR SHOW (Entradas y Productos) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
                              <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><Music className="w-5 h-5 text-zinc-400"/> Ventas por Show</h3>
@@ -830,39 +823,39 @@ export default function DashboardPage() {
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-4 py-3">Show / Evento</th>
-                                                <th className="px-4 py-3 text-center">Entradas</th>
-                                                <th className="px-4 py-3 text-center">Con Pedido</th>
-                                                <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
-                                            </tr>
+                                        <tr>
+                                            <th className="px-4 py-3">Show / Evento</th>
+                                            <th className="px-4 py-3 text-center">Entradas</th>
+                                            <th className="px-4 py-3 text-center">Con Pedido</th>
+                                            <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
+                                        </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                            {showPerformance.map((show) => (
-                                                <tr key={show.id} className="hover:bg-white/5 transition-colors">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-bold text-white text-xs">{show.title}</p>
-                                                        <p className="text-[10px] text-zinc-500">{show.date_event}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        <span className="bg-zinc-800 text-white px-2 py-1 rounded text-xs font-bold">{show.paxReal} pax</span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                         <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
-                                                            {show.pedidosCount}
-                                                         </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-green-400">
-                                                        ${show.dineroComida.toLocaleString('es-CL')}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                        {showPerformance.map((show) => (
+                                            <tr key={show.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-bold text-white text-xs">{show.title}</p>
+                                                    <p className="text-[10px] text-zinc-500">{show.date_event}</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className="bg-zinc-800 text-white px-2 py-1 rounded text-xs font-bold">{show.paxReal} pax</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                     <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
+                                                        {show.pedidosCount}
+                                                     </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-green-400">
+                                                    ${show.dineroComida.toLocaleString('es-CL')}
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
-                        {/* PANEL 2: DETALLE DE PEDIDOS WEB */}
+                        {/* PANEL 2: DETALLE DE PEDIDOS WEB (Reservas con Consumo) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
                              <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><Utensils className="w-5 h-5 text-zinc-400"/> Detalle Pedidos Web</h3>
@@ -899,8 +892,10 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    {/* --- FIN NUEVO CONTENIDO --- */}
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* SECCIÓN 2: HISTORIAL DE CLIENTES */}
+                        {/* SECCIÓN 2: HISTORIAL DE CLIENTES (NUEVO) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-zinc-400"/> Historial de Clientes</h3>
@@ -909,67 +904,67 @@ export default function DashboardPage() {
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-4 py-3">Cliente</th>
-                                                <th className="px-4 py-3">Origen</th>
-                                                <th className="px-4 py-3 text-right">Consumo</th>
-                                            </tr>
+                                        <tr>
+                                            <th className="px-4 py-3">Cliente</th>
+                                            <th className="px-4 py-3">Origen</th>
+                                            <th className="px-4 py-3 text-right">Consumo</th>
+                                        </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                            {clientHistory.map((item) => (
-                                                <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-bold text-white text-xs">{item.cliente}</p>
-                                                        <p className="text-[10px] text-zinc-500">{new Date(item.fecha).toLocaleDateString()}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${item.tipo.includes('Reserva') ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>
-                                                            {item.tipo}
-                                                        </span>
-                                                        <p className="text-[9px] text-zinc-500 mt-1 truncate max-w-[120px]">{item.detalle}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-white">${item.monto.toLocaleString('es-CL')}</td>
-                                                </tr>
-                                            ))}
+                                        {clientHistory.map((item) => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-bold text-white text-xs">{item.cliente}</p>
+                                                    <p className="text-[10px] text-zinc-500">{new Date(item.fecha).toLocaleDateString()}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${item.tipo.includes('Reserva') ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>
+                                                        {item.tipo}
+                                                    </span>
+                                                    <p className="text-[9px] text-zinc-500 mt-1 truncate max-w-[120px]">{item.detalle}</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-white">${item.monto.toLocaleString('es-CL')}</td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                                 {clientHistory.length === 0 && <div className="p-8 text-center text-zinc-600 text-xs">No hay historial de clientes aún.</div>}
                             </div>
                         </div>
 
-                        {/* SECCIÓN 3: ÚLTIMAS TRANSACCIONES */}
+                        {/* SECCIÓN 3: ÚLTIMAS TRANSACCIONES (REGISTRO CRUDO) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-zinc-400"/> Transacciones en Caja</h3>
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-4 py-3">Desc.</th>
-                                                <th className="px-4 py-3">Tipo</th>
-                                                <th className="px-4 py-3 text-right">Monto</th>
-                                                <th className="px-4 py-3 text-right"></th>
-                                            </tr>
+                                        <tr>
+                                            <th className="px-4 py-3">Desc.</th>
+                                            <th className="px-4 py-3">Tipo</th>
+                                            <th className="px-4 py-3 text-right">Monto</th>
+                                            <th className="px-4 py-3 text-right"></th>
+                                        </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                            {ventas.map((venta) => (
-                                                <tr key={venta.id} className="hover:bg-white/5 transition-colors">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-medium text-white text-xs truncate max-w-[150px]">{venta.descripcion}</p>
-                                                        <p className="text-[10px] text-zinc-500">{venta.metodo_pago}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
-                                                            venta.tipo === 'entrada_manual' ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'bg-blue-900/30 text-blue-400'
-                                                        }`}>
-                                                            {venta.tipo === 'entrada_manual' ? 'Entrada' : 'Menú'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                        {ventas.map((venta) => (
+                                            <tr key={venta.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-medium text-white text-xs truncate max-w-[150px]">{venta.descripcion}</p>
+                                                    <p className="text-[10px] text-zinc-500">{venta.metodo_pago}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                                                        venta.tipo === 'entrada_manual' ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'bg-blue-900/30 text-blue-400'
+                                                    }`}>
+                                                        {venta.tipo === 'entrada_manual' ? 'Entrada' : 'Menú'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -1186,8 +1181,8 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => handleOpenShowModal(show)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4"/></button>
-                                    <button onClick={() => handleDeleteShow(show.id)} className="p-2 bg-white/5 hover:bg-red-900/50 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                    <button onClick={() => handleOpenShowModal(show)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-300 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDeleteShow(show.id)} className="p-2 bg-white/5 hover:bg-red-900/50 rounded-lg text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                             </div>
                         ))}
@@ -1195,7 +1190,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 🔥 PROMOCIONES (ACTUALIZADO: VISUALIZACIÓN DE TIPO) 🔥 */}
             {activeTab === "promos" && (
                 <motion.div key="promos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
@@ -1210,13 +1204,6 @@ export default function DashboardPage() {
                                 <div className="relative w-full aspect-square bg-black rounded-xl overflow-hidden mb-4 border border-white/5">
                                     <Image src={promo.image_url || "/placeholder.jpg"} alt={promo.title} fill className="object-cover opacity-90" />
                                     <div className="absolute top-2 right-2"><span className={`text-[9px] font-bold px-2 py-1 rounded uppercase shadow-sm ${promo.category === 'pack' ? 'bg-purple-500 text-white' : 'bg-blue-500 text-white'}`}>{promo.category}</span></div>
-                                    
-                                    {/* INDICADOR VISUAL DE TIPO (VENTA / AVISO) */}
-                                    <div className="absolute bottom-2 left-2">
-                                        <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase shadow-sm ${promo.type === 'venta' ? 'bg-green-500 text-black' : 'bg-zinc-500 text-white'}`}>
-                                            {promo.type === 'venta' ? '🛒 Se Vende' : '📢 Solo Aviso'}
-                                        </span>
-                                    </div>
                                 </div>
                                 <div className="relative z-10">
                                     <h3 className="text-lg font-bold text-white line-clamp-1">{promo.title}</h3>
@@ -1371,17 +1358,17 @@ export default function DashboardPage() {
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
-                                            <option value="entrada_manual">🎫 Entrada / Ticket</option>
-                                            <option value="consumo_extra">🍽️ Menú / Consumo</option>
-                                            <option value="general">💰 Venta General</option>
+                                        <option value="entrada_manual">🎫 Entrada / Ticket</option>
+                                        <option value="consumo_extra">🍽️ Menú / Consumo</option>
+                                        <option value="general">💰 Venta General</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Método Pago</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
-                                            <option value="efectivo">Efectivo</option>
-                                            <option value="tarjeta">Tarjeta</option>
-                                            <option value="transferencia">Transferencia</option>
+                                        <option value="efectivo">Efectivo</option>
+                                        <option value="tarjeta">Tarjeta</option>
+                                        <option value="transferencia">Transferencia</option>
                                     </select>
                                 </div>
                             </div>
@@ -1424,7 +1411,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* MODAL MENÚ EXPRESS */}
+        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
         <AnimatePresence>
             {isMenuModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
@@ -1460,7 +1447,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* 🔥 MODAL EDICIÓN PROMOCIONES (ACTUALIZADO: SELECTOR TIPO) 🔥 */}
+        {/* --- MODAL EDICIÓN PROMOCIONES --- */}
         <AnimatePresence>
             {isPromoModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
@@ -1483,20 +1470,6 @@ export default function DashboardPage() {
                             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentPromo.id ? "Editar" : "Crear"} Promoción</h3><button onClick={() => setIsPromoModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
                             <form onSubmit={handleSavePromo} className="space-y-4">
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Principal</label><input required type="text" placeholder="Ej: Happy Hour 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
-                                
-                                {/* NUEVO SELECTOR TIPO DE PUBLICACIÓN */}
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Publicación</label>
-                                    <select 
-                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" 
-                                        value={currentPromo.type || 'venta'} 
-                                        onChange={e => setCurrentPromo({...currentPromo, type: e.target.value})}
-                                    >
-                                        <option value="venta">🛒 Venta Online (Se puede agregar al carrito)</option>
-                                        <option value="aviso">📢 Solo Aviso (Informativo)</option>
-                                    </select>
-                                </div>
-
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}>
                                             <option value="semana">Semanal</option>
@@ -1521,7 +1494,7 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* MODAL EDICIÓN SHOWS */}
+        {/* --- MODAL EDICIÓN SHOWS (AVANZADO) --- */}
         <AnimatePresence>
             {isShowModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">

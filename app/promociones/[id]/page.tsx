@@ -6,7 +6,7 @@ import {
     ArrowLeft, Calendar, MapPin, Clock, Minus, Plus, 
     ShoppingCart, Share2, AlertCircle, 
     Tag, CheckCircle, X, Loader2, AlertTriangle, Shield, Utensils, Star,
-    Armchair // Icono para la reserva
+    Armchair, CheckSquare, Square // Iconos para el check
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -30,7 +30,8 @@ export default function PromotionDetailPage() {
   const [error, setError] = useState(false);
 
   // Estados de interacción
-  const [quantity, setQuantity] = useState(1); // Por defecto 1 para incentivar compra
+  const [quantity, setQuantity] = useState(1); 
+  const [termsAccepted, setTermsAccepted] = useState(false); // <--- NUEVO ESTADO PARA EL CHECK
 
   // --- 1. CARGAR DATOS DESDE SUPABASE ---
   useEffect(() => {
@@ -38,7 +39,6 @@ export default function PromotionDetailPage() {
         if (!id) return;
 
         try {
-            // Conectamos a la tabla 'promociones'
             const { data, error } = await supabase
                 .from('promociones') 
                 .select('*')
@@ -77,6 +77,10 @@ export default function PromotionDetailPage() {
 
   // --- LÓGICA DEL CARRITO ---
   const handleAddToCart = () => {
+      if (!termsAccepted) {
+          alert("Debes aceptar las políticas de compra para continuar.");
+          return;
+      }
       if (!promo || quantity === 0) return;
 
       addItem({
@@ -86,18 +90,16 @@ export default function PromotionDetailPage() {
           quantity: quantity,
           image: promo.image,
           detail: `Promo ${promo.day}`, 
-          category: "delivery" // Usamos 'delivery' o 'shop' para que entre en la lógica del carrito
+          category: "delivery" 
       });
-      
-      // Feedback visual opcional
-      // alert("Agregado al carrito");
   };
 
   // --- LÓGICA PARA RESERVAR ---
   const handleReserve = () => {
-      // Redirigir a la página de reservas
-      // Opcional: Podrías pasar el ID de la promo por query param si quisieras pre-seleccionarla
-      // router.push(`/reservas?promo=${promo.id}`);
+      if (!termsAccepted) {
+          alert("Debes aceptar las políticas de compra para continuar.");
+          return;
+      }
       router.push('/reservas');
   };
 
@@ -127,9 +129,9 @@ export default function PromotionDetailPage() {
   const total = promo.price * quantity;
 
   return (
-    <main className={`min-h-screen bg-black text-white pb-40 overflow-x-hidden ${montserrat.className}`}>
+    <main className={`min-h-screen bg-black text-white pb-48 overflow-x-hidden ${montserrat.className}`}> {/* Aumenté pb-48 para espacio del check */}
       
-      {/* --- HERO SECTION (IGUAL A TICKETS) --- */}
+      {/* --- HERO SECTION --- */}
       <div className="relative h-[450px] w-full">
         <Image src={promo.image} alt={promo.title} fill className="object-cover" priority />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black" />
@@ -158,7 +160,7 @@ export default function PromotionDetailPage() {
         </div>
       </div>
 
-      {/* --- SELECCIÓN DE CANTIDAD (ESTILO TICKET) --- */}
+      {/* --- SELECCIÓN DE CANTIDAD --- */}
       <div className="px-4 mt-6">
         <div className="bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
             <div className="bg-zinc-800 p-4 flex justify-between items-center border-b border-white/5">
@@ -207,7 +209,7 @@ export default function PromotionDetailPage() {
         </div>
       </div>
 
-      {/* --- INFORMACIÓN DEL EVENTO / DETALLES --- */}
+      {/* --- DETALLES --- */}
       <div className="px-6 py-8">
         <h3 className="text-lg font-bold text-white uppercase tracking-wide mb-4 border-l-4 border-[#DAA520] pl-3">Detalles</h3>
         <div className="text-zinc-400 text-sm leading-relaxed space-y-4">
@@ -216,7 +218,7 @@ export default function PromotionDetailPage() {
         </div>
       </div>
 
-      {/* --- HORARIOS DE ATENCIÓN (SOLICITADO) --- */}
+      {/* --- HORARIOS --- */}
       <div className="px-4 mb-8">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 relative overflow-hidden">
             <div className="flex items-center gap-2 mb-4 text-white">
@@ -241,27 +243,31 @@ export default function PromotionDetailPage() {
         </div>
       </div>
 
-      {/* --- POLÍTICAS DE COMPRA (ESTILO TICKETS) --- */}
+      {/* --- POLÍTICAS DE COMPRA CON CHECK OBLIGATORIO --- */}
       <div className="px-4 mb-8">
-        <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5">
+        <div className={`bg-zinc-900/50 border rounded-xl p-5 transition-colors ${termsAccepted ? 'border-[#DAA520]' : 'border-white/5'}`}>
             <div className="flex items-center gap-2 mb-3 text-zinc-300">
-                <Shield className="w-4 h-4 text-[#DAA520]" />
+                <Shield className={`w-4 h-4 ${termsAccepted ? 'text-[#DAA520]' : 'text-zinc-500'}`} />
                 <h4 className="text-xs font-bold uppercase tracking-wider">Políticas de Compra</h4>
             </div>
             
-            <div className="text-[10px] text-zinc-500 space-y-3 leading-relaxed text-justify">
-                <p>
-                    Esta promoción es válida únicamente para consumo o retiro en los días indicados: <strong>{promo.day}</strong>.
-                </p>
-                <p>
-                    <strong>Devoluciones:</strong> No se realizan devoluciones de dinero una vez procesada la compra, salvo falta de stock.
-                </p>
-                <p>
-                    Prohibida la venta de alcohol a menores de 18 años. Se exigirá cédula de identidad.
-                </p>
-                <div className="bg-[#DAA520]/10 border border-[#DAA520]/20 p-2 rounded text-[#DAA520] font-bold text-center mt-2">
-                    AVISO: Promoción sujeta a stock diario.
+            <div className="text-[10px] text-zinc-500 space-y-3 leading-relaxed text-justify mb-4">
+                <p>Esta promoción es válida únicamente para consumo o retiro en los días indicados: <strong>{promo.day}</strong>.</p>
+                <p><strong>Devoluciones:</strong> No se realizan devoluciones de dinero una vez procesada la compra, salvo falta de stock.</p>
+                <p>Prohibida la venta de alcohol a menores de 18 años. Se exigirá cédula de identidad.</p>
+            </div>
+
+            {/* CHECKBOX PERSONALIZADO */}
+            <div 
+                onClick={() => setTermsAccepted(!termsAccepted)}
+                className="flex items-center gap-3 p-3 bg-black rounded-lg cursor-pointer hover:bg-white/5 transition-colors select-none"
+            >
+                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${termsAccepted ? 'bg-[#DAA520] border-[#DAA520]' : 'border-zinc-600 bg-transparent'}`}>
+                    {termsAccepted && <CheckCircle className="w-3.5 h-3.5 text-black" />}
                 </div>
+                <p className={`text-xs font-bold ${termsAccepted ? 'text-white' : 'text-zinc-400'}`}>
+                    He leído y acepto las políticas de compra y devolución.
+                </p>
             </div>
         </div>
       </div>
@@ -269,19 +275,28 @@ export default function PromotionDetailPage() {
       {/* --- BARRA INFERIOR DE ACCIÓN (FIXED) --- */}
       <div className="fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 pb-6 shadow-[0_-5px_30px_rgba(0,0,0,0.5)] z-50 flex items-center gap-3 safe-area-bottom">
         
-        {/* BOTÓN RESERVAR (NUEVO) */}
+        {/* BOTÓN RESERVAR */}
         <button 
             onClick={handleReserve}
-            className="flex-1 bg-zinc-800 text-white px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 border border-zinc-700 hover:bg-zinc-700 hover:border-[#DAA520]"
+            disabled={!termsAccepted}
+            className={`flex-1 px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
+                termsAccepted 
+                ? 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700 hover:border-[#DAA520] cursor-pointer' 
+                : 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
+            }`}
         >
             Reservar <Armchair className="w-4 h-4" />
         </button>
 
-        {/* BOTÓN AGREGAR (CON PRECIO) */}
+        {/* BOTÓN AGREGAR */}
         <button 
             onClick={handleAddToCart}
-            disabled={total === 0}
-            className={`flex-[2] px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex flex-col items-center justify-center transition-all active:scale-95 ${total > 0 ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+            disabled={total === 0 || !termsAccepted}
+            className={`flex-[2] px-4 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex flex-col items-center justify-center transition-all active:scale-95 ${
+                total > 0 && termsAccepted
+                ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' 
+                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50'
+            }`}
         >
             <div className="flex items-center gap-2">
                 <span>Agregar</span>

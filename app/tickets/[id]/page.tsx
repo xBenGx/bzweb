@@ -5,13 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     ArrowLeft, Calendar, MapPin, Clock, Minus, Plus, 
     ShoppingCart, Share2, AlertCircle, 
-    Ticket as TicketIcon, CheckCircle, X, Loader2, AlertTriangle, Shield
+    Ticket as TicketIcon, CheckCircle, X, Loader2, AlertTriangle, Shield, 
+    CheckSquare, Square // Nuevos iconos para el checkbox
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { Montserrat } from "next/font/google";
-// Eliminamos la importación estática y usamos Supabase
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/components/CartContext"; 
 
@@ -19,12 +19,12 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 
 export default function EventDetailPage() {
   const params = useParams();
-  const id = params?.id; // Obtenemos el ID de la URL
+  const id = params?.id; 
   
   const { addItem } = useCart();
 
   // --- ESTADOS ---
-  const [event, setEvent] = useState<any>(null); // Datos del evento
+  const [event, setEvent] = useState<any>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -32,6 +32,9 @@ export default function EventDetailPage() {
   const [ticketsSelection, setTicketsSelection] = useState<{ [key: string]: number }>({});
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [reservationData, setReservationData] = useState({ name: "", email: "", phone: "", guests: 1 });
+  
+  // NUEVO: Estado para aceptación de términos
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // --- 1. CARGAR DATOS DESDE SUPABASE ---
   useEffect(() => {
@@ -48,12 +51,11 @@ export default function EventDetailPage() {
             if (error) throw error;
 
             if (data) {
-                // Formateamos los datos para la vista
                 setEvent({
                     id: data.id,
                     title: data.title,
                     subtitle: data.subtitle || "Evento Exclusivo",
-                    fullDate: data.date_event, // Asumiendo formato "2026-01-31" o texto
+                    fullDate: data.date_event, 
                     time: data.time_event,
                     endTime: data.end_time || "05:00",
                     location: data.location,
@@ -62,7 +64,6 @@ export default function EventDetailPage() {
                     tag: data.tag || "",
                     isAdultOnly: data.is_adult || false,
                     description: data.description || "Sin descripción disponible.",
-                    // Usamos los tickets configurados o uno por defecto
                     tickets: data.tickets && data.tickets.length > 0 ? data.tickets : [
                         { id: 'gen', name: 'Entrada General', desc: 'Acceso General', price: 15000 }
                     ]
@@ -91,6 +92,12 @@ export default function EventDetailPage() {
   };
 
   const handleAddToCart = () => {
+      // VALIDACIÓN DE TÉRMINOS
+      if (!termsAccepted) {
+          alert("Por favor, acepta las políticas de compra y devolución para continuar.");
+          return;
+      }
+
       let added = false;
       if (!event) return;
 
@@ -111,14 +118,22 @@ export default function EventDetailPage() {
       });
 
       if (added) {
-          setTicketsSelection({}); // Resetear selección
-          // Aquí podrías abrir el carrito o mostrar confirmación
+          setTicketsSelection({}); 
+          alert("Tickets agregados al carrito.");
       }
+  };
+
+  const handleOpenReservationModal = () => {
+      // VALIDACIÓN DE TÉRMINOS TAMBIÉN PARA RESERVA GRATIS
+      if (!termsAccepted) {
+          alert("Por favor, acepta las políticas de compra y devolución para continuar.");
+          return;
+      }
+      setShowReservationModal(true);
   };
 
   const handleReservationSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      // Lógica simple para reserva gratuita (podría conectarse a Supabase 'reservas')
       alert(`Reserva gratuita confirmada para ${reservationData.name}.`);
       setShowReservationModal(false);
   };
@@ -146,13 +161,12 @@ export default function EventDetailPage() {
       );
   }
 
-  // Cálculos de UI
   const isFreeEvent = event.tickets.some((t: any) => t.price === 0);
   const total = event.tickets.reduce((acc: number, t: any) => acc + (t.price * (ticketsSelection[t.id] || 0)), 0);
   const totalCount = Object.values(ticketsSelection).reduce((a, b) => a + b, 0);
 
   return (
-    <main className={`min-h-screen bg-black text-white pb-40 overflow-x-hidden ${montserrat.className}`}>
+    <main className={`min-h-screen bg-black text-white pb-48 overflow-x-hidden ${montserrat.className}`}> {/* pb-48 para dar espacio al check */}
       
       {/* --- HEADER EVENTO (HERO) --- */}
       <div className="relative h-[450px] w-full">
@@ -248,36 +262,41 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {/* --- POLÍTICAS DE COMPRA (NUEVA SECCIÓN) --- */}
+      {/* --- POLÍTICAS DE COMPRA CON CHECK OBLIGATORIO --- */}
       <div className="px-4 mb-8">
-        <div className="bg-zinc-900/50 border border-white/5 rounded-xl p-5">
+        {/* Cambiamos el color del borde según si aceptó o no */}
+        <div className={`bg-zinc-900/50 border rounded-xl p-5 transition-colors ${termsAccepted ? 'border-[#DAA520]' : 'border-white/5'}`}>
             <div className="flex items-center gap-2 mb-3 text-zinc-300">
-                <Shield className="w-4 h-4 text-[#DAA520]" />
+                <Shield className={`w-4 h-4 ${termsAccepted ? 'text-[#DAA520]' : 'text-zinc-500'}`} />
                 <h4 className="text-xs font-bold uppercase tracking-wider">Políticas de Compra y Devoluciones</h4>
             </div>
             
-            <div className="text-[10px] text-zinc-500 space-y-3 leading-relaxed text-justify">
+            <div className="text-[10px] text-zinc-500 space-y-3 leading-relaxed text-justify mb-4">
                 <p>
                     Estimado cliente, por normativa de <strong>Boulevard Zapallar</strong>, declaramos expresamente que <strong>no se realizarán cambios ni devoluciones de dinero</strong> una vez finalizado el proceso de compra.
                 </p>
-                
                 <p>
-                    <strong>Excepción por Fuerza Mayor:</strong> Únicamente en caso de que el evento sea suspendido o cancelado por fuerza mayor, se procederá al reintegro del dinero por concepto de venta de entradas. Alternativamente, y solo si el cliente lo desea, se podrá optar por el canje de las entradas del evento cancelado por tickets para futuros eventos.
+                    <strong>Excepción por Fuerza Mayor:</strong> Únicamente en caso de que el evento sea suspendido o cancelado por fuerza mayor, se procederá al reintegro del dinero.
                 </p>
-
-                <p>
-                    <strong>Devolución por Cancelación:</strong> En caso de cancelación o suspensión definitiva del evento, la devolución de los montos recaudados se realizará previa autorización, coordinación y publicación oficial, en un plazo no mayor a <strong>15 días hábiles</strong>.
-                </p>
-
                 <p>
                     Recomendamos revisar cuidadosamente los datos de su orden antes de confirmar la compra. Las entradas son nominativas y personalizadas.
                 </p>
-
                 <div className="bg-[#DAA520]/10 border border-[#DAA520]/20 p-2 rounded text-[#DAA520] font-bold text-center mt-2">
                     AVISO IMPORTANTE: Según el tipo de evento, las mesas podrían ser compartidas.
                 </div>
-                
-                <p className="text-center pt-2 italic">Agradecemos su atención y preferencia.</p>
+            </div>
+
+            {/* CHECKBOX PERSONALIZADO */}
+            <div 
+                onClick={() => setTermsAccepted(!termsAccepted)}
+                className="flex items-center gap-3 p-3 bg-black rounded-lg cursor-pointer hover:bg-white/5 transition-colors select-none"
+            >
+                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${termsAccepted ? 'bg-[#DAA520] border-[#DAA520]' : 'border-zinc-600 bg-transparent'}`}>
+                    {termsAccepted && <CheckCircle className="w-3.5 h-3.5 text-black" />}
+                </div>
+                <p className={`text-xs font-bold ${termsAccepted ? 'text-white' : 'text-zinc-400'}`}>
+                    He leído y acepto las políticas de compra y devolución.
+                </p>
             </div>
         </div>
       </div>
@@ -287,8 +306,13 @@ export default function EventDetailPage() {
         
         {isFreeEvent ? (
             <button 
-                onClick={() => setShowReservationModal(true)}
-                className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-black px-8 py-4 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95"
+                onClick={handleOpenReservationModal}
+                disabled={!termsAccepted}
+                className={`w-full px-8 py-4 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                    termsAccepted 
+                    ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' 
+                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50'
+                }`}
             >
                 Reservar Cupo Gratis <CheckCircle className="w-4 h-4" />
             </button>
@@ -301,8 +325,13 @@ export default function EventDetailPage() {
                 
                 <button 
                     onClick={handleAddToCart}
-                    disabled={total === 0}
-                    className={`px-8 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 transition-all active:scale-95 ${total > 0 ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+                    // Deshabilitado si total es 0 O si NO aceptó términos
+                    disabled={total === 0 || !termsAccepted}
+                    className={`px-8 py-3.5 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 transition-all active:scale-95 ${
+                        (total > 0 && termsAccepted)
+                        ? 'bg-[#DAA520] hover:bg-[#B8860B] text-black cursor-pointer' 
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed' // Estilo deshabilitado
+                    }`}
                 >
                     Agregar al Carrito <ShoppingCart className="w-4 h-4" />
                     {totalCount > 0 && <span className="bg-black text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center ml-1">{totalCount}</span>}
