@@ -569,113 +569,21 @@ export default function DashboardPage() {
       fetchData();
   };
 
-// --- FUNCIÓN AUXILIAR CORREGIDA (Usa window.Image para evitar el error de Next.js) ---
-  const preloadImage = (src: string) => {
-    return new Promise((resolve, reject) => {
-      const img = new window.Image(); // <--- FIX: window.Image
-      img.src = src;
-      img.onload = resolve;
-      img.onerror = reject;
-    });
-  };
-
-  // --- FUNCIÓN DE CONFIRMACIÓN ACTUALIZADA ---
+// --- FUNCIÓN ACTUALIZADA: DELEGA TODO AL SERVIDOR ---
   const handleConfirmReservation = async (reserva: any) => {
-    if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
+    // 1. Confirmación
+    if (!confirm(`¿Confirmar a ${reserva.name}? El sistema generará el ticket internamente y lo enviará.`)) return;
 
     setProcessingId(reserva.id); 
 
     try {
-        // 1. Determinar el código final
-        const codigoFinal = reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
-        console.log("Generando ticket para código:", codigoFinal);
-
-        // Intento de precarga de imagen
-        try { await preloadImage('/ticket-bg.png'); } catch(e) { console.error("Fallo precarga", e); }
-
-        // 2. Crear el lienzo visual (Invisible)
-        const ticketElement = document.createElement("div");
-        ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; background:#fff; font-family: Arial, sans-serif; overflow:hidden;";
-        
-        // --- HTML DEL TICKET (Textos en NEGRO y posiciones ajustadas) ---
-        ticketElement.innerHTML = `
-          <div style="width: 1080px; height: 1920px; position: relative;">
-              
-              <img src="/ticket-bg.png" style="width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; object-fit: cover;" />
-              
-              <div style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:10; display:flex; flex-direction:column; align-items:center;">
-                  
-                  <div style="margin-top: 890px; width: 800px; text-align: center;">
-                      <span style="font-size: 90px; font-weight: 900; color: #000000; letter-spacing: 5px; text-transform: uppercase; font-family: Arial, sans-serif;">
-                          ${codigoFinal}
-                      </span>
-                  </div>
-
-                  <div style="margin-top: 190px; width: 850px; text-align: left; padding-left: 40px; display: flex; flex-direction: column; gap: 85px;">
-                      
-                      <div>
-                          <p style="font-size: 35px; font-weight: 800; margin: 0; color: #000000; text-transform: uppercase;">
-                             ${reserva.date_reserva} | ${reserva.time_reserva}
-                          </p>
-                      </div>
-
-                      <div>
-                          <p style="font-size: 35px; font-weight: 800; margin: 0; color: #000000; text-transform: uppercase;">
-                             ${reserva.zone}
-                          </p>
-                      </div>
-
-                      <div>
-                          <p style="font-size: 35px; font-weight: 800; margin: 0; color: #000000; text-transform: uppercase;">
-                             ${reserva.guests} PERSONAS
-                          </p>
-                      </div>
-
-                  </div>
-              </div>
-          </div>
-        `;
-        
-        document.body.appendChild(ticketElement);
-
-        // Espera de 2.5 segundos para asegurar que se pinte todo
-        await new Promise(resolve => setTimeout(resolve, 2500));
-
-        // 3. Generar Imagen
-        const canvas = await html2canvas(ticketElement, { 
-            scale: 1, 
-            useCORS: true, 
-            allowTaint: true,
-            backgroundColor: "#ffffff", // Fondo blanco base por si acaso
-            logging: false
-        });
-        
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-        document.body.removeChild(ticketElement);
-
-        if (!blob) throw new Error("No se pudo generar la imagen");
-
-        let ticketPublicUrl = null;
-
-        // 4. Subir a Supabase
-        const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
-        const { error: uploadError } = await supabase.storage
-            .from('tickets')
-            .upload(fileName, blob, { contentType: 'image/png', upsert: true });
-        
-        if (!uploadError) {
-            const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
-            ticketPublicUrl = data.publicUrl;
-        }
-
-        // 5. Enviar a API
+        // 2. Solo llamamos a la API. No generamos nada aquí.
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
                 reservaId: reserva.id, 
-                ticketUrl: ticketPublicUrl, 
-                codigo: codigoFinal, 
+                // NO enviamos ticketUrl, ni código. Dejamos que el server lo haga.
                 phone: reserva.phone 
             }),
         });
@@ -683,16 +591,16 @@ export default function DashboardPage() {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert(`✅ Ticket generado y enviado correctamente.`);
+            alert(`✅ ¡Éxito!\nReserva confirmada.\nTicket generado: ${result.code}\nWhatsApp enviado.`);
             fetchData(); 
         } else {
-            alert("⚠️ Error al enviar WhatsApp: " + (result.error || "Desconocido"));
+            alert(`⚠️ Error: ${result.error || "Desconocido"}`);
             fetchData();
         }
 
-    } catch (error: any) {
-        console.error(error);
-        alert("Error crítico: " + error.message);
+    } catch (e: any) {
+        console.error(e);
+        alert("Error de conexión: " + e.message);
     } finally {
         setProcessingId(null);
     }
