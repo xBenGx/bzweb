@@ -569,110 +569,104 @@ export default function DashboardPage() {
       fetchData();
   };
 
-// --- FUNCIÓN CLAVE: CONFIRMAR, GENERAR IMAGEN Y SINCRONIZAR CÓDIGO ---
-  // VERSIÓN FINAL CORREGIDA: Usa posicionamiento absoluto para garantizar que los textos se pinten.
+// --- FUNCIÓN AUXILIAR (CORREGIDA: usa window.Image) ---
+  const preloadImage = (src: string) => {
+    return new Promise((resolve, reject) => {
+      // AQUÍ ESTABA EL ERROR: Usamos window.Image para evitar conflicto con next/image
+      const img = new window.Image(); 
+      img.src = src;
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+  };
+
+  // --- FUNCIÓN CLAVE: CONFIRMAR, GENERAR IMAGEN Y SINCRONIZAR CÓDIGO ---
   const handleConfirmReservation = async (reserva: any) => {
-    // 1. Confirmación
     if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
 
     setProcessingId(reserva.id); 
 
     try {
-        // 2. Determinar Código
+        // 1. DETERMINAR CÓDIGO
         const codigoFinal = reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
-        console.log("Generando ticket para:", codigoFinal);
+        console.log("Generando ticket para código:", codigoFinal);
 
-        // 3. Crear el lienzo visual (Invisible)
+        // Precargar la imagen para asegurar que html2canvas la vea
+        try { await preloadImage('/ticket-bg.png'); } catch(e) { console.error("Fallo precarga", e); }
+
+        // 2. CREAR ELEMENTO VISUAL
         const ticketElement = document.createElement("div");
-        // Usamos la imagen como fondo directo del div para evitar problemas de capas
-        ticketElement.style.cssText = `
-            position: fixed; 
-            top: -9999px; 
-            left: -9999px; 
-            width: 1080px; 
-            height: 1920px; 
-            background-image: url('/ticket-bg.png');
-            background-size: cover;
-            background-position: center;
-            font-family: 'Montserrat', sans-serif; 
-            overflow: hidden;
-        `;
+        // Forzamos fuente Arial para evitar problemas de carga de fuentes externas
+        ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; background:#000; font-family: Arial, sans-serif; overflow:hidden;";
         
-        // --- DISEÑO DEL TICKET CON POSICIONAMIENTO ABSOLUTO ---
-        // Esto coloca cada texto en una coordenada exacta sobre la imagen.
+        // HTML EXACTO AJUSTADO A TU IMAGEN (Fondo Blanco abajo -> Texto Negro)
         ticketElement.innerHTML = `
-          <div style="position: relative; width: 100%; height: 100%;">
+          <div style="width: 1080px; height: 1920px; position: relative;">
+              <img src="/ticket-bg.png" style="width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; object-fit: cover;" />
               
-              <div style="position: absolute; top: 880px; left: 50%; transform: translateX(-50%); width: 800px; text-align: center;">
-                  <p style="font-size: 110px; font-weight: 900; color: #000; letter-spacing: 10px; margin: 0; text-transform: uppercase;">
-                      ${codigoFinal}
-                  </p>
-              </div>
-
-              <div style="position: absolute; top: 1280px; left: 140px; width: 800px; text-align: left;">
+              <div style="position:relative; z-index:10; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; text-align: center;">
                   
-                  <div style="margin-bottom: 55px;">
-                      <p style="font-size: 24px; color: #DAA520; font-weight: bold; margin: 0; text-transform: uppercase; letter-spacing: 1px;">FECHA Y HORA</p>
-                      <p style="font-size: 40px; font-weight: 800; margin: 5px 0 0 0; color: #fff; text-transform: uppercase;">
-                          ${reserva.date_reserva} | ${reserva.time_reserva}
-                      </p>
+                  <div style="margin-top: 880px; font-size: 100px; font-weight: 900; color: #000; letter-spacing: 5px; width: 800px; text-align: center; text-transform: uppercase;">
+                      ${codigoFinal}
                   </div>
 
-                  <div style="margin-bottom: 55px;">
-                      <p style="font-size: 24px; color: #DAA520; font-weight: bold; margin: 0; text-transform: uppercase; letter-spacing: 1px;">UBICACIÓN</p>
-                      <p style="font-size: 40px; font-weight: 800; margin: 5px 0 0 0; color: #fff; text-transform: uppercase;">
-                          ${reserva.zone}
-                      </p>
-                  </div>
+                  <div style="margin-top: 135px; width: 850px; text-align: left; padding-left: 20px;">
+                      
+                      <div style="margin-bottom: 95px;">
+                          <p style="font-size: 40px; font-weight: bold; margin: 0; color: #000; text-transform: uppercase; margin-left: 20px;">
+                             ${reserva.date_reserva} <span style="margin: 0 15px;">|</span> ${reserva.time_reserva} HRS
+                          </p>
+                      </div>
 
-                  <div>
-                      <p style="font-size: 24px; color: #DAA520; font-weight: bold; margin: 0; text-transform: uppercase; letter-spacing: 1px;">ACCESO PARA</p>
-                      <p style="font-size: 40px; font-weight: 800; margin: 5px 0 0 0; color: #fff; text-transform: uppercase;">
-                          ${reserva.guests} PERSONAS
-                      </p>
-                  </div>
+                      <div style="margin-bottom: 95px;">
+                          <p style="font-size: 40px; font-weight: bold; margin: 0; color: #000; text-transform: uppercase; margin-left: 20px;">
+                             ${reserva.zone}
+                          </p>
+                      </div>
 
+                      <div>
+                          <p style="font-size: 40px; font-weight: bold; margin: 0; color: #000; text-transform: uppercase; margin-left: 20px;">
+                             ${reserva.guests} PERSONAS
+                          </p>
+                      </div>
+
+                  </div>
               </div>
           </div>
         `;
         
         document.body.appendChild(ticketElement);
 
-        // --- CLAVE: ESPERA MÁS LARGA ---
-        // Damos tiempo extra para que la imagen de fondo y las fuentes se carguen.
-        await new Promise(r => setTimeout(r, 2000)); // 2 segundos
+        // Espera extendida para asegurar renderizado
+        await new Promise(resolve => setTimeout(resolve, 2500));
 
-        // 4. Convertir a Imagen
+        // 3. GENERAR IMAGEN
         const canvas = await html2canvas(ticketElement, { 
             scale: 1, 
-            useCORS: true, // Permite cargar la imagen local
+            useCORS: true, 
             allowTaint: true,
-            backgroundColor: null, // Fondo transparente para que se vea la imagen de fondo
-            logging: true // Activa logs para ver si hay errores en la consola
+            backgroundColor: null 
         });
         
-        const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'));
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         document.body.removeChild(ticketElement);
 
         let ticketPublicUrl = null;
 
-        // 5. Subir a Supabase
+        // 4. SUBIR A SUPABASE
         if (blob) {
             const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
             const { error: uploadError } = await supabase.storage
                 .from('tickets')
                 .upload(fileName, blob, { contentType: 'image/png', upsert: true });
-
+            
             if (!uploadError) {
                 const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
                 ticketPublicUrl = data.publicUrl;
-                console.log("✅ Ticket generado y subido:", ticketPublicUrl);
-            } else {
-                console.error("❌ Error subiendo ticket:", uploadError);
             }
         }
 
-        // 6. Enviar a API
+        // 5. ENVIAR A API
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -687,16 +681,16 @@ export default function DashboardPage() {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert(`✅ Confirmado y Enviado.\nCódigo: ${codigoFinal}`);
-            fetchData();
+            alert(`✅ Confirmado. WhatsApp enviado.`);
+            fetchData(); 
         } else {
-            alert(`⚠️ Error al enviar: ${result.error || "Desconocido"}`);
+            alert("⚠️ Error al enviar WhatsApp: " + (result.error || "Desconocido"));
             fetchData();
         }
 
-    } catch (e: any) {
-        console.error("Error crítico:", e);
-        alert("Error crítico: " + e.message);
+    } catch (error: any) {
+        console.error(error);
+        alert("Error crítico: " + error.message);
     } finally {
         setProcessingId(null);
     }
