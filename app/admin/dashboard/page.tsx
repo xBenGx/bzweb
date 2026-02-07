@@ -569,10 +569,10 @@ export default function DashboardPage() {
       fetchData();
   };
 
-// --- FUNCIÓN AUXILIAR (CORREGIDA: usa window.Image) ---
+// --- FUNCIÓN AUXILIAR (CORREGIDA: usa window.Image para evitar conflictos) ---
   const preloadImage = (src: string) => {
     return new Promise((resolve, reject) => {
-      // AQUÍ ESTABA EL ERROR: Usamos window.Image para evitar conflicto con next/image
+      // FIX: Usamos window.Image para que Next.js no se confunda
       const img = new window.Image(); 
       img.src = src;
       img.onload = resolve;
