@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay // <--- NUEVOS ICONOS PARA EL CARRUSEL
+    Presentation, Eye, EyeOff, MonitorPlay
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -31,7 +31,7 @@ const TABS = [
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
-    { id: "carrusel", label: "Carrusel", icon: Presentation }, // <--- NUEVA PESTAÑA AGREGADA AQUÍ
+    { id: "carrusel", label: "Carrusel", icon: Presentation },
     { id: "rrhh", label: "Equipo", icon: Users },
 ];
 
@@ -577,7 +577,7 @@ export default function DashboardPage() {
 
     try {
         // 1. DETERMINAR CÓDIGO FINAL (Prioridad: el que ya tiene > generar uno nuevo)
-        const codigoFinal = reserva.reservation_code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+        const codigoFinal = reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
         console.log("Generando ticket para código:", codigoFinal);
 
         // 2. CREAR ELEMENTO VISUAL (Ticket Negro y Dorado)
@@ -636,7 +636,7 @@ export default function DashboardPage() {
             // Subimos directamente usando uploadImageToSupabase modificado o lógica directa
             // Usamos lógica directa aquí para asegurar bucket 'tickets'
             const { error: uploadError } = await supabase.storage
-                .from('tickets') // Asegúrate que este bucket es público
+                .from('tickets') // Asegúrate que este bucket existe y es público
                 .upload(fileName, blob, { contentType: 'image/png', upsert: true });
             
             if (!uploadError) {
@@ -656,7 +656,8 @@ export default function DashboardPage() {
             body: JSON.stringify({ 
                 reservaId: reserva.id,
                 ticketUrl: ticketPublicUrl,
-                codigo: codigoFinal // <--- CLAVE DE LA SINCRONIZACIÓN
+                codigo: codigoFinal, // <--- CLAVE DE LA SINCRONIZACIÓN
+                phone: reserva.phone
             }),
         });
 
@@ -823,33 +824,33 @@ export default function DashboardPage() {
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                        <tr>
-                                            <th className="px-4 py-3">Show / Evento</th>
-                                            <th className="px-4 py-3 text-center">Entradas</th>
-                                            <th className="px-4 py-3 text-center">Con Pedido</th>
-                                            <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
-                                        </tr>
+                                            <tr>
+                                                <th className="px-4 py-3">Show / Evento</th>
+                                                <th className="px-4 py-3 text-center">Entradas</th>
+                                                <th className="px-4 py-3 text-center">Con Pedido</th>
+                                                <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
+                                            </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {showPerformance.map((show) => (
-                                            <tr key={show.id} className="hover:bg-white/5 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <p className="font-bold text-white text-xs">{show.title}</p>
-                                                    <p className="text-[10px] text-zinc-500">{show.date_event}</p>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className="bg-zinc-800 text-white px-2 py-1 rounded text-xs font-bold">{show.paxReal} pax</span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                     <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
-                                                        {show.pedidosCount}
-                                                     </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-green-400">
-                                                    ${show.dineroComida.toLocaleString('es-CL')}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                            {showPerformance.map((show) => (
+                                                <tr key={show.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-bold text-white text-xs">{show.title}</p>
+                                                        <p className="text-[10px] text-zinc-500">{show.date_event}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className="bg-zinc-800 text-white px-2 py-1 rounded text-xs font-bold">{show.paxReal} pax</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                         <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
+                                                            {show.pedidosCount}
+                                                         </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-green-400">
+                                                        ${show.dineroComida.toLocaleString('es-CL')}
+                                                    </td>
+                                                </tr>
+                                            ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -904,28 +905,28 @@ export default function DashboardPage() {
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                        <tr>
-                                            <th className="px-4 py-3">Cliente</th>
-                                            <th className="px-4 py-3">Origen</th>
-                                            <th className="px-4 py-3 text-right">Consumo</th>
-                                        </tr>
+                                            <tr>
+                                                <th className="px-4 py-3">Cliente</th>
+                                                <th className="px-4 py-3">Origen</th>
+                                                <th className="px-4 py-3 text-right">Consumo</th>
+                                            </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {clientHistory.map((item) => (
-                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <p className="font-bold text-white text-xs">{item.cliente}</p>
-                                                    <p className="text-[10px] text-zinc-500">{new Date(item.fecha).toLocaleDateString()}</p>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${item.tipo.includes('Reserva') ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>
-                                                        {item.tipo}
-                                                    </span>
-                                                    <p className="text-[9px] text-zinc-500 mt-1 truncate max-w-[120px]">{item.detalle}</p>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-white">${item.monto.toLocaleString('es-CL')}</td>
-                                            </tr>
-                                        ))}
+                                            {clientHistory.map((item) => (
+                                                <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-bold text-white text-xs">{item.cliente}</p>
+                                                        <p className="text-[10px] text-zinc-500">{new Date(item.fecha).toLocaleDateString()}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${item.tipo.includes('Reserva') ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>
+                                                            {item.tipo}
+                                                        </span>
+                                                        <p className="text-[9px] text-zinc-500 mt-1 truncate max-w-[120px]">{item.detalle}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-white">${item.monto.toLocaleString('es-CL')}</td>
+                                                </tr>
+                                            ))}
                                     </tbody>
                                 </table>
                                 {clientHistory.length === 0 && <div className="p-8 text-center text-zinc-600 text-xs">No hay historial de clientes aún.</div>}
@@ -938,33 +939,33 @@ export default function DashboardPage() {
                             <div className="overflow-y-auto custom-scrollbar flex-1">
                                 <table className="w-full text-left text-sm text-zinc-400">
                                     <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
-                                        <tr>
-                                            <th className="px-4 py-3">Desc.</th>
-                                            <th className="px-4 py-3">Tipo</th>
-                                            <th className="px-4 py-3 text-right">Monto</th>
-                                            <th className="px-4 py-3 text-right"></th>
-                                        </tr>
+                                            <tr>
+                                                <th className="px-4 py-3">Desc.</th>
+                                                <th className="px-4 py-3">Tipo</th>
+                                                <th className="px-4 py-3 text-right">Monto</th>
+                                                <th className="px-4 py-3 text-right"></th>
+                                            </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {ventas.map((venta) => (
-                                            <tr key={venta.id} className="hover:bg-white/5 transition-colors">
-                                                <td className="px-4 py-3">
-                                                    <p className="font-medium text-white text-xs truncate max-w-[150px]">{venta.descripcion}</p>
-                                                    <p className="text-[10px] text-zinc-500">{venta.metodo_pago}</p>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
-                                                        venta.tipo === 'entrada_manual' ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'bg-blue-900/30 text-blue-400'
-                                                    }`}>
-                                                        {venta.tipo === 'entrada_manual' ? 'Entrada' : 'Menú'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                            {ventas.map((venta) => (
+                                                <tr key={venta.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-medium text-white text-xs truncate max-w-[150px]">{venta.descripcion}</p>
+                                                        <p className="text-[10px] text-zinc-500">{venta.metodo_pago}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                                                            venta.tipo === 'entrada_manual' ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'bg-blue-900/30 text-blue-400'
+                                                        }`}>
+                                                            {venta.tipo === 'entrada_manual' ? 'Entrada' : 'Menú'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-white">${venta.monto?.toLocaleString('es-CL')}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button onClick={() => handleDeleteVenta(venta.id)} className="text-zinc-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                                    </td>
+                                                </tr>
+                                            ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -1358,17 +1359,17 @@ export default function DashboardPage() {
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
-                                        <option value="entrada_manual">🎫 Entrada / Ticket</option>
-                                        <option value="consumo_extra">🍽️ Menú / Consumo</option>
-                                        <option value="general">💰 Venta General</option>
+                                            <option value="entrada_manual">🎫 Entrada / Ticket</option>
+                                            <option value="consumo_extra">🍽️ Menú / Consumo</option>
+                                            <option value="general">💰 Venta General</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Método Pago</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
-                                        <option value="efectivo">Efectivo</option>
-                                        <option value="tarjeta">Tarjeta</option>
-                                        <option value="transferencia">Transferencia</option>
+                                            <option value="efectivo">Efectivo</option>
+                                            <option value="tarjeta">Tarjeta</option>
+                                            <option value="transferencia">Transferencia</option>
                                     </select>
                                 </div>
                             </div>

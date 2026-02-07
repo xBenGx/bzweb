@@ -6,7 +6,8 @@ import {
   ArrowLeft, Users, ChevronRight, ChevronLeft, 
   CheckCircle, Calendar, Clock, AlertTriangle, 
   Armchair, Cigarette, CigaretteOff, Loader2, User, Mail, Phone, 
-  ShoppingBag, Plus, Minus, X, Utensils, Wine, ChefHat, Sparkles, Eye
+  ShoppingBag, Plus, Minus, X, Utensils, Wine, ChefHat, Sparkles, Eye,
+  MessageCircle // NUEVO: Importado para el estado de espera
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image"; 
@@ -131,7 +132,7 @@ export default function BookingPage() {
   const [userData, setUserData] = useState({ name: "", email: "", phone: "" });
 
   // Estados de Backend y UI
-  const [bookingCode, setBookingCode] = useState("");
+  const [bookingCode, setBookingCode] = useState(""); // Se mantiene por compatibilidad de tipos, pero no se setea al inicio
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // --- NUEVO: ESTADOS PARA EL MENÚ PRE-ORDER ---
@@ -287,7 +288,7 @@ export default function BookingPage() {
       e.preventDefault();
       setIsSubmitting(true);
       
-      const generatedCode = `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+      // ELIMINADO: const generatedCode = ... (Ahora se genera en el admin)
       const zoneDetails = ZONES.find(z => z.id === selectedZone);
 
       try {
@@ -299,7 +300,7 @@ export default function BookingPage() {
               time_reserva: time,
               guests: guests,
               zone: zoneDetails?.name || "Zona General",
-              code: generatedCode,
+              code: null, // ACTUALIZADO: Se envía null inicialmente
               status: cart.length > 0 ? 'pendiente_pago' : 'pendiente', 
               pre_order: cart.length > 0 ? cart : null, 
               total_pre_order: cartTotal
@@ -331,7 +332,7 @@ export default function BookingPage() {
                         name: userData.name,
                         email: userData.email,
                         phone: userData.phone,
-                        reservation_code: generatedCode
+                        reservation_code: "PENDIENTE" // Placeholder hasta confirmar en admin
                       }
                   }),
               });
@@ -346,7 +347,7 @@ export default function BookingPage() {
 
           } else {
               // --- CAMINO B: SOLO RESERVA ---
-              setBookingCode(generatedCode);
+              // setBookingCode(generatedCode); // ELIMINADO
               setStep(4); 
               setIsSubmitting(false);
           }
@@ -579,9 +580,7 @@ export default function BookingPage() {
 
                 <div className="fixed bottom-0 left-0 w-full p-4 bg-zinc-900 border-t border-white/10 flex gap-3 z-30 safe-area-bottom">
                     <button onClick={prevStep} className="w-14 h-14 rounded-xl bg-black border border-white/10 flex items-center justify-center text-white hover:bg-zinc-800 transition-colors"><ArrowLeft/></button>
-                    <button onClick={nextStep} disabled={!selectedZone} className="flex-1 bg-[#DAA520] text-black font-bold uppercase tracking-widest rounded-xl disabled:opacity-50 hover:bg-[#B8860B] transition-colors shadow-lg">
-                        Continuar
-                    </button>
+                    <button onClick={nextStep} disabled={!selectedZone} className="flex-1 bg-[#DAA520] text-black font-bold uppercase tracking-widest rounded-xl disabled:opacity-50 hover:bg-[#B8860B] transition-colors shadow-lg">Continuar</button>
                 </div>
             </motion.div>
           )}
@@ -655,18 +654,18 @@ export default function BookingPage() {
                                         }}
                                         style={{ width: "max-content" }}
                                     >
-                                        {/* Duplicamos los productos para crear el efecto de bucle infinito */}
-                                        {[...products, ...products].map((item, idx) => (
-                                            <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
-                                                <div className="relative h-20 w-full bg-zinc-800">
-                                                    <Image src={item.image_url} alt={item.name} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                            {/* Duplicamos los productos para crear el efecto de bucle infinito */}
+                                            {[...products, ...products].map((item, idx) => (
+                                                <div key={`${item.id}-${idx}`} className="w-32 flex-shrink-0 bg-black/60 border border-white/10 rounded-lg overflow-hidden group-hover:border-[#DAA520]/50 transition-colors">
+                                                    <div className="relative h-20 w-full bg-zinc-800">
+                                                        <Image src={item.image_url} alt={item.name} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                                    </div>
+                                                    <div className="p-2">
+                                                        <p className="text-[10px] font-bold text-white truncate">{item.name}</p>
+                                                        <p className="text-[10px] text-[#DAA520] font-bold mt-0.5">${item.price.toLocaleString('es-CL')}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="p-2">
-                                                    <p className="text-[10px] font-bold text-white truncate">{item.name}</p>
-                                                    <p className="text-[10px] text-[#DAA520] font-bold mt-0.5">${item.price.toLocaleString('es-CL')}</p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))}
                                     </motion.div>
                                   ) : (
                                     <div className="text-center py-4">
@@ -685,18 +684,18 @@ export default function BookingPage() {
                                         exit={{ height: 0, opacity: 0 }}
                                         className="mt-3 bg-zinc-800/50 rounded-xl p-3 border border-white/5 overflow-hidden"
                                     >
-                                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-white/5">
-                                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Resumen Pedido</span>
-                                            <span className="text-[10px] font-bold text-[#DAA520]">${cartTotal.toLocaleString('es-CL')}</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {cart.map(item => (
-                                                <div key={item.id} className="flex justify-between text-xs text-zinc-300">
-                                                    <span>{item.quantity}x {item.name}</span>
-                                                    <span>${(item.price * item.quantity).toLocaleString('es-CL')}</span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-white/5">
+                                                <span className="text-[10px] font-bold text-zinc-400 uppercase">Resumen Pedido</span>
+                                                <span className="text-[10px] font-bold text-[#DAA520]">${cartTotal.toLocaleString('es-CL')}</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {cart.map(item => (
+                                                    <div key={item.id} className="flex justify-between text-xs text-zinc-300">
+                                                        <span>{item.quantity}x {item.name}</span>
+                                                        <span>${(item.price * item.quantity).toLocaleString('es-CL')}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                     </motion.div>
                                 )}
                               </AnimatePresence>
@@ -723,7 +722,7 @@ export default function BookingPage() {
             </motion.div>
           )}
 
-          {/* ================= PASO 4: TICKET DE CONFIRMACIÓN ================= */}
+          {/* ================= PASO 4: CONFIRMACIÓN DE SOLICITUD PENDIENTE ================= */}
           {step === 4 && (
              <motion.div 
                 key="step4" 
@@ -731,72 +730,31 @@ export default function BookingPage() {
                 animate={{ scale: 1, opacity: 1 }} 
                 className="pt-2 flex flex-col items-center pb-24"
              >
-                <div className="w-full bg-white text-black rounded-3xl overflow-hidden shadow-2xl relative max-w-sm mb-6">
-                    {/* Header del Ticket */}
-                    <div className="bg-black p-8 text-center relative border-b-4 border-[#DAA520]">
-                        <div className="absolute top-[-50%] left-1/2 -translate-x-1/2 w-40 h-40 bg-[#DAA520]/30 rounded-full blur-3xl" />
-                        <motion.div 
-                            initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                        >
-                            <CheckCircle className="w-12 h-12 text-[#DAA520] mx-auto mb-3 relative z-10" />
-                        </motion.div>
-                        <h2 className="text-white font-black text-2xl uppercase tracking-widest relative z-10">¡Exitoso!</h2>
-                        <p className="text-zinc-400 text-[10px] uppercase tracking-[0.3em] mt-1 relative z-10">Reserva Confirmada</p>
+                <div className="w-full bg-zinc-900 border border-white/10 rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-[#DAA520]"></div>
+                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <MessageCircle className="w-10 h-10 text-green-500" />
                     </div>
-
-                    <div className="p-6 relative bg-zinc-50">
-                        {/* Detalles del Código */}
-                        <div className="text-center mb-6">
-                            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-2">Tu Código</p>
-                            <div className="text-3xl font-black text-black tracking-wider font-mono bg-white border-2 border-dashed border-zinc-200 py-3 rounded-xl select-all">
-                                {bookingCode}
-                            </div>
-                        </div>
-
-                        {/* Detalles de la Reserva */}
-                        <div className="space-y-3 mb-6">
-                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
-                                <span className="text-xs font-bold text-zinc-400 uppercase">Fecha y Hora</span>
-                                <span className="text-xs font-bold text-black">{selectedDate} {currentMonthName}, {time}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
-                                <span className="text-xs font-bold text-zinc-400 uppercase">Zona</span>
-                                <span className="text-xs font-bold text-black">{ZONES.find(z => z.id === selectedZone)?.name}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-zinc-200 pb-2">
-                                <span className="text-xs font-bold text-zinc-400 uppercase">Personas</span>
-                                <span className="text-xs font-bold text-black">{guests} Pax</span>
-                            </div>
-                            
-                            {/* Bloque de Pedido en el Ticket */}
-                            {cart.length > 0 && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <ShoppingBag className="w-4 h-4 text-amber-600"/>
-                                        <span className="text-xs font-bold text-amber-800 uppercase">Pedido Express Incluido</span>
-                                    </div>
-                                    <p className="text-[10px] text-amber-700 leading-tight">Tu selección de <strong>{cartCount} productos</strong> estará lista en tu mesa a la hora de llegada.</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Advertencia / Info */}
-                        <div className="bg-zinc-100 rounded-xl p-3 flex gap-2 items-start">
-                            <AlertTriangle className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
-                            <p className="text-[9px] text-zinc-500 leading-snug">
-                                Tolerancia de espera: 15 mins.<br/>Presenta este código en recepción.
-                            </p>
-                        </div>
-                    </div>
+                    <h2 className="text-2xl font-black uppercase tracking-wider mb-2">Solicitud Recibida</h2>
+                    <p className="text-zinc-400 text-xs leading-relaxed mb-8 uppercase tracking-widest font-bold">Reserva sujeta a validación</p>
                     
-                    {/* Decoración Ticket Cutoff */}
-                    <div className="absolute top-[215px] -left-3 w-6 h-6 bg-black rounded-full"></div>
-                    <div className="absolute top-[215px] -right-3 w-6 h-6 bg-black rounded-full"></div>
-                </div>
+                    <div className="bg-black/40 border border-[#DAA520]/20 rounded-2xl p-6 mb-8 text-left space-y-4">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                             <span className="text-[10px] text-zinc-500 font-bold uppercase">Estado Actual</span>
+                             <span className="text-[10px] text-white font-bold uppercase bg-amber-900/30 px-2 py-1 rounded">Pendiente</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300 leading-relaxed">
+                            Hola <strong>{userData.name.split('')[0]}</strong>, hemos recibido tu solicitud para el <strong>{selectedDate} de {currentMonthName}</strong> a las <strong>{time}</strong>.
+                        </p>
+                        <p className="text-[11px] text-[#DAA520] font-bold">
+                            Un ejecutivo confirmará la disponibilidad en la zona {ZONES.find(z => z.id === selectedZone)?.name} y te enviará tu ticket oficial por WhatsApp a la brevedad.
+                        </p>
+                    </div>
 
-                <Link href="/" className="px-8 py-3 bg-zinc-900 text-white rounded-xl font-bold border border-zinc-800 text-xs uppercase tracking-widest hover:bg-black transition-colors">
-                    Volver al Inicio
-                </Link>
+                    <Link href="/" className="inline-block px-10 py-4 bg-white text-black font-bold rounded-xl text-[10px] uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-lg">
+                        Volver al Inicio
+                    </Link>
+                </div>
              </motion.div>
           )}
 
