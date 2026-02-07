@@ -1,167 +1,124 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import path from "path";
+import QRCode from "qrcode";
 
 // ----------------------------------------------------------------------
 // 1. CONFIGURACIÓN Y CREDENCIALES
 // ----------------------------------------------------------------------
 
-// SUPABASE: Usamos las variables de entorno para seguridad.
-// Es CRÍTICO usar la SERVICE_ROLE_KEY para poder actualizar el estado de la reserva sin restricciones.
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Inicializar Supabase con permisos de administrador (Service Role)
+// Cliente con permisos de Admin (Service Role)
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// ULTRAMSG: Usamos las variables que definiste en tu .env.local
-// Si por alguna razón no las lee, usa los valores por defecto (backup)
-const WAPP_INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID || "instance161222"; 
-const WAPP_TOKEN = process.env.ULTRAMSG_TOKEN || "65qat7d38cyc4ozf";     
-
-// Construimos la URL base automáticamente
+// Configuración UltraMsg
+const WAPP_INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID || "instance161222";
+const WAPP_TOKEN = process.env.ULTRAMSG_TOKEN || "65qat7d38cyc4ozf";
 const WAPP_API_URL = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}`;
 
 // ----------------------------------------------------------------------
 // 2. FUNCIONES AUXILIARES
 // ----------------------------------------------------------------------
 
-// Carga segura de Canvas (Fallback opcional por si falla la imagen del cliente)
-// Esto permite que el servidor genere la imagen si el navegador falla.
-let canvasLib: any = null;
-try {
-    if (typeof window === 'undefined') {
-        canvasLib = require("canvas");
-    }
-} catch (e) {
-    // Si no está instalado canvas en el servidor, no pasa nada, usamos la imagen del cliente.
-    console.warn("⚠️ Canvas server-side no disponible. Se dependerá 100% de la imagen del cliente.");
-}
-
 /**
- * Genera una imagen PNG del ticket en el servidor (Respaldo)
- * Solo se usa si el Dashboard no envió la URL de la imagen generada.
+ * Genera el Buffer de la imagen QR a partir de una URL o Texto
  */
-async function generarTicketImagenServidor(reserva: any, codigo: string) {
-  if (!canvasLib) return null;
-
+async function generarImagenQR(texto: string): Promise<Buffer> {
   try {
-    const { createCanvas, loadImage } = canvasLib;
-    // Intentamos buscar la imagen de fondo en la carpeta public
-    const bgPath = path.join(process.cwd(), "public", "ticket-bg.png");
-    
-    let width = 1080;
-    let height = 1920;
-    let image = null;
-
-    try {
-        image = await loadImage(bgPath);
-        width = image.width;
-        height = image.height;
-    } catch (e) {
-        console.warn("⚠️ No se encontró ticket-bg.png en servidor para fallback.");
-    }
-
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
-
-    // 1. Dibujar Fondo
-    if (image) {
-        ctx.drawImage(image, 0, 0);
-    } else {
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, width, height);
-    }
-
-    // 2. Escribir Datos (Diseño Básico de Respaldo)
-    ctx.fillStyle = "#DAA520"; // Color dorado
-    ctx.font = "bold 80px Arial"; 
-    ctx.textAlign = "center";
-    
-    // Posición aproximada del código
-    ctx.fillText(codigo, width / 2, 900); 
-
-    // Detalles simples
-    ctx.font = "bold 40px Arial";
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(reserva.date_reserva, width / 2, 1100);
-    ctx.fillText(`${reserva.guests} Personas`, width / 2, 1200);
-
-    return canvas.toBuffer("image/png");
-
-  } catch (error) {
-    console.error("❌ Error generando ticket server-side:", error);
-    return null; 
+    // Generamos el QR en memoria (Buffer)
+    // margin: 2 crea un borde blanco pequeño para que sea legible
+    // width: 500 define una buena calidad para WhatsApp
+    const qrBuffer = await QRCode.toBuffer(texto, {
+      type: 'png',
+      width: 500,
+      margin: 2,
+      color: {
+        dark: '#000000', // Puntos negros
+        light: '#ffffff' // Fondo blanco
+      }
+    });
+    return qrBuffer;
+  } catch (err) {
+    console.error("❌ Error generando QR:", err);
+    throw new Error("Fallo al generar código QR");
   }
 }
 
 /**
- * Envía el mensaje a UltraMsg (WhatsApp)
+ * Sube el QR a Supabase y retorna la URL pública
  */
-async function enviarWhatsApp(telefono: string, imagenUrl: string | null, codigo: string, nombre: string) {
-  // 1. Limpieza y Formato de Teléfono
-  let raw = telefono.replace(/\D/g, ""); // Quitar todo lo que no sea número
-  
-  // Lógica para Chile: Asegurar formato 569XXXXXXXX
-  if (raw.length === 9 && raw.startsWith("9")) {
-      raw = "56" + raw;
-  }
-  if (raw.length === 8) {
-      raw = "569" + raw;
-  }
-  
-  // El número final para UltraMsg
-  const phoneFinal = raw; 
+async function subirQRaSupabase(idReserva: string, buffer: Buffer): Promise<string | null> {
+  try {
+    const fileName = `qr-${idReserva}-${Date.now()}.png`;
+    
+    // Subir al bucket 'qrcodes'
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('qrcodes')
+      .upload(fileName, buffer, { 
+        contentType: 'image/png', 
+        upsert: true 
+      });
 
-  // 2. Construcción del Mensaje (Caption)
+    if (uploadError) {
+      console.error("❌ Error subiendo a Supabase Storage:", uploadError);
+      return null;
+    }
+
+    // Obtener URL Pública
+    const { data } = supabaseAdmin.storage
+      .from('qrcodes')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  } catch (error) {
+    console.error("❌ Error en gestión de archivos:", error);
+    return null;
+  }
+}
+
+/**
+ * Envía el mensaje con el QR a UltraMsg
+ */
+async function enviarWhatsApp(telefono: string, qrUrl: string, nombre: string, fecha: string, personas: number) {
+  // Limpieza de teléfono (Formato Chile 569...)
+  let raw = telefono.replace(/\D/g, "");
+  if (raw.length === 9 && raw.startsWith("9")) raw = "56" + raw;
+  if (raw.length === 8) raw = "569" + raw;
+  
+  // Mensaje
   const mensaje = `Hola ${nombre} 👋,
 
-¡Tu reserva en *Boulevard Zapallar* ha sido CONFIRMADA! 🥂
+¡Tu reserva en *Boulevard Zapallar* está CONFIRMADA! 🥂
 
-📌 *Código:* ${codigo}
+📅 Fecha: ${fecha}
+👥 Personas: ${personas}
 
-Adjuntamos tu ticket oficial de entrada. 🎟️
-Por favor presenta la imagen adjunta en recepción para validar tu ingreso.
+👇 *IMPORTANTE: ACCESO*
+Este código QR es tu pase de entrada. Por favor muéstralo en recepción para ser escaneado.
 
 ¡Te esperamos!`;
 
   try {
-    // Definir endpoint (Si hay imagen usa /image, si no usa /chat)
-    const endpoint = imagenUrl ? "/messages/image" : "/messages/chat";
-    const url = `${WAPP_API_URL}${endpoint}`;
-
-    // Construir parámetros URL Encoded
     const params = new URLSearchParams();
     params.append("token", WAPP_TOKEN);
-    params.append("to", phoneFinal);
-    
-    if (imagenUrl) {
-        params.append("image", imagenUrl);
-        params.append("caption", mensaje);
-    } else {
-        params.append("body", mensaje);
-    }
-    params.append("priority", "10"); // Prioridad alta
+    params.append("to", raw);
+    params.append("image", qrUrl); // Enviamos el QR como imagen
+    params.append("caption", mensaje);
+    params.append("priority", "10");
 
-    console.log(`📨 Enviando a: ${phoneFinal} | URL: ${url} | Tiene Imagen: ${!!imagenUrl}`);
-
-    const res = await fetch(url, {
+    const res = await fetch(`${WAPP_API_URL}/messages/image`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params
     });
-    
+
     const responseText = await res.text();
-    console.log("📡 Respuesta UltraMsg:", responseText);
-    
-    if (!res.ok) {
-        return { success: false, error: responseText };
-    }
+    if (!res.ok) throw new Error(responseText);
     
     return { success: true, details: responseText };
-
   } catch (e: any) {
-    console.error("❌ Error conexión WhatsApp:", e);
+    console.error("❌ Error enviando WhatsApp:", e);
     return { success: false, error: e.message };
   }
 }
@@ -169,21 +126,23 @@ Por favor presenta la imagen adjunta en recepción para validar tu ingreso.
 // ----------------------------------------------------------------------
 // 3. ENDPOINT PRINCIPAL (POST)
 // ----------------------------------------------------------------------
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    
-    // Recibimos datos del Dashboard:
-    // reservaId: ID de la reserva a confirmar
-    // ticketUrl: URL de la imagen generada por html2canvas en el cliente
-    // codigo: El código generado en el cliente
-    // phone: El teléfono del cliente
-    const { reservaId, ticketUrl: clientTicketUrl, codigo: clientCodigo, phone } = body;
+    const { reservaId } = body;
 
-    // Validación básica
-    if (!reservaId) return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
+    // Detectar el dominio actual para crear el link de validación
+    // (Ej: https://boulevard-zapallar.com o http://localhost:3000)
+    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_BASE_URL || "https://tupaginaweb.com";
 
-    // 1. Obtener Reserva de la Base de Datos para validar existencia
+    if (!reservaId) {
+      return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
+    }
+
+    console.log(`🚀 Iniciando confirmación para reserva: ${reservaId}`);
+
+    // 1. Obtener datos de la reserva
     const { data: reserva, error } = await supabaseAdmin
       .from("reservas")
       .select("*")
@@ -191,71 +150,53 @@ export async function POST(req: Request) {
       .single();
 
     if (error || !reserva) {
-        return NextResponse.json({ error: "Reserva no encontrada en DB" }, { status: 404 });
+      return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
     }
 
-    // 2. Determinar Código Final
-    // Prioridad: El que viene del dashboard > El que ya tiene la reserva > Generar uno nuevo
-    const codigoFinal = clientCodigo || reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+    // 2. Generar URL de Validación
+    // Esta es la URL que leerá el escáner del guardia
+    const urlValidacion = `${origin}/admin/validar/${reservaId}`;
 
-    // 3. Gestión de Imagen (Prioridad: Cliente > Server Fallback)
-    let finalTicketUrl = clientTicketUrl || ""; 
+    // 3. Generar Imagen QR (Buffer)
+    const qrBuffer = await generarImagenQR(urlValidacion);
 
-    // FALLBACK: Si no vino imagen del cliente, intentamos generarla en servidor (si canvas está disponible)
-    if (!finalTicketUrl && canvasLib) {
-        try {
-            console.log("⚠️ No llegó imagen del cliente, intentando generar en servidor...");
-            const ticketBuffer = await generarTicketImagenServidor(reserva, codigoFinal);
-            
-            if (ticketBuffer) {
-                const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
-                const { error: uploadError } = await supabaseAdmin.storage
-                  .from('tickets')
-                  .upload(fileName, ticketBuffer, { contentType: 'image/png', upsert: true });
+    // 4. Subir QR a Supabase Storage
+    const publicQrUrl = await subirQRaSupabase(reservaId, qrBuffer);
 
-                if (!uploadError) {
-                    const { data } = supabaseAdmin.storage.from('tickets').getPublicUrl(fileName);
-                    finalTicketUrl = data.publicUrl;
-                    console.log("✅ Imagen generada en SERVIDOR:", finalTicketUrl);
-                }
-            }
-        } catch (e) {
-            console.error("Fallo generación fallback server:", e);
-        }
+    if (!publicQrUrl) {
+      throw new Error("No se pudo generar la URL pública del QR");
     }
 
-    // 4. Enviar WhatsApp
-    // Usamos el teléfono que viene del dashboard (preferible) o el de la reserva
-    const targetPhone = phone || reserva.phone;
-    let whatsappResult: any = { success: false, error: "Sin teléfono" };
-    
-    if (targetPhone) {
-       whatsappResult = await enviarWhatsApp(targetPhone, finalTicketUrl || null, codigoFinal, reserva.name);
-    } else {
-       console.warn("⚠️ Reserva sin teléfono, se omite envío de WhatsApp.");
+    // 5. Enviar WhatsApp al cliente
+    let whatsappResult = { success: false, error: "Sin teléfono" };
+    if (reserva.phone) {
+      whatsappResult = await enviarWhatsApp(
+        reserva.phone, 
+        publicQrUrl, 
+        reserva.name, 
+        reserva.date_reserva, // Asegúrate que este campo exista en tu DB
+        reserva.guests        // Asegúrate que este campo exista en tu DB
+      );
     }
 
-    // 5. Actualizar Base de Datos
-    // Guardamos estado 'confirmada' y el código definitivo
-    const { error: updateError } = await supabaseAdmin.from("reservas")
+    // 6. Actualizar Base de Datos
+    // Guardamos el estado y la URL del QR generado por si se necesita reenviar
+    const { error: updateError } = await supabaseAdmin
+      .from("reservas")
       .update({ 
         status: "confirmada", 
-        code: codigoFinal, 
-        // ticket_url: finalTicketUrl // Descomentar si tienes esta columna en tu DB
+        qr_url: publicQrUrl // Asegúrate de tener esta columna en tu tabla 'reservas', si no, bórrala de aquí
       })
       .eq("id", reservaId);
 
     if (updateError) {
-        console.error("Error al actualizar DB:", updateError);
-        // No retornamos error fatal porque el WS ya se envió, pero lo logueamos
+      console.error("⚠️ Error actualizando estado en DB:", updateError);
     }
 
-    // 6. Responder al Dashboard
     return NextResponse.json({ 
-        success: true, 
-        whatsapp: whatsappResult.success,
-        whatsapp_details: whatsappResult,
-        code: codigoFinal
+      success: true, 
+      qr_url: publicQrUrl,
+      whatsapp: whatsappResult 
     });
 
   } catch (err: any) {
