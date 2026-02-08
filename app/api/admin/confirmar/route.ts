@@ -22,20 +22,25 @@ const WAPP_API_URL = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}`;
 // ----------------------------------------------------------------------
 
 /**
+ * Genera un código aleatorio formato BZ-XXXX
+ */
+function generarCodigoBZ(): string {
+  const numeroAleatorio = Math.floor(1000 + Math.random() * 9000); // Genera entre 1000 y 9999
+  return `BZ-${numeroAleatorio}`;
+}
+
+/**
  * Genera el Buffer de la imagen QR a partir de una URL o Texto
  */
 async function generarImagenQR(texto: string): Promise<Buffer> {
   try {
-    // Generamos el QR en memoria (Buffer)
-    // margin: 2 crea un borde blanco pequeño para que sea legible
-    // width: 500 define una buena calidad para WhatsApp
     const qrBuffer = await QRCode.toBuffer(texto, {
       type: 'png',
       width: 500,
       margin: 2,
       color: {
-        dark: '#000000', // Puntos negros
-        light: '#ffffff' // Fondo blanco
+        dark: '#000000',
+        light: '#ffffff'
       }
     });
     return qrBuffer;
@@ -80,8 +85,15 @@ async function subirQRaSupabase(idReserva: string, buffer: Buffer): Promise<stri
 /**
  * Envía el mensaje con el QR a UltraMsg
  */
-async function enviarWhatsApp(telefono: string, qrUrl: string, nombre: string, fecha: string, personas: number) {
-  // Limpieza de teléfono (Formato Chile 569...)
+async function enviarWhatsApp(
+  telefono: string, 
+  qrUrl: string, 
+  nombre: string, 
+  fecha: string, 
+  personas: number,
+  codigoReserva: string // Añado el código al mensaje por seguridad
+) {
+  // Limpieza de teléfono
   let raw = telefono.replace(/\D/g, "");
   if (raw.length === 9 && raw.startsWith("9")) raw = "56" + raw;
   if (raw.length === 8) raw = "569" + raw;
@@ -91,10 +103,12 @@ async function enviarWhatsApp(telefono: string, qrUrl: string, nombre: string, f
 
 ¡Tu reserva en *Boulevard Zapallar* está CONFIRMADA! 🥂
 
+🔑 *CÓDIGO DE ACCESO: ${codigoReserva}*
+
 📅 Fecha: ${fecha}
 👥 Personas: ${personas}
 
-👇 *IMPORTANTE: ACCESO*
+👇 *IMPORTANTE: TICKET DE INGRESO*
 Este código QR es tu pase de entrada. Por favor muéstralo en recepción para ser escaneado.
 
 ¡Te esperamos!`;
@@ -103,7 +117,7 @@ Este código QR es tu pase de entrada. Por favor muéstralo en recepción para s
     const params = new URLSearchParams();
     params.append("token", WAPP_TOKEN);
     params.append("to", raw);
-    params.append("image", qrUrl); // Enviamos el QR como imagen
+    params.append("image", qrUrl);
     params.append("caption", mensaje);
     params.append("priority", "10");
 
@@ -132,8 +146,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { reservaId } = body;
 
-    // Detectar el dominio actual para crear el link de validación
-    // (Ej: https://boulevard-zapallar.com o http://localhost:3000)
     const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_BASE_URL || "https://tupaginaweb.com";
 
     if (!reservaId) {
@@ -142,7 +154,7 @@ export async function POST(req: Request) {
 
     console.log(`🚀 Iniciando confirmación para reserva: ${reservaId}`);
 
-    // 1. Obtener datos de la reserva
+    // 1. Obtener datos de la reserva actual
     const { data: reserva, error } = await supabaseAdmin
       .from("reservas")
       .select("*")
@@ -153,10 +165,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
     }
 
-    // 2. Generar URL de Validación
-    // Esta es la URL que leerá el escáner del guardia
-    const urlValidacion = `${origin}/admin/validar/${reservaId}`;
+    // ---------------------------------------------------------
+    // NUEVA LÓGICA: Generar Código BZ Único
+    // ---------------------------------------------------------
+    const codigoBZ = generarCodigoBZ(); 
+    console.log(`🆕 Código Generado: ${codigoBZ}`);
 
+    // 2. Generar URL de Validación (Link que contendrá el QR)
+    // Usamos el ID de la reserva, pero ahora el sistema ya tendrá el código BZ guardado
+    const urlValidacion = `${origin}/tickets/${reservaId}`; 
+    // NOTA: Cambié esto a /tickets/[id] para que el usuario al escanear vea SU ticket.
+    // Si prefieres que sea para el guardia (/admin/validar/[id]), cámbialo de nuevo.
+    
     // 3. Generar Imagen QR (Buffer)
     const qrBuffer = await generarImagenQR(urlValidacion);
 
@@ -167,34 +187,37 @@ export async function POST(req: Request) {
       throw new Error("No se pudo generar la URL pública del QR");
     }
 
-    // 5. Enviar WhatsApp al cliente
-    let whatsappResult = { success: false, error: "Sin teléfono" };
-    if (reserva.phone) {
-      whatsappResult = await enviarWhatsApp(
-        reserva.phone, 
-        publicQrUrl, 
-        reserva.name, 
-        reserva.date_reserva, // Asegúrate que este campo exista en tu DB
-        reserva.guests        // Asegúrate que este campo exista en tu DB
-      );
-    }
-
-    // 6. Actualizar Base de Datos
-    // Guardamos el estado y la URL del QR generado por si se necesita reenviar
+    // 5. Actualizar Base de Datos con el CÓDIGO BZ
     const { error: updateError } = await supabaseAdmin
       .from("reservas")
       .update({ 
-        status: "confirmada", 
-        qr_url: publicQrUrl // Asegúrate de tener esta columna en tu tabla 'reservas', si no, bórrala de aquí
+        status: "confirmada",      // Cambia estado a verde
+        reservation_code: codigoBZ, // <--- AQUÍ SE GUARDA EL CÓDIGO BZ-XXXX
+        qr_url: publicQrUrl        // Guarda la imagen del QR
       })
       .eq("id", reservaId);
 
     if (updateError) {
       console.error("⚠️ Error actualizando estado en DB:", updateError);
+      throw updateError;
+    }
+
+    // 6. Enviar WhatsApp al cliente
+    let whatsappResult: any = { success: false, error: "Sin teléfono" };
+    if (reserva.phone) {
+      whatsappResult = await enviarWhatsApp(
+        reserva.phone, 
+        publicQrUrl, 
+        reserva.name, 
+        reserva.date_reserva || "Fecha Pendiente", 
+        reserva.guests || 0,
+        codigoBZ // Pasamos el código para que salga en el texto del chat
+      );
     }
 
     return NextResponse.json({ 
       success: true, 
+      reservation_code: codigoBZ,
       qr_url: publicQrUrl,
       whatsapp: whatsappResult 
     });

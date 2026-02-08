@@ -131,7 +131,6 @@ export default function DashboardPage() {
       const { data: ventasData } = await supabase.from('ventas_generales').select('*').order('created_at', { ascending: false });
       if (ventasData) setVentas(ventasData);
   };
-
   // --- LÓGICA CARRUSEL UNIFICADO (NUEVA) ---
   // Fusiona Shows y Promos para visualizarlos en el panel de control del Carrusel
   const getCarouselItems = () => {
@@ -290,7 +289,7 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
-          // Combinamos nombre cliente en descripción para mantener simple la tabla, o úsalo como prefieras
+          // Combinamos nombre cliente en descripción para mantener simple la tabla
           const descFinal = currentVenta.cliente ? `${currentVenta.cliente} - ${currentVenta.descripcion}` : currentVenta.descripcion;
 
           const ventaData = {
@@ -581,8 +580,10 @@ export default function DashboardPage() {
     setProcessingId(reserva.id); 
 
     try {
-        // 1. DETERMINAR CÓDIGO FINAL (Prioridad: el que ya tiene > generar uno nuevo)
-        const codigoFinal = reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+        // 1. GENERAR CÓDIGO BZ LOCALMENTE
+        // Lo generamos aquí para asegurar que lo que ve el usuario en la imagen es IDÉNTICO a lo que se guarda en la BD
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        const codigoFinal = reserva.code || `BZ-${randomNum}`;
         console.log("Generando ticket para código:", codigoFinal);
 
         // 2. CREAR ELEMENTO VISUAL (Ticket Negro y Dorado)
@@ -638,8 +639,7 @@ export default function DashboardPage() {
         if (blob) {
             // Nombre único con el código
             const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
-            // Subimos directamente usando uploadImageToSupabase modificado o lógica directa
-            // Usamos lógica directa aquí para asegurar bucket 'tickets'
+            // Subimos directamente usando lógica directa para asegurar bucket 'tickets'
             const { error: uploadError } = await supabase.storage
                 .from('tickets') // Asegúrate que este bucket existe y es público
                 .upload(fileName, blob, { contentType: 'image/png', upsert: true });
@@ -654,14 +654,14 @@ export default function DashboardPage() {
         }
 
         // 5. ENVIAR A LA API (Sincronizando Código)
-        // Enviamos 'codigoFinal' para forzar a la API a usar ESTE mismo código
+        // Enviamos 'reservation_code' para forzar a la API a guardar ESTE mismo código
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
                 reservaId: reserva.id,
                 ticketUrl: ticketPublicUrl,
-                codigo: codigoFinal, // <--- CLAVE DE LA SINCRONIZACIÓN
+                reservation_code: codigoFinal, // <--- CLAVE DE LA SINCRONIZACIÓN
                 phone: reserva.phone
             }),
         });
@@ -683,7 +683,6 @@ export default function DashboardPage() {
         setProcessingId(null);
     }
   };
-
   // ---------------------------------------------------------
   // NUEVAS FUNCIONES PARA EL PANEL AVANZADO DE RESERVAS
   // ---------------------------------------------------------
@@ -716,9 +715,12 @@ export default function DashboardPage() {
   const filteredReservas = reservas.filter(r => {
       // Filtro por Texto (Nombre, Email o Código BZ)
       const searchLower = reservaSearch.toLowerCase();
+      // Buscamos en el campo 'code' o 'reservation_code' dependiendo de tu DB
+      const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
+      
       const matchText = 
           (r.name || "").toLowerCase().includes(searchLower) || 
-          (r.code || "").toLowerCase().includes(searchLower) ||
+          codeMatch ||
           (r.email || "").toLowerCase().includes(searchLower);
 
       // Filtro por Estado
@@ -829,10 +831,9 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* --- 1.5 VISTA VENTAS / FINANZAS (NUEVO & EXTENDIDO) --- */}
+            {/* --- 1.5 VISTA VENTAS / FINANZAS --- */}
             {activeTab === "ventas" && (
                 <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Header de Finanzas */}
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Gestión Financiera 360°</h3>
                         <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
@@ -840,9 +841,7 @@ export default function DashboardPage() {
                         </button>
                     </div>
 
-                    {/* SECCIÓN 1: KPIs GLOBALES (NO SE HA TOCADO) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        {/* INGRESO TOTAL */}
                         <div className="bg-zinc-900 border border-green-900/30 p-6 rounded-2xl relative overflow-hidden group hover:border-green-500/30 transition-all">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-24 h-24 text-green-500" /></div>
                             <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Ingresos Totales (Global)</p>
@@ -850,7 +849,6 @@ export default function DashboardPage() {
                             <p className="text-[10px] text-zinc-500 mt-2">Incluye Pre-orders web y Ventas en caja</p>
                         </div>
 
-                        {/* VENTA DE ENTRADAS */}
                         <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-[#DAA520]/30 transition-all">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Ticket className="w-24 h-24 text-[#DAA520]" /></div>
                             <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Entradas</p>
@@ -859,7 +857,6 @@ export default function DashboardPage() {
                             <p className="text-[10px] text-zinc-500 mt-2">Tickets / Cover / Accesos</p>
                         </div>
 
-                        {/* VENTA DE MENÚ */}
                         <div className="bg-zinc-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/30 transition-all">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-24 h-24 text-blue-500" /></div>
                             <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Menú / Carta</p>
@@ -869,9 +866,7 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* --- NUEVO: RENDIMIENTO POR SHOW Y DETALLE DE PEDIDOS (INSERTADO AQUÍ) --- */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                        {/* PANEL 1: VENTAS POR SHOW (Entradas y Productos) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
                              <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><Music className="w-5 h-5 text-zinc-400"/> Ventas por Show</h3>
@@ -912,7 +907,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* PANEL 2: DETALLE DE PEDIDOS WEB (Reservas con Consumo) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[400px] flex flex-col">
                              <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><Utensils className="w-5 h-5 text-zinc-400"/> Detalle Pedidos Web</h3>
@@ -949,10 +943,7 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* --- FIN NUEVO CONTENIDO --- */}
-
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* SECCIÓN 2: HISTORIAL DE CLIENTES (NUEVO) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold flex items-center gap-2"><UserCheck className="w-5 h-5 text-zinc-400"/> Historial de Clientes</h3>
@@ -989,7 +980,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* SECCIÓN 3: ÚLTIMAS TRANSACCIONES (REGISTRO CRUDO) */}
                         <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 h-[500px] flex flex-col">
                             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-zinc-400"/> Transacciones en Caja</h3>
                             <div className="overflow-y-auto custom-scrollbar flex-1">
@@ -1034,7 +1024,6 @@ export default function DashboardPage() {
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     
-                    {/* KPI RÁPIDOS RESERVAS */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
                         <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center">
                             <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Reservas</span>
@@ -1057,7 +1046,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* BARRA DE CONTROL */}
                     <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col md:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
                         <div className="relative w-full md:w-1/3 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
@@ -1097,7 +1085,6 @@ export default function DashboardPage() {
                         />
                     </div>
 
-                    {/* TABLA DE RESERVAS */}
                     <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden flex-1 min-h-[500px] flex flex-col">
                         <div className="overflow-x-auto custom-scrollbar flex-1">
                             <table className="w-full text-left text-sm text-zinc-400">
@@ -1124,8 +1111,9 @@ export default function DashboardPage() {
                                             <tr key={res.id} className="hover:bg-white/[0.02] transition-colors group">
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-1">
+                                                        {/* AQUÍ MOSTRAMOS EL CÓDIGO BZ */}
                                                         <span className="font-mono font-black text-[#DAA520] tracking-widest text-xs bg-[#DAA520]/10 px-2 py-0.5 rounded w-fit border border-[#DAA520]/20">
-                                                            {res.code || "SIN-CODIGO"}
+                                                            {res.reservation_code || res.code || "SIN-CODIGO"}
                                                         </span>
                                                         <span className="text-white font-bold flex items-center gap-1.5 mt-1">
                                                             <Clock className="w-3 h-3 text-zinc-500"/> {res.time_reserva} hrs
