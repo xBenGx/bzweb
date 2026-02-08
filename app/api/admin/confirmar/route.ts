@@ -91,7 +91,7 @@ async function enviarWhatsApp(
   nombre: string, 
   fecha: string, 
   personas: number,
-  codigoReserva: string // Añado el código al mensaje por seguridad
+  codigoReserva: string
 ) {
   // Limpieza de teléfono
   let raw = telefono.replace(/\D/g, "");
@@ -146,7 +146,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { reservaId } = body;
 
-    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_BASE_URL || "https://tupaginaweb.com";
+    // --- DETECCIÓN ROBUSTA DEL DOMINIO (Para evitar 404 en Vercel) ---
+    const protocol = req.headers.get("x-forwarded-proto") || "https";
+    const host = req.headers.get("host");
+    
+    // Prioridad: 1. Variable de entorno, 2. Header Host, 3. Fallback manual
+    let origin = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!origin && host) {
+        origin = `${protocol}://${host}`;
+    }
+    if (!origin) {
+        origin = "https://bzweb.vercel.app"; // Fallback final por si todo falla
+    }
 
     if (!reservaId) {
       return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
@@ -166,17 +177,17 @@ export async function POST(req: Request) {
     }
 
     // ---------------------------------------------------------
-    // NUEVA LÓGICA: Generar Código BZ Único
+    // LÓGICA: Generar Código BZ Único
     // ---------------------------------------------------------
     const codigoBZ = generarCodigoBZ(); 
     console.log(`🆕 Código Generado: ${codigoBZ}`);
 
-    // 2. Generar URL de Validación (Link que contendrá el QR)
-    // Usamos el ID de la reserva, pero ahora el sistema ya tendrá el código BZ guardado
+    // 2. Generar URL de Validación CORRECTA
+    // IMPORTANTE: Aquí se define a dónde lleva el QR.
     const urlValidacion = `${origin}/validar/${reservaId}`;
-    // NOTA: Cambié esto a /tickets/[id] para que el usuario al escanear vea SU ticket.
-    // Si prefieres que sea para el guardia (/admin/validar/[id]), cámbialo de nuevo.
     
+    console.log(`🔗 URL incrustada en QR: ${urlValidacion}`);
+
     // 3. Generar Imagen QR (Buffer)
     const qrBuffer = await generarImagenQR(urlValidacion);
 
@@ -191,9 +202,9 @@ export async function POST(req: Request) {
     const { error: updateError } = await supabaseAdmin
       .from("reservas")
       .update({ 
-        status: "confirmada",      // Cambia estado a verde
-        reservation_code: codigoBZ, // <--- AQUÍ SE GUARDA EL CÓDIGO BZ-XXXX
-        qr_url: publicQrUrl        // Guarda la imagen del QR
+        status: "confirmada",      
+        reservation_code: codigoBZ, // Guardar código BZ
+        qr_url: publicQrUrl        // Guardar imagen QR
       })
       .eq("id", reservaId);
 
@@ -211,7 +222,7 @@ export async function POST(req: Request) {
         reserva.name, 
         reserva.date_reserva || "Fecha Pendiente", 
         reserva.guests || 0,
-        codigoBZ // Pasamos el código para que salga en el texto del chat
+        codigoBZ
       );
     }
 
