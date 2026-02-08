@@ -22,10 +22,10 @@ const WAPP_API_URL = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}`;
 // ----------------------------------------------------------------------
 
 /**
- * Genera un código aleatorio formato BZ-XXXX
+ * Genera un código aleatorio formato BZ-XXXX (Solo como respaldo)
  */
 function generarCodigoBZ(): string {
-  const numeroAleatorio = Math.floor(1000 + Math.random() * 9000); // Genera entre 1000 y 9999
+  const numeroAleatorio = Math.floor(1000 + Math.random() * 9000); 
   return `BZ-${numeroAleatorio}`;
 }
 
@@ -91,7 +91,7 @@ async function enviarWhatsApp(
   nombre: string, 
   fecha: string, 
   personas: number,
-  codigoReserva: string
+  codigoReserva: string 
 ) {
   // Limpieza de teléfono
   let raw = telefono.replace(/\D/g, "");
@@ -144,26 +144,34 @@ Este código QR es tu pase de entrada. Por favor muéstralo en recepción para s
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { reservaId } = body;
+    // AQUI ESTÁ LA CLAVE: Recibimos reservation_code del Dashboard
+    const { reservaId, reservation_code } = body; 
 
-    // --- DETECCIÓN ROBUSTA DEL DOMINIO (Para evitar 404 en Vercel) ---
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const host = req.headers.get("host");
-    
-    // Prioridad: 1. Variable de entorno, 2. Header Host, 3. Fallback manual
+    // --- DETECCIÓN DE DOMINIO PARA EL QR (Corrección 404) ---
+    // Prioridad: 
+    // 1. Variable de Entorno (Recomendado configurar en Vercel: https://tuweb.com)
+    // 2. Header 'origin' (El navegador suele enviarlo)
+    // 3. Fallback directo a tu dominio de Vercel
     let origin = process.env.NEXT_PUBLIC_BASE_URL;
-    if (!origin && host) {
-        origin = `${protocol}://${host}`;
-    }
+    
     if (!origin) {
-        origin = "https://bzweb.vercel.app"; // Fallback final por si todo falla
+        const reqOrigin = req.headers.get("origin");
+        if (reqOrigin && !reqOrigin.includes("localhost")) {
+            origin = reqOrigin;
+        } else {
+            // FALLBACK FINAL: Pon aquí tu dominio real si todo falla
+            origin = "https://bzweb.vercel.app"; 
+        }
     }
+    
+    // Quitamos trailing slash si existe
+    origin = origin.replace(/\/$/, "");
 
     if (!reservaId) {
       return NextResponse.json({ error: "Falta reservaId" }, { status: 400 });
     }
 
-    console.log(`🚀 Iniciando confirmación para reserva: ${reservaId}`);
+    console.log(`🚀 Iniciando confirmación. ID: ${reservaId}`);
 
     // 1. Obtener datos de la reserva actual
     const { data: reserva, error } = await supabaseAdmin
@@ -177,16 +185,18 @@ export async function POST(req: Request) {
     }
 
     // ---------------------------------------------------------
-    // LÓGICA: Generar Código BZ Único
+    // SINCRONIZACIÓN: Usamos el código que mandó el Dashboard
     // ---------------------------------------------------------
-    const codigoBZ = generarCodigoBZ(); 
-    console.log(`🆕 Código Generado: ${codigoBZ}`);
+    // Si el dashboard mandó un código, lo usamos. Si no, generamos uno.
+    const codigoBZ = reservation_code || generarCodigoBZ(); 
+    
+    console.log(`✅ Usando Código Sincronizado: ${codigoBZ}`);
 
-    // 2. Generar URL de Validación CORRECTA
-    // IMPORTANTE: Aquí se define a dónde lleva el QR.
+    // 2. Generar URL de Validación (Link dentro del QR)
+    // Apuntamos a la carpeta /validar/[id]
     const urlValidacion = `${origin}/validar/${reservaId}`;
     
-    console.log(`🔗 URL incrustada en QR: ${urlValidacion}`);
+    console.log(`🔗 Link generado en QR: ${urlValidacion}`);
 
     // 3. Generar Imagen QR (Buffer)
     const qrBuffer = await generarImagenQR(urlValidacion);
@@ -198,13 +208,13 @@ export async function POST(req: Request) {
       throw new Error("No se pudo generar la URL pública del QR");
     }
 
-    // 5. Actualizar Base de Datos con el CÓDIGO BZ
+    // 5. Actualizar Base de Datos con el CÓDIGO BZ Sincronizado
     const { error: updateError } = await supabaseAdmin
       .from("reservas")
       .update({ 
         status: "confirmada",      
-        reservation_code: codigoBZ, // Guardar código BZ
-        qr_url: publicQrUrl        // Guardar imagen QR
+        reservation_code: codigoBZ, // Guardamos EL MISMO código que vio el usuario
+        qr_url: publicQrUrl        
       })
       .eq("id", reservaId);
 
@@ -222,13 +232,13 @@ export async function POST(req: Request) {
         reserva.name, 
         reserva.date_reserva || "Fecha Pendiente", 
         reserva.guests || 0,
-        codigoBZ
+        codigoBZ // Enviamos el código sincronizado por WS
       );
     }
 
     return NextResponse.json({ 
       success: true, 
-      reservation_code: codigoBZ,
+      reservation_code: codigoBZ, // Devolvemos el mismo para confirmar
       qr_url: publicQrUrl,
       whatsapp: whatsappResult 
     });
