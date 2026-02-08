@@ -53,12 +53,35 @@ export default function DashboardPage() {
   // NUEVO ESTADO: VENTAS
   const [ventas, setVentas] = useState<any[]>([]);
 
+  // --- NUEVOS ESTADOS PARA EL PANEL DE RESERVAS AVANZADO ---
+  const [reservaFilterStatus, setReservaFilterStatus] = useState("todos"); // todos, pendiente, confirmada, realizado
+  const [reservaSearch, setReservaSearch] = useState("");
+  const [reservaDateFilter, setReservaDateFilter] = useState(""); // vacío = todas las fechas
+
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   
+  // --- ESTADOS DE MODALES Y ARCHIVOS ---
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [currentPromo, setCurrentPromo] = useState<any>(null);
+  
+  const [isShowModalOpen, setIsShowModalOpen] = useState(false);
+  const [currentShow, setCurrentShow] = useState<any>(null);
+
+  // MODAL PARA MENÚ EXPRESS
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
+
+  // MODAL PARA VENTAS
+  const [isVentaModalOpen, setIsVentaModalOpen] = useState(false);
+  const [currentVenta, setCurrentVenta] = useState<any>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   // --- CARGA DE DATOS Y REALTIME (Conexión Supabase) ---
   useEffect(() => {
     fetchData();
@@ -211,24 +234,6 @@ export default function DashboardPage() {
   // Filtramos solo las reservas que tienen pedidos para el panel de detalle
   const reservasConPedidoFull = reservas.filter(r => r.total_pre_order > 0);
 
-
-  // --- ESTADOS DE MODALES Y ARCHIVOS ---
-  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-  const [currentPromo, setCurrentPromo] = useState<any>(null);
-  
-  const [isShowModalOpen, setIsShowModalOpen] = useState(false);
-  const [currentShow, setCurrentShow] = useState<any>(null);
-
-  // MODAL PARA MENÚ EXPRESS
-  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
-  const [currentMenuItem, setCurrentMenuItem] = useState<any>(null);
-
-  // MODAL PARA VENTAS
-  const [isVentaModalOpen, setIsVentaModalOpen] = useState(false);
-  const [currentVenta, setCurrentVenta] = useState<any>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // --- MANEJADOR DE IMAGEN (Unificado para todos los módulos) ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
@@ -569,43 +574,167 @@ export default function DashboardPage() {
       fetchData();
   };
 
-// --- FUNCIÓN ACTUALIZADA: DELEGA TODO AL SERVIDOR ---
+  // --- FUNCIÓN CLAVE: CONFIRMAR, GENERAR IMAGEN Y SINCRONIZAR CÓDIGO ---
   const handleConfirmReservation = async (reserva: any) => {
-    // 1. Confirmación
-    if (!confirm(`¿Confirmar a ${reserva.name}? El sistema generará el ticket internamente y lo enviará.`)) return;
+    if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
 
     setProcessingId(reserva.id); 
 
     try {
-        // 2. Solo llamamos a la API. No generamos nada aquí.
+        // 1. DETERMINAR CÓDIGO FINAL (Prioridad: el que ya tiene > generar uno nuevo)
+        const codigoFinal = reserva.code || `BZ-${Math.floor(1000 + Math.random() * 9000)}`;
+        console.log("Generando ticket para código:", codigoFinal);
+
+        // 2. CREAR ELEMENTO VISUAL (Ticket Negro y Dorado)
+        const ticketElement = document.createElement("div");
+        // Posicionamos fuera de pantalla pero visible para el render
+        ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #000;";
+        
+        // HTML del Ticket usando el CÓDIGO FINAL
+        ticketElement.innerHTML = `
+          <div style="width: 100%; height: 100%; position: relative; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+              
+              <img src="/ticket-bg.png" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; z-index:0; opacity: 0.6;" onerror="this.style.display='none'" />
+              
+              <div style="z-index: 10; width: 100%; display: flex; flex-direction: column; align-items: center; border: 20px solid #DAA520; height: 100%; box-sizing: border-box; justify-content: center;">
+                  
+                  <h1 style="font-size: 80px; color: #DAA520; margin: 0; letter-spacing: 10px; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">BOULEVARD</h1>
+                  <h2 style="font-size: 50px; margin: 10px 0 60px 0; letter-spacing: 10px; color: #fff; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">ZAPALLAR</h2>
+                  
+                  <div style="font-size: 130px; font-weight: bold; color: #DAA520; margin: 60px 0; background: rgba(0,0,0,0.8); padding: 40px 80px; border: 4px solid #DAA520; border-radius: 40px; text-shadow: 0 0 20px #DAA520;">
+                      ${codigoFinal}
+                  </div>
+                  
+                  <div style="text-align: left; width: 80%; margin-top: 60px; font-size: 45px; line-height: 1.8; background: rgba(0,0,0,0.6); padding: 40px; border-radius: 30px; border: 1px solid #333;">
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">TITULAR:</strong> ${reserva.name}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">FECHA:</strong> ${reserva.date_reserva}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">HORA:</strong> ${reserva.time_reserva} HRS</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">ZONA:</strong> ${reserva.zone}</p>
+                      <p style="margin: 10px 0;"><strong style="color: #DAA520;">CANTIDAD:</strong> ${reserva.guests} PAX</p>
+                  </div>
+
+                  <p style="margin-top: 100px; font-size: 35px; color: #aaa; text-transform: uppercase; letter-spacing: 2px; text-shadow: 1px 1px 2px black;">Presenta este código en recepción</p>
+              </div>
+          </div>
+        `;
+        document.body.appendChild(ticketElement);
+
+        // 3. GENERAR IMAGEN
+        // Pequeña espera para cargar recursos
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        const canvas = await html2canvas(ticketElement, { 
+            scale: 1, 
+            useCORS: true, 
+            allowTaint: true,
+            backgroundColor: null 
+        });
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        document.body.removeChild(ticketElement); // Limpieza
+
+        let ticketPublicUrl = null;
+
+        // 4. SUBIR A SUPABASE
+        if (blob) {
+            // Nombre único con el código
+            const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
+            // Subimos directamente usando uploadImageToSupabase modificado o lógica directa
+            // Usamos lógica directa aquí para asegurar bucket 'tickets'
+            const { error: uploadError } = await supabase.storage
+                .from('tickets') // Asegúrate que este bucket existe y es público
+                .upload(fileName, blob, { contentType: 'image/png', upsert: true });
+            
+            if (!uploadError) {
+                const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
+                ticketPublicUrl = data.publicUrl;
+                console.log("Ticket subido:", ticketPublicUrl);
+            } else {
+                 console.warn("Error subiendo ticket:", uploadError);
+            }
+        }
+
+        // 5. ENVIAR A LA API (Sincronizando Código)
+        // Enviamos 'codigoFinal' para forzar a la API a usar ESTE mismo código
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
-                reservaId: reserva.id, 
-                // NO enviamos ticketUrl, ni código. Dejamos que el server lo haga.
-                phone: reserva.phone 
+                reservaId: reserva.id,
+                ticketUrl: ticketPublicUrl,
+                codigo: codigoFinal, // <--- CLAVE DE LA SINCRONIZACIÓN
+                phone: reserva.phone
             }),
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert(`✅ ¡Éxito!\nReserva confirmada.\nTicket generado: ${result.code}\nWhatsApp enviado.`);
+            alert(`✅ Reserva confirmada (Código: ${codigoFinal}).\nWhatsApp enviado.`);
             fetchData(); 
         } else {
-            alert(`⚠️ Error: ${result.error || "Desconocido"}`);
+            alert("⚠️ Confirmado en BD, pero error al enviar: " + (result.error || "Desconocido"));
             fetchData();
         }
 
-    } catch (e: any) {
-        console.error(e);
-        alert("Error de conexión: " + e.message);
+    } catch (error: any) {
+        console.error(error);
+        alert("Error crítico al generar ticket: " + error.message);
     } finally {
         setProcessingId(null);
     }
   };
 
+  // ---------------------------------------------------------
+  // NUEVAS FUNCIONES PARA EL PANEL AVANZADO DE RESERVAS
+  // ---------------------------------------------------------
+  
+  // 1. Validar Entrada Manualmente (Check-in desde Dashboard)
+  const handleManualCheckIn = async (reservaId: number) => {
+      if(!confirm("¿Registrar ingreso manual de este cliente?")) return;
+      
+      const { error } = await supabase
+          .from('reservas')
+          .update({ 
+              status: 'realizado', 
+              check_in_time: new Date().toISOString() 
+          })
+          .eq('id', reservaId);
+          
+      if (error) alert("Error al registrar entrada");
+      else fetchData(); // El realtime lo actualizaría, pero forzamos por seguridad
+  };
+
+  // 2. Eliminar Reserva
+  const handleDeleteReserva = async (id: number) => {
+      if(confirm("¿ELIMINAR RESERVA? Esta acción es irreversible.")) {
+          await supabase.from('reservas').delete().eq('id', id);
+          fetchData();
+      }
+  };
+
+  // 3. Filtrado Inteligente
+  const filteredReservas = reservas.filter(r => {
+      // Filtro por Texto (Nombre, Email o Código BZ)
+      const searchLower = reservaSearch.toLowerCase();
+      const matchText = 
+          (r.name || "").toLowerCase().includes(searchLower) || 
+          (r.code || "").toLowerCase().includes(searchLower) ||
+          (r.email || "").toLowerCase().includes(searchLower);
+
+      // Filtro por Estado
+      const matchStatus = reservaFilterStatus === "todos" 
+          ? true 
+          : reservaFilterStatus === "pendientes" 
+              ? r.status === "pendiente"
+              : reservaFilterStatus === "confirmadas"
+                  ? r.status === "confirmada"
+                  : r.status === reservaFilterStatus; // 'realizado', 'cancelada'
+
+      // Filtro por Fecha
+      const matchDate = reservaDateFilter ? r.date_reserva === reservaDateFilter : true;
+
+      return matchText && matchStatus && matchDate;
+  });
   return (
     <div className={`min-h-screen bg-black text-white flex ${montserrat.className}`}>
       
@@ -901,75 +1030,200 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS */}
+            {/* 2. GESTIÓN DE RESERVAS AVANZADA (PANEL BZ) */}
             {activeTab === "reservas" && (
-                <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="space-y-3">
-                        {reservas.length === 0 ? <p className="text-zinc-500">No hay reservas registradas.</p> : reservas.map((res) => (
-                            <div key={res.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                    <div className="flex items-center gap-4 w-full md:w-auto">
-                                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-[#DAA520]">{res.guests}</div>
-                                        <div>
-                                            <h4 className="font-bold text-white text-sm">{res.name}</h4>
-                                            <div className="flex gap-2 text-xs text-zinc-400">
-                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {res.date_reserva} - {res.time_reserva}</span>
-                                                <span className="flex items-center gap-1"><MapPin className="w-3 h-3"/> {res.zone}</span>
-                                            </div>
-                                            <p className="text-[10px] text-zinc-500 mt-1">{res.phone} • {res.email} • {res.code}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto justify-end items-end">
-                                            {res.status === "pendiente" ? (
-                                                <div className="flex gap-2">
-                                                    <button 
-                                                        onClick={() => handleConfirmReservation(res)} 
-                                                        disabled={processingId === res.id}
-                                                        className="px-4 py-2 bg-green-500/20 text-green-500 text-xs font-bold rounded-lg border border-green-500/30 hover:bg-green-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
-                                                    >
-                                                        {processingId === res.id ? (
-                                                            <><Loader2 className="w-3 h-3 animate-spin" /> Generando...</>
-                                                        ) : (
-                                                            "Aceptar y Enviar"
-                                                        )}
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => updateReservaStatus(res.id, 'rechazada')} 
-                                                        disabled={!!processingId}
-                                                        className="px-4 py-2 bg-red-500/20 text-red-500 text-xs font-bold rounded-lg border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50"
-                                                    >
-                                                        Rechazar
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span className={`px-4 py-2 text-xs rounded-lg border font-bold uppercase tracking-wider ${res.status === 'confirmada' ? 'bg-zinc-800 text-green-400 border-green-900' : 'bg-zinc-800 text-red-400 border-red-900'}`}>
-                                                    {res.status === 'confirmada' ? 'Confirmado ✅' : res.status}
-                                                </span>
-                                            )}
-                                    </div>
-                                </div>
+                <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
+                    
+                    {/* KPI RÁPIDOS RESERVAS */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
+                        <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center">
+                            <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Reservas</span>
+                            <span className="text-3xl font-bold text-white mt-1">{reservas.length}</span>
+                        </div>
+                        <div className="bg-zinc-900 border border-yellow-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-3 opacity-10"><AlertCircle className="w-12 h-12 text-yellow-500"/></div>
+                            <span className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">Pendientes Pago</span>
+                            <span className="text-3xl font-bold text-white mt-1">{reservas.filter(r => r.status === 'pendiente').length}</span>
+                        </div>
+                        <div className="bg-zinc-900 border border-green-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-3 opacity-10"><CheckCircle className="w-12 h-12 text-green-500"/></div>
+                            <span className="text-green-500 text-[10px] font-bold uppercase tracking-wider">Confirmados (QR)</span>
+                            <span className="text-3xl font-bold text-white mt-1">{reservas.filter(r => r.status === 'confirmada').length}</span>
+                        </div>
+                        <div className="bg-blue-600/10 border border-blue-500/50 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+                            <div className="absolute right-0 top-0 p-3 opacity-20"><UserCheck className="w-12 h-12 text-blue-400"/></div>
+                            <span className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">EN EL LOCAL</span>
+                            <span className="text-3xl font-black text-white mt-1">{reservas.filter(r => r.status === 'realizado' || r.status === 'ingresado').length}</span>
+                        </div>
+                    </div>
 
-                                {/* SECCIÓN DE PEDIDO ANTICIPADO */}
-                                {res.pre_order && res.pre_order.length > 0 && (
-                                    <div className="mt-4 bg-black/40 rounded-lg p-3 border border-[#DAA520]/20">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <p className="text-xs font-bold text-[#DAA520] uppercase flex items-center gap-2">
-                                                        <ShoppingBag className="w-3 h-3" /> Pedido Anticipado
-                                                    </p>
-                                                    <span className="text-sm font-bold text-white">${res.total_pre_order?.toLocaleString() || 0}</span>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    {res.pre_order.map((item: any, idx: number) => (
-                                                        <div key={idx} className="flex justify-between text-[11px] text-zinc-400 border-b border-white/5 pb-1 last:border-0">
-                                                            <span>{item.quantity}x {item.name}</span>
-                                                            <span>${(item.price * item.quantity).toLocaleString()}</span>
+                    {/* BARRA DE CONTROL */}
+                    <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col md:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
+                        <div className="relative w-full md:w-1/3 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
+                            <input 
+                                type="text" 
+                                placeholder="Buscar por Nombre, Código BZ..." 
+                                className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors placeholder:text-zinc-600"
+                                value={reservaSearch}
+                                onChange={(e) => setReservaSearch(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
+                            {[
+                                { id: 'todos', label: 'Todos' },
+                                { id: 'pendientes', label: 'Pendientes' },
+                                { id: 'confirmadas', label: 'Listos QR' },
+                                { id: 'realizado', label: 'Ingresados' }
+                            ].map(filter => (
+                                <button
+                                    key={filter.id}
+                                    onClick={() => setReservaFilterStatus(filter.id)}
+                                    className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${
+                                        reservaFilterStatus === filter.id 
+                                        ? 'bg-[#DAA520] text-black border-[#DAA520] shadow-lg scale-105' 
+                                        : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5 hover:border-white/20'
+                                    }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
+                        <input 
+                            type="date" 
+                            className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#DAA520] scheme-dark font-bold uppercase tracking-wider"
+                            value={reservaDateFilter}
+                            onChange={(e) => setReservaDateFilter(e.target.value)}
+                        />
+                    </div>
+
+                    {/* TABLA DE RESERVAS */}
+                    <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden flex-1 min-h-[500px] flex flex-col">
+                        <div className="overflow-x-auto custom-scrollbar flex-1">
+                            <table className="w-full text-left text-sm text-zinc-400">
+                                <thead className="bg-black/80 text-zinc-500 text-[10px] uppercase font-bold tracking-wider sticky top-0 z-20 backdrop-blur-md">
+                                    <tr>
+                                        <th className="px-6 py-4">Ticket / Hora</th>
+                                        <th className="px-6 py-4">Cliente / Contacto</th>
+                                        <th className="px-6 py-4 text-center">Pax</th>
+                                        <th className="px-6 py-4 text-center">Estado Actual</th>
+                                        <th className="px-6 py-4 text-center">Consumo Web</th>
+                                        <th className="px-6 py-4 text-right">Controles</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredReservas.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-20 text-center flex flex-col items-center justify-center gap-2">
+                                                <Search className="w-8 h-8 text-zinc-700"/>
+                                                <span className="text-zinc-500 font-medium">No se encontraron reservas con estos filtros.</span>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredReservas.map((res) => (
+                                            <tr key={res.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-mono font-black text-[#DAA520] tracking-widest text-xs bg-[#DAA520]/10 px-2 py-0.5 rounded w-fit border border-[#DAA520]/20">
+                                                            {res.code || "SIN-CODIGO"}
+                                                        </span>
+                                                        <span className="text-white font-bold flex items-center gap-1.5 mt-1">
+                                                            <Clock className="w-3 h-3 text-zinc-500"/> {res.time_reserva} hrs
+                                                        </span>
+                                                        <span className="text-[10px] text-zinc-500 font-medium uppercase">
+                                                            {new Date(res.date_reserva).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-white text-sm">{res.name}</span>
+                                                        <span className="text-xs text-zinc-500 mt-0.5">{res.phone}</span>
+                                                        <span className="text-[10px] text-zinc-600 mt-1 flex items-center gap-1">
+                                                            <MapPin className="w-3 h-3"/> {res.zone || "General"}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-800 text-white font-bold text-xs border border-white/5">
+                                                        {res.guests}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {res.status === 'pendiente' && (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"/> Pendiente
+                                                        </span>
+                                                    )}
+                                                    {res.status === 'confirmada' && (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                                                            <CheckCircle className="w-3 h-3"/> Listo QR
+                                                        </span>
+                                                    )}
+                                                    {(res.status === 'realizado' || res.status === 'ingresado') && (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                                                            <UserCheck className="w-3 h-3"/> Ingresado
+                                                        </span>
+                                                    )}
+                                                    {res.status === 'rechazada' && (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                                                            <X className="w-3 h-3"/> Cancelada
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {res.total_pre_order > 0 ? (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className="text-green-400 font-bold text-xs bg-green-900/20 px-2 py-0.5 rounded border border-green-500/20">
+                                                                ${res.total_pre_order.toLocaleString()}
+                                                            </span>
+                                                            <span className="text-[9px] text-zinc-500 font-medium">
+                                                                {res.pre_order?.length} productos
+                                                            </span>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                                    ) : (
+                                                        <span className="text-zinc-700 text-lg opacity-20 font-bold">·</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-2 items-center">
+                                                        {res.status === 'pendiente' && (
+                                                            <button 
+                                                                onClick={() => handleConfirmReservation(res)}
+                                                                disabled={processingId === res.id}
+                                                                className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all shadow-lg shadow-green-900/20 text-xs font-bold uppercase tracking-wide group/btn"
+                                                            >
+                                                                {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <CheckCircle className="w-3 h-3"/>}
+                                                                <span className="hidden group-hover/btn:inline">Aprobar</span>
+                                                            </button>
+                                                        )}
+                                                        {res.status === 'confirmada' && (
+                                                            <button 
+                                                                onClick={() => handleManualCheckIn(res.id)}
+                                                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-lg shadow-blue-900/20 text-xs font-bold uppercase tracking-wide group/btn"
+                                                                title="Registrar Ingreso Manualmente"
+                                                            >
+                                                                <UserCheck className="w-3 h-3"/>
+                                                                <span className="hidden group-hover/btn:inline">Ingresar</span>
+                                                            </button>
+                                                        )}
+                                                        {(res.status !== 'realizado' && res.status !== 'ingresado') && (
+                                                            <button 
+                                                                onClick={() => handleDeleteReserva(res.id)}
+                                                                className="p-2 bg-zinc-800 hover:bg-red-500/20 text-zinc-500 hover:text-red-500 rounded-lg transition-colors"
+                                                                title="Eliminar Reserva"
+                                                            >
+                                                                <Trash2 className="w-4 h-4"/>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </motion.div>
             )}
@@ -983,7 +1237,6 @@ export default function DashboardPage() {
                             <Plus className="w-4 h-4" /> Nuevo Producto
                         </button>
                     </div>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {menuItems.map((item) => (
                             <div key={item.id} className={`group bg-zinc-900 border ${item.active ? 'border-white/10' : 'border-red-900/30 opacity-60'} p-4 rounded-2xl relative transition-all hover:border-[#DAA520]/50`}>
@@ -1187,7 +1440,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                                <Plus className="w-4 h-4" /> Nueva Promo
+                                <Plus className="w-4 h-4" /> Nuevo Promo
                             </button>
                             <button onClick={() => handleOpenShowModal()} className="bg-[#8338EC] text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#6c2bd9] transition-colors shadow-lg">
                                 <Plus className="w-4 h-4" /> Nuevo Show
@@ -1399,17 +1652,11 @@ export default function DashboardPage() {
                             <form onSubmit={handleSavePromo} className="space-y-4">
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Principal</label><input required type="text" placeholder="Ej: Happy Hour 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}>
-                                            <option value="semana">Semanal</option>
-                                            <option value="pack">Pack / Gift Card</option>
-                                            <option value="banner">Banner Principal</option>
-                                    </select></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}><option value="semana">Semanal</option><option value="pack">Pack / Gift Card</option><option value="banner">Banner Principal</option></select></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.price} onChange={e => setCurrentPromo({...currentPromo, price: parseInt(e.target.value)})} /></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Día</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.day} onChange={e => setCurrentPromo({...currentPromo, day: e.target.value})} disabled={currentPromo.category === 'pack'}><option value="">Seleccionar</option>
-                                    <option value="todos">Todos los días</option>
-                                    {["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Día</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.day} onChange={e => setCurrentPromo({...currentPromo, day: e.target.value})} disabled={currentPromo.category === 'pack'}><option value="">Seleccionar</option><option value="todos">Todos los días</option>{["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta</label><input type="text" placeholder="Ej: NUEVO" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.tag || ""} onChange={e => setCurrentPromo({...currentPromo, tag: e.target.value})} /></div>
                                 </div>
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentPromo.subtitle} onChange={e => setCurrentPromo({...currentPromo, subtitle: e.target.value})} /></div>
