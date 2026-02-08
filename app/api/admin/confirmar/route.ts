@@ -144,27 +144,29 @@ Este código QR es tu pase de entrada. Por favor muéstralo en recepción para s
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // AQUI ESTÁ LA CLAVE: Recibimos reservation_code del Dashboard
+    // AQUI ESTÁ LA CLAVE: Recibimos reservation_code del Dashboard para mantener la sincronización
     const { reservaId, reservation_code } = body; 
 
-    // --- DETECCIÓN DE DOMINIO PARA EL QR (Corrección 404) ---
-    // Prioridad: 
-    // 1. Variable de Entorno (Recomendado configurar en Vercel: https://tuweb.com)
-    // 2. Header 'origin' (El navegador suele enviarlo)
-    // 3. Fallback directo a tu dominio de Vercel
+    // --- DETECCIÓN ROBUSTA DEL DOMINIO (Corrección Error 404) ---
+    // 1. Intentamos leer la variable de entorno
     let origin = process.env.NEXT_PUBLIC_BASE_URL;
     
+    // 2. Si no existe, intentamos construirla desde los headers
     if (!origin) {
-        const reqOrigin = req.headers.get("origin");
-        if (reqOrigin && !reqOrigin.includes("localhost")) {
-            origin = reqOrigin;
-        } else {
-            // FALLBACK FINAL: Pon aquí tu dominio real si todo falla
-            origin = "https://bzweb.vercel.app"; 
+        const protocol = req.headers.get("x-forwarded-proto") || "https";
+        const host = req.headers.get("host");
+        if (host && !host.includes("localhost")) {
+             origin = `${protocol}://${host}`;
         }
     }
+
+    // 3. FALLBACK FINAL MANUAL: Si todo falla, usamos tu dominio de Vercel explícito
+    // Esto asegura que el QR nunca se rompa en producción
+    if (!origin || origin.includes("localhost")) {
+        origin = "https://bzweb.vercel.app"; 
+    }
     
-    // Quitamos trailing slash si existe
+    // Quitamos slash final si existe para evitar dobles slashes
     origin = origin.replace(/\/$/, "");
 
     if (!reservaId) {
@@ -185,15 +187,15 @@ export async function POST(req: Request) {
     }
 
     // ---------------------------------------------------------
-    // SINCRONIZACIÓN: Usamos el código que mandó el Dashboard
+    // SINCRONIZACIÓN: Usamos el código que nos mandó el Dashboard
     // ---------------------------------------------------------
-    // Si el dashboard mandó un código, lo usamos. Si no, generamos uno.
+    // Si el dashboard mandó un código (ej: BZ-2160), usamos ese. Si no, generamos uno nuevo.
     const codigoBZ = reservation_code || generarCodigoBZ(); 
     
     console.log(`✅ Usando Código Sincronizado: ${codigoBZ}`);
 
     // 2. Generar URL de Validación (Link dentro del QR)
-    // Apuntamos a la carpeta /validar/[id]
+    // Apuntamos a la carpeta /validar/[id] que ahora está en la raíz app/validar/[id]
     const urlValidacion = `${origin}/validar/${reservaId}`;
     
     console.log(`🔗 Link generado en QR: ${urlValidacion}`);
@@ -213,7 +215,7 @@ export async function POST(req: Request) {
       .from("reservas")
       .update({ 
         status: "confirmada",      
-        reservation_code: codigoBZ, // Guardamos EL MISMO código que vio el usuario
+        reservation_code: codigoBZ, // Guardamos EL MISMO código que vio el usuario en el dashboard
         qr_url: publicQrUrl        
       })
       .eq("id", reservaId);
@@ -232,7 +234,7 @@ export async function POST(req: Request) {
         reserva.name, 
         reserva.date_reserva || "Fecha Pendiente", 
         reserva.guests || 0,
-        codigoBZ // Enviamos el código sincronizado por WS
+        codigoBZ // Enviamos el código sincronizado por WhatsApp
       );
     }
 
