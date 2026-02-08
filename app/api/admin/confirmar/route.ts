@@ -173,7 +173,7 @@ export async function POST(req: Request) {
 
     // 2. Generar URL de Validación (Link que contendrá el QR)
     // Usamos el ID de la reserva, pero ahora el sistema ya tendrá el código BZ guardado
-    const urlValidacion = `${origin}/tickets/${reservaId}`; 
+    const urlValidacion = `${origin}/validar/${reservaId}`;
     // NOTA: Cambié esto a /tickets/[id] para que el usuario al escanear vea SU ticket.
     // Si prefieres que sea para el guardia (/admin/validar/[id]), cámbialo de nuevo.
     
