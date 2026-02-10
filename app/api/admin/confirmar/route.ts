@@ -9,7 +9,7 @@ import QRCode from "qrcode";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Cliente con permisos de Admin (Service Role)
+// Cliente con permisos de Admin (Service Role) para poder escribir/leer todo
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // Configuración UltraMsg
@@ -27,6 +27,37 @@ const WAPP_API_URL = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}`;
 function generarCodigoBZ(): string {
   const numeroAleatorio = Math.floor(1000 + Math.random() * 9000); 
   return `BZ-${numeroAleatorio}`;
+}
+
+/**
+ * Formatea la fecha para que se vea bonita en el mensaje y evite "Invalid Date"
+ * Entrada: "2024-02-07" -> Salida: "Viernes, 7 de Febrero"
+ */
+function formatearFechaBonita(fechaStr: string): string {
+  if (!fechaStr) return "Fecha por confirmar";
+  try {
+    // Dividimos manualmente para evitar errores de zona horaria (UTC vs Local)
+    const partes = fechaStr.split('-');
+    if (partes.length !== 3) return fechaStr;
+
+    const year = parseInt(partes[0]);
+    const month = parseInt(partes[1]) - 1; // Meses en JS van de 0 a 11
+    const day = parseInt(partes[2]);
+
+    const date = new Date(year, month, day);
+    
+    // Formateamos en español de Chile
+    const opciones: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long' 
+    };
+    // Capitalizamos la primera letra
+    const fechaFormateada = date.toLocaleDateString('es-CL', opciones);
+    return fechaFormateada.charAt(0).toUpperCase() + fechaFormateada.slice(1);
+  } catch (e) {
+    return fechaStr; // Fallback
+  }
 }
 
 /**
@@ -84,6 +115,7 @@ async function subirQRaSupabase(idReserva: string, buffer: Buffer): Promise<stri
 
 /**
  * Envía el mensaje con el QR a UltraMsg
+ * AHORA INCLUYE DETALLE DEL PEDIDO ANTICIPADO
  */
 async function enviarWhatsApp(
   telefono: string, 
@@ -91,23 +123,40 @@ async function enviarWhatsApp(
   nombre: string, 
   fecha: string, 
   personas: number,
-  codigoReserva: string 
+  codigoReserva: string,
+  preOrder: any[] = [] // Nuevo parámetro para el menú
 ) {
   // Limpieza de teléfono
   let raw = telefono.replace(/\D/g, "");
   if (raw.length === 9 && raw.startsWith("9")) raw = "56" + raw;
   if (raw.length === 8) raw = "569" + raw;
   
-  // Mensaje
+  // 1. Formatear la fecha para que no salga error
+  const fechaTexto = formatearFechaBonita(fecha);
+
+  // 2. Construir el bloque de texto del Pedido (si existe)
+  let textoPedido = "";
+  if (preOrder && preOrder.length > 0) {
+    const itemsList = preOrder.map((item: any) => `▪ ${item.quantity}x ${item.name}`).join("\n");
+    const totalPedido = preOrder.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
+    
+    textoPedido = `
+🍽 *PEDIDO ANTICIPADO (PAGADO)*
+${itemsList}
+💰 *Total Extra:* $${totalPedido.toLocaleString('es-CL')}
+`;
+  }
+
+  // 3. Construir mensaje final
   const mensaje = `Hola ${nombre} 👋,
 
 ¡Tu reserva en *Boulevard Zapallar* está CONFIRMADA! 🥂
 
 🔑 *CÓDIGO DE ACCESO: ${codigoReserva}*
 
-📅 Fecha: ${fecha}
+📅 Fecha: ${fechaTexto}
 👥 Personas: ${personas}
-
+${textoPedido}
 👇 *IMPORTANTE: TICKET DE INGRESO*
 Este código QR es tu pase de entrada. Por favor muéstralo en recepción para ser escaneado.
 
@@ -157,7 +206,7 @@ export async function POST(req: Request) {
         }
     }
 
-    // Fallback manual si todo falla (IMPORTANTE: MANTÉN ESTO)
+    // Fallback manual: asegurar dominio producción
     if (!origin || origin.includes("localhost")) {
         origin = "https://bzweb.vercel.app"; 
     }
@@ -170,10 +219,10 @@ export async function POST(req: Request) {
 
     console.log(`🚀 Iniciando confirmación. ID: ${reservaId}`);
 
-    // 1. Obtener datos de la reserva actual
+    // 1. Obtener datos de la reserva actual (incluyendo pre_order)
     const { data: reserva, error } = await supabaseAdmin
       .from("reservas")
-      .select("*")
+      .select("*") // Esto trae todas las columnas, incluido pre_order
       .eq("id", reservaId)
       .single();
 
@@ -187,8 +236,7 @@ export async function POST(req: Request) {
     const codigoBZ = reservation_code || generarCodigoBZ(); 
     console.log(`✅ Usando Código: ${codigoBZ}`);
 
-    // 2. Generar URL de Validación CORRECTA
-    // AQUI ESTABA EL ERROR: Agregamos "/admin" a la ruta porque tu archivo está en app/admin/validar
+    // 2. Generar URL de Validación CORRECTA (con /admin/)
     const urlValidacion = `${origin}/admin/validar/${reservaId}`;
     
     console.log(`🔗 Link QR generado: ${urlValidacion}`);
@@ -225,9 +273,10 @@ export async function POST(req: Request) {
         reserva.phone, 
         publicQrUrl, 
         reserva.name, 
-        reserva.date_reserva || "Fecha Pendiente", 
+        reserva.date_reserva || "", // Enviamos el string crudo, la funcion lo formatea
         reserva.guests || 0,
-        codigoBZ
+        codigoBZ,
+        reserva.pre_order // Pasamos el array de productos del pedido
       );
     }
 

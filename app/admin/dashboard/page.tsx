@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,7 +21,7 @@ import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
-// --- TABS DE NAVEGACIÓN ---
+// --- TABS DE NAVEGACIÓN (ORDENADO SEGÚN TU SOLICITUD) ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "ventas", label: "Finanzas", icon: DollarSign }, 
@@ -81,6 +81,20 @@ export default function DashboardPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // --- HELPER: FORMATO DE FECHA SEGURO (SOLUCIÓN ERROR ROJO) ---
+  const formatDateSafe = (dateString: string) => {
+      if (!dateString) return "Sin Fecha";
+      // Agregamos T12:00:00 para asegurar que no se reste un día por zona horaria
+      const date = new Date(`${dateString}T12:00:00`); 
+      if (isNaN(date.getTime())) return dateString; // Si falla, devuelve el string original para debug
+      
+      return date.toLocaleDateString('es-CL', { 
+          weekday: 'short', 
+          day: 'numeric', 
+          month: 'short' 
+      });
+  };
 
   // --- CARGA DE DATOS Y REALTIME (Conexión Supabase) ---
   useEffect(() => {
@@ -689,7 +703,7 @@ export default function DashboardPage() {
   
   // 1. Validar Entrada Manualmente (Check-in desde Dashboard)
   const handleManualCheckIn = async (reservaId: number) => {
-      if(!confirm("¿Registrar ingreso manual de este cliente?")) return;
+      if(!confirm("¿Registrar el ingreso del cliente?")) return;
       
       const { error } = await supabase
           .from('reservas')
@@ -814,7 +828,11 @@ export default function DashboardPage() {
                                 <div key={res.id} className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><CheckCircle className="w-4 h-4 text-green-500"/></div>
-                                        <div><p className="text-xs text-white">Reserva de {res.name}</p><p className="text-[10px] text-zinc-500">{res.date_reserva} • {res.zone}</p></div>
+                                        <div>
+                                            <p className="text-xs text-white">Reserva de {res.name}</p>
+                                            {/* CORRECCIÓN DE FECHA AQUÍ TAMBIÉN */}
+                                            <p className="text-[10px] text-zinc-500">{formatDateSafe(res.date_reserva)} • {res.zone}</p>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {res.total_pre_order > 0 && (
@@ -894,7 +912,7 @@ export default function DashboardPage() {
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
                                                          <span className={`px-2 py-1 rounded text-xs font-bold ${show.pedidosCount > 0 ? 'bg-[#DAA520]/20 text-[#DAA520]' : 'text-zinc-600'}`}>
-                                                            {show.pedidosCount}
+                                                             {show.pedidosCount}
                                                          </span>
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-bold text-green-400">
@@ -917,26 +935,26 @@ export default function DashboardPage() {
                                     <p className="text-center text-zinc-600 text-xs py-10">No hay pedidos anticipados activos.</p>
                                 ) : (
                                     reservasConPedidoFull.map(res => (
-                                        <div key={res.id} className="bg-black/40 border border-white/10 p-3 rounded-xl hover:border-[#DAA520]/30 transition-colors">
-                                            <div className="flex justify-between items-start mb-2 border-b border-white/5 pb-2">
-                                                <div>
-                                                    <p className="text-xs font-bold text-white">{res.name}</p>
-                                                    <p className="text-[10px] text-zinc-500">{res.date_reserva} • {res.zone}</p>
-                                                </div>
-                                                <span className="text-sm font-bold text-[#DAA520]">${res.total_pre_order.toLocaleString()}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                {res.pre_order.map((item: any, i: number) => (
-                                                    <div key={i} className="flex justify-between text-[11px] text-zinc-300">
-                                                        <span className="flex items-center gap-2">
-                                                            <span className="bg-zinc-800 text-white px-1.5 rounded text-[9px]">{item.quantity}x</span> 
-                                                            {item.name}
-                                                        </span>
-                                                        <span className="text-zinc-500">${(item.price * item.quantity).toLocaleString()}</span>
+                                            <div key={res.id} className="bg-black/40 border border-white/10 p-3 rounded-xl hover:border-[#DAA520]/30 transition-colors">
+                                                <div className="flex justify-between items-start mb-2 border-b border-white/5 pb-2">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-white">{res.name}</p>
+                                                        <p className="text-[10px] text-zinc-500">{res.date_reserva} • {res.zone}</p>
                                                     </div>
-                                                ))}
+                                                    <span className="text-sm font-bold text-[#DAA520]">${res.total_pre_order.toLocaleString()}</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {res.pre_order.map((item: any, i: number) => (
+                                                        <div key={i} className="flex justify-between text-[11px] text-zinc-300">
+                                                            <span className="flex items-center gap-2">
+                                                                <span className="bg-zinc-800 text-white px-1.5 rounded text-[9px]">{item.quantity}x</span> 
+                                                                {item.name}
+                                                            </span>
+                                                            <span className="text-zinc-500">${(item.price * item.quantity).toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
                                     ))
                                 )}
                             </div>
@@ -1118,8 +1136,11 @@ export default function DashboardPage() {
                                                         <span className="text-white font-bold flex items-center gap-1.5 mt-1">
                                                             <Clock className="w-3 h-3 text-zinc-500"/> {res.time_reserva} hrs
                                                         </span>
+                                                        
+                                                        {/* --- SOLUCIÓN ERROR INVALID DATE --- */}
+                                                        {/* Usamos la función formatDateSafe en lugar de toLocaleDateString directo */}
                                                         <span className="text-[10px] text-zinc-500 font-medium uppercase">
-                                                            {new Date(res.date_reserva).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                            {formatDateSafe(res.date_reserva)}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -1148,9 +1169,10 @@ export default function DashboardPage() {
                                                             <CheckCircle className="w-3 h-3"/> Listo QR
                                                         </span>
                                                     )}
+                                                    {/* --- VISUALIZACIÓN CLIENTE INGRESADO --- */}
                                                     {(res.status === 'realizado' || res.status === 'ingresado') && (
                                                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-                                                            <UserCheck className="w-3 h-3"/> Ingresado
+                                                            <QrCode className="w-3 h-3"/> Cliente con QR Utilizado
                                                         </span>
                                                     )}
                                                     {res.status === 'rechazada' && (
@@ -1186,13 +1208,14 @@ export default function DashboardPage() {
                                                             </button>
                                                         )}
                                                         {res.status === 'confirmada' && (
+                                                            /* --- BOTÓN DE INGRESO ACTUALIZADO --- */
                                                             <button 
                                                                 onClick={() => handleManualCheckIn(res.id)}
                                                                 className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-lg shadow-blue-900/20 text-xs font-bold uppercase tracking-wide group/btn"
                                                                 title="Registrar Ingreso Manualmente"
                                                             >
                                                                 <UserCheck className="w-3 h-3"/>
-                                                                <span className="hidden group-hover/btn:inline">Ingresar</span>
+                                                                <span className="hidden group-hover/btn:inline">REGISTRAR ENTRADA</span>
                                                             </button>
                                                         )}
                                                         {(res.status !== 'realizado' && res.status !== 'ingresado') && (
@@ -1215,8 +1238,7 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
             )}
-
-            {/* 3. MENÚ RESERVA / EXPRESS */}
+{/* 3. MENÚ RESERVA / EXPRESS */}
             {activeTab === "menu_express" && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                       <div className="flex justify-between items-center mb-6">
