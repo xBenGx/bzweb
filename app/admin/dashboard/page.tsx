@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,15 +21,16 @@ import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
-// --- TABS DE NAVEGACIÓN (ORDENADO SEGÚN TU SOLICITUD) ---
+// --- TABS DE NAVEGACIÓN (ORDENADO Y EXTENDIDO) ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "ventas", label: "Finanzas", icon: DollarSign }, 
     { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
-    { id: "clientes", label: "Clientes VIP", icon: UserPlus },
+    { id: "pagos_web", label: "Pagos Web", icon: Globe }, // NUEVO TAB
+    { id: "ventas", label: "Caja Local", icon: DollarSign }, 
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
+    { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
+    { id: "clientes", label: "Clientes VIP", icon: UserPlus },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
     { id: "carrusel", label: "Carrusel", icon: Presentation },
     { id: "rrhh", label: "Equipo", icon: Users },
@@ -57,6 +58,9 @@ export default function DashboardPage() {
   const [reservaFilterStatus, setReservaFilterStatus] = useState("todos"); // todos, pendiente, confirmada, realizado
   const [reservaSearch, setReservaSearch] = useState("");
   const [reservaDateFilter, setReservaDateFilter] = useState(""); // vacío = todas las fechas
+
+  // --- ESTADO BUSQUEDA PAGOS WEB ---
+  const [webPaymentSearch, setWebPaymentSearch] = useState("");
 
   // --- ESTADOS PARA CLIENTES ---
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -247,6 +251,34 @@ export default function DashboardPage() {
   // Filtramos solo las reservas que tienen pedidos para el panel de detalle
   const reservasConPedidoFull = reservas.filter(r => r.total_pre_order > 0);
 
+  // --- LÓGICA DE PAGOS WEB / GETNET (NUEVO) ---
+  const getWebPayments = () => {
+      // Filtramos reservas que tengan montos pagados o intento de pago
+      return reservas
+        .filter(r => r.total_pre_order > 0 || r.payment_id)
+        .map(r => ({
+            id: r.id,
+            cliente: r.name,
+            email: r.email,
+            fecha: r.created_at,
+            monto: r.total_pre_order,
+            ref_getnet: r.payment_id || '---',
+            status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') 
+                         ? 'APROBADO' 
+                         : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
+            detalle: `${r.pre_order?.length || 0} items`,
+            reserva_obj: r
+        }))
+        .filter(p => 
+            p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || 
+            p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase())
+        )
+        .sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  };
+  const webPayments = getWebPayments();
+  const totalWebApproved = webPayments.filter(p => p.status_pago === 'APROBADO').reduce((acc, curr) => acc + curr.monto, 0);
+  const totalWebPending = webPayments.filter(p => p.status_pago === 'PENDIENTE').reduce((acc, curr) => acc + curr.monto, 0);
+
 
   // --- MANEJADOR DE IMAGEN (Unificado para todos los módulos) ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
@@ -284,7 +316,6 @@ export default function DashboardPage() {
   const triggerFileInput = () => {
       fileInputRef.current?.click();
   };
-
   // ---------------------------------------------------------
   // LÓGICA GESTIÓN DE VENTAS (NUEVO MODAL)
   // ---------------------------------------------------------
@@ -575,7 +606,7 @@ export default function DashboardPage() {
   // ---------------------------------------------------------
   // LÓGICA RESERVAS & SOLICITUDES (ACTUALIZADA CON WHATSAPP + IMAGEN)
   // ---------------------------------------------------------
-  
+   
   // Función SIMPLE para actualizar estado (usada para rechazar)
   const updateReservaStatus = async (id: number, status: string) => {
       await supabase.from('reservas').update({ status }).eq('id', id);
@@ -830,7 +861,6 @@ export default function DashboardPage() {
                                         <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><CheckCircle className="w-4 h-4 text-green-500"/></div>
                                         <div>
                                             <p className="text-xs text-white">Reserva de {res.name}</p>
-                                            {/* CORRECCIÓN DE FECHA AQUÍ TAMBIÉN */}
                                             <p className="text-[10px] text-zinc-500">{formatDateSafe(res.date_reserva)} • {res.zone}</p>
                                         </div>
                                     </div>
@@ -849,6 +879,98 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* 🔥🔥 NUEVA VISTA: PAGOS WEB (GETNET) 🔥🔥 */}
+            {activeTab === "pagos_web" && (
+                <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                     
+                     {/* KPIs GetNet */}
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div className="bg-zinc-900 border border-green-500/20 p-6 rounded-2xl relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-4 opacity-10"><CheckCircle className="w-20 h-20 text-green-500"/></div>
+                            <p className="text-xs text-zinc-500 uppercase font-bold">Total Aprobado (Web)</p>
+                            <h2 className="text-3xl font-black text-white mt-2">${totalWebApproved.toLocaleString('es-CL')}</h2>
+                            <p className="text-[10px] text-zinc-600 mt-1">{webPayments.filter(p => p.status_pago === 'APROBADO').length} transacciones exitosas</p>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-yellow-500/20 p-6 rounded-2xl relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-4 opacity-10"><Clock className="w-20 h-20 text-yellow-500"/></div>
+                            <p className="text-xs text-zinc-500 uppercase font-bold">Pendiente / Abandonado</p>
+                            <h2 className="text-3xl font-black text-yellow-500 mt-2">${totalWebPending.toLocaleString('es-CL')}</h2>
+                            <p className="text-[10px] text-zinc-600 mt-1">{webPayments.filter(p => p.status_pago === 'PENDIENTE').length} transacciones sin confirmar</p>
+                        </div>
+
+                        <div className="bg-zinc-900 border border-white/10 p-6 rounded-2xl flex items-center justify-center">
+                            <button onClick={fetchData} className="flex flex-col items-center gap-2 text-zinc-400 hover:text-white transition-colors">
+                                <RefreshCw className="w-8 h-8"/>
+                                <span className="text-xs font-bold uppercase">Actualizar Tabla</span>
+                            </button>
+                        </div>
+                     </div>
+
+                     {/* Tabla Detallada GetNet */}
+                     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6 min-h-[500px] flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Registro de Transacciones Web</h3>
+                            <div className="relative w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                <input type="text" placeholder="Buscar por Cliente o ID Pago..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto custom-scrollbar flex-1">
+                            <table className="w-full text-left text-sm text-zinc-400">
+                                <thead className="text-xs uppercase bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
+                                    <tr>
+                                        <th className="px-4 py-3">Ref. Pago / ID</th>
+                                        <th className="px-4 py-3">Cliente</th>
+                                        <th className="px-4 py-3 text-center">Detalle</th>
+                                        <th className="px-4 py-3 text-right">Monto</th>
+                                        <th className="px-4 py-3 text-center">Estado</th>
+                                        <th className="px-4 py-3 text-right">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {webPayments.length === 0 ? <tr className="text-center"><td colSpan={6} className="py-10">No hay transacciones web registradas.</td></tr> : webPayments.map((p) => (
+                                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="px-4 py-3">
+                                                <p className="font-mono text-xs text-zinc-300">{p.ref_getnet}</p>
+                                                <p className="text-[10px] text-zinc-600">{new Date(p.fecha).toLocaleString()}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-white text-xs">{p.cliente}</p>
+                                                <p className="text-[10px] text-zinc-500">{p.email}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-center text-xs">{p.detalle}</td>
+                                            <td className="px-4 py-3 text-right font-bold text-white">${p.monto.toLocaleString('es-CL')}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
+                                                    p.status_pago === 'APROBADO' ? 'bg-green-900/20 text-green-400 border-green-500/30' : 
+                                                    p.status_pago === 'PENDIENTE' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' : 
+                                                    'bg-red-900/20 text-red-400 border-red-500/30'
+                                                }`}>
+                                                    {p.status_pago}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {/* SI ESTÁ PENDIENTE PERO SE CONFIRMA PAGO MANUALMENTE */}
+                                                {p.status_pago === 'PENDIENTE' && (
+                                                    <button 
+                                                        onClick={() => handleConfirmReservation(p.reserva_obj)}
+                                                        className="text-[10px] bg-white/10 hover:bg-green-600 hover:text-white px-3 py-1 rounded transition-colors"
+                                                        title="Confirmar Pago Manualmente y Emitir Ticket"
+                                                    >
+                                                        Confirmar Manual
+                                                    </button>
+                                                )}
+                                                {p.status_pago === 'APROBADO' && <span className="text-[10px] text-zinc-600 flex justify-end gap-1"><CheckCircle className="w-3 h-3"/> Listo</span>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                     </div>
+                </motion.div>
+            )}
             {/* --- 1.5 VISTA VENTAS / FINANZAS --- */}
             {activeTab === "ventas" && (
                 <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -1538,8 +1660,8 @@ export default function DashboardPage() {
         <AnimatePresence>
             {isVentaModalOpen && (
                  <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsVentaModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm relative z-70 shadow-2xl p-6">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsVentaModalOpen(false)} />
+                    <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm relative z-70 shadow-2xl p-6">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase flex items-center gap-2"><DollarSign className="w-5 h-5 text-green-500"/> Registrar Venta</h3><button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
                         <form onSubmit={handleSaveVenta} className="space-y-4">
                             <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Cliente (Opcional)</label><input type="text" placeholder="Ej: Juan Pérez" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.cliente} onChange={e => setCurrentVenta({...currentVenta, cliente: e.target.value})} /></div>
@@ -1565,17 +1687,28 @@ export default function DashboardPage() {
                             </div>
                             <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-3 rounded-xl mt-2 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-green-900/20">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Confirmar Ingreso</>}</button>
                         </form>
-                    </motion.div>
+                    </div>
                  </div>
             )}
         </AnimatePresence>
 
-        {/* CLIENTES */}
+{/* CLIENTES */}
         <AnimatePresence>
             {isClientModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsClientModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6">
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }} 
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+                        onClick={() => setIsClientModalOpen(false)} 
+                    />
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }} 
+                        animate={{ opacity: 1, scale: 1 }} 
+                        exit={{ opacity: 0, scale: 0.95 }} 
+                        className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6"
+                    >
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white uppercase">{currentClient.id ? "Editar" : "Nuevo"} Cliente</h3>
                             <button onClick={() => setIsClientModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
@@ -1602,19 +1735,30 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL MENÚ EXPRESS (NUEVO) --- */}
+        {/* --- MODAL MENÚ EXPRESS --- */}
         <AnimatePresence>
             {isMenuModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]">
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }} 
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+                        onClick={() => setIsMenuModalOpen(false)} 
+                    />
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]"
+                    >
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
                             <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                                 {currentMenuItem.image_url ? (
                                     <>
-                                            <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                        <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
                                     </>
                                 ) : (
                                     <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
@@ -1642,15 +1786,26 @@ export default function DashboardPage() {
         <AnimatePresence>
             {isPromoModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsPromoModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[600px]">
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }} 
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+                        onClick={() => setIsPromoModalOpen(false)} 
+                    />
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[600px]"
+                    >
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
                             <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'promo')} accept="image/*" className="hidden" />
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                                 {currentPromo.image_url ? (
                                     <>
-                                            <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                        <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
                                     </>
                                 ) : (
                                     <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Subir Imagen</p><p className="text-[9px] text-zinc-600 mt-1">1080x1080 Rec.</p></div>
@@ -1683,8 +1838,19 @@ export default function DashboardPage() {
         <AnimatePresence>
             {isShowModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsShowModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[700px]">
+                    <motion.div 
+                        initial={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        exit={{ opacity: 0 }} 
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+                        onClick={() => setIsShowModalOpen(false)} 
+                    />
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        animate={{ opacity: 1, scale: 1, y: 0 }} 
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[700px]"
+                    >
                         
                         {/* Panel Izquierdo: Imagen */}
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
@@ -1804,7 +1970,6 @@ export default function DashboardPage() {
                 </div>
             )}
         </AnimatePresence>
-
       </main>
     </div>
   );
