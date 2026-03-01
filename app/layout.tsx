@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google"; 
 import "./globals.css";
 
-// Importamos el Provider y el nuevo Overlay Global
+// Importamos solo el Provider del carrito
 import { CartProvider } from "@/components/CartContext"; 
 
 const inter = Inter({ subsets: ["latin"] });
