@@ -117,7 +117,7 @@ const BENTO_LINKS = [
   { 
     id: "delivery", 
     title: "Delivery", 
-    href: "/delivery", 
+    href: "https://menu.fu.do/boulevardzapallar", 
     image: "/delivery.jpeg",
     overlay: "from-[#F3722C]/80 via-black/50 via-40% to-transparent",
     colorClass: "text-[#F3722C] bg-[#F3722C]/20 border-[#F3722C]/30"
