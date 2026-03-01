@@ -4,7 +4,6 @@ import "./globals.css";
 
 // Importamos el Provider y el nuevo Overlay Global
 import { CartProvider } from "@/components/CartContext"; 
-import GlobalOverlay from "@/components/GlobalOverlay";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,8 +22,6 @@ export default function RootLayout({
       <body className={inter.className}>
         <CartProvider>
             {children}
-            {/* Overlay contiene WhatsApp y Carrito Flotante */}
-            <GlobalOverlay /> 
         </CartProvider>
       </body>
     </html>
