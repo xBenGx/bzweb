@@ -40,7 +40,6 @@ export async function POST(req: Request) {
     const nombreCliente = reserva.name || 'Cliente'; 
     const emailCliente = reserva.email;
     
-    // 🔥 CORRECCIÓN CRÍTICA APLICADA: Ahora lee desde 'pre_order' en lugar de 'details_json'
     const carritoItems = reserva.pre_order || [];
 
     // Filtrar solo los items que son tickets/entradas
@@ -125,7 +124,7 @@ export async function POST(req: Request) {
     const pdfBuffer = Buffer.from(pdfBytes);
 
     // ==========================================
-    // PASO 4: ENVIAR CORREO CON RESEND
+    // PASO 4: ENVIAR CORREO CON RESEND (ACTUALIZADO A PRODUCCIÓN)
     // ==========================================
     
     // Tomamos el primer QR generado para mostrarlo de preview en el cuerpo del correo
@@ -136,18 +135,18 @@ export async function POST(req: Request) {
     const nombresEventos = [...new Set(ticketItems.map((i: any) => i.name))].join(', ');
 
     const emailData = await resend.emails.send({
-      from: 'Entradas Boulevard <onboarding@resend.dev>', // Asegúrate de configurar tu dominio en Resend en producción
+      // 🔥 REEMPLAZA "entradas@tudominio.cl" con tu correo real verificado en Resend
+      from: process.env.RESEND_FROM_EMAIL || 'Entradas Boulevard <entradas@tudominio.cl>', 
       
-      // MODO PRUEBA DE RESEND: Solo te deja enviar al correo con el que te registraste.
-      // Cuando verifiques tu dominio en Resend, cambia esto a: to: [emailCliente]
-      to: [process.env.NODE_ENV === 'development' ? 'TU_CORREO_REGISTRADO_EN_RESEND@gmail.com' : emailCliente], 
+      // 🔥 AHORA SE ENVÍA AL CORREO REAL DEL CLIENTE
+      to: [emailCliente], 
       
       subject: `🎟️ Tus entradas para ${nombresEventos} - Boulevard Zapallar`,
       
       react: TicketEmail({ 
         customerName: nombreCliente, 
         eventName: nombresEventos, 
-        eventDate: "Revisa los detalles en tu PDF", // Podrías extraer esto de tu BD si lo tienes
+        eventDate: "Revisa los detalles en tu PDF", 
         qrCodeUrl: firstQrDataUrl, 
         ticketId: firstTicketUUID 
       }) as React.ReactElement, 
@@ -160,7 +159,7 @@ export async function POST(req: Request) {
       ],
     });
 
-    console.log('✅ Correo enviado con PDF multipágina adjunto:', emailData);
+    console.log('✅ Correo enviado exitosamente al cliente:', emailData);
 
     // ==========================================
     // PASO 5: ACTUALIZAR LA RESERVA COMO PAGADA
