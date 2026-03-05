@@ -117,7 +117,7 @@ const BENTO_LINKS = [
   { 
     id: "delivery", 
     title: "Delivery", 
-    href: "https://menu.fu.do/boulevardzapallar", 
+    href: "https://www.restomovil.com/mkt/tienda_new.php?id=195&fbclid=PARlRTSAQWe59leHRuA2FlbQIxMQBzcnRjBmFwcF9pZA8xMjQwMjQ1NzQyODc0MTQAAaeCcIAx6ck-90gVFyasT8-PgNk7KycyvQbQ-DhwFH_Mxe2a_FQqiBwc9HuQMg_aem_42TcDuAWzKwJ1AsJp2ssMg", 
     image: "/delivery.jpeg",
     overlay: "from-[#F3722C]/80 via-black/50 via-40% to-transparent",
     colorClass: "text-[#F3722C] bg-[#F3722C]/20 border-[#F3722C]/30"
