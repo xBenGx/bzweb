@@ -55,8 +55,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Datos del cliente
-  const [clientData, setClientData] = useState({ name: "", phone: "" });
+  // Datos del cliente (AÑADIDO EMAIL)
+  const [clientData, setClientData] = useState({ name: "", phone: "", email: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Cargar Menú de Complementos desde Supabase
@@ -125,7 +125,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       setItems([]);
       setCheckoutStep('cart');
       setPaymentProof(null);
-      setClientData({ name: "", phone: "" });
+      setClientData({ name: "", phone: "", email: "" }); // Reset del email
       setIsSubmitting(false);
   };
 
@@ -158,7 +158,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   // --- LÓGICA DE PAGO 1: TRANSFERENCIA MANUAL ---
   const handleFinalizeReservationManual = async () => {
       if (!paymentProof) return alert("Debes subir el comprobante de transferencia.");
-      if (!clientData.name || !clientData.phone) return alert("Completa tus datos de contacto.");
+      if (!clientData.name || !clientData.phone || !clientData.email) return alert("Completa todos tus datos de contacto.");
+      
+      // Validación simple de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(clientData.email)) return alert("Por favor ingresa un correo electrónico válido.");
       
       setIsSubmitting(true);
       try {
@@ -173,10 +177,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const { data: publicUrlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName);
           const proofUrl = publicUrlData.publicUrl;
 
-          // 2. Guardar Reserva
+          // 2. Guardar Reserva (Añadido el email)
           const { error: dbError } = await supabase.from('reservas').insert([{
               name: clientData.name,
               phone: clientData.phone,
+              email: clientData.email, // <-- Se guarda en BD para uso de admin/resend posterior
               total_pre_order: total, 
               status: 'pendiente_validacion', 
               payment_proof_url: proofUrl,
@@ -187,7 +192,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (dbError) throw dbError;
 
-          alert("✅ ¡Reserva enviada! Validaremos tu pago manual.");
+          alert("✅ ¡Reserva enviada! Validaremos tu pago manual y te notificaremos al correo.");
           clearCart();
           toggleCart();
 
@@ -201,7 +206,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
   // --- LÓGICA DE PAGO 2: GETNET (ONLINE) ---
   const handleGetNetPayment = async () => {
-    if (!clientData.name || !clientData.phone) return alert("Por favor, completa tus datos de contacto antes de pagar.");
+    if (!clientData.name || !clientData.phone || !clientData.email) return alert("Por favor, completa todos tus datos de contacto antes de pagar.");
+    
+    // Validación simple de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(clientData.email)) return alert("Por favor ingresa un correo electrónico válido.");
     
     setIsSubmitting(true);
     try {
@@ -213,13 +222,14 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
             category: item.category
         }));
 
+        // customerDetails ahora incluye email
         const response = await fetch('/api/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 cart: cartLite, 
                 total: total,
-                customerDetails: clientData
+                customerDetails: clientData 
             }),
         });
 
@@ -378,18 +388,25 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">Tus Datos de Contacto</h4>
                                 <div className="space-y-2">
                                     <input 
-                                            type="text" 
-                                            placeholder="Nombre Completo" 
-                                            className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
-                                            value={clientData.name}
-                                            onChange={(e) => setClientData({...clientData, name: e.target.value})}
+                                        type="text" 
+                                        placeholder="Nombre Completo" 
+                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
+                                        value={clientData.name}
+                                        onChange={(e) => setClientData({...clientData, name: e.target.value})}
                                     />
                                     <input 
-                                            type="tel" 
-                                            placeholder="Teléfono / WhatsApp" 
-                                            className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
-                                            value={clientData.phone}
-                                            onChange={(e) => setClientData({...clientData, phone: e.target.value})}
+                                        type="email" 
+                                        placeholder="Correo Electrónico" 
+                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
+                                        value={clientData.email}
+                                        onChange={(e) => setClientData({...clientData, email: e.target.value})}
+                                    />
+                                    <input 
+                                        type="tel" 
+                                        placeholder="Teléfono / WhatsApp" 
+                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-white focus:border-[#DAA520] outline-none transition-colors"
+                                        value={clientData.phone}
+                                        onChange={(e) => setClientData({...clientData, phone: e.target.value})}
                                     />
                                 </div>
                             </div>
