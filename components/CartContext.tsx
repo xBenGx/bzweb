@@ -185,7 +185,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               total_pre_order: total, 
               status: 'pendiente_validacion', 
               payment_proof_url: proofUrl,
-              details_json: items, 
+              pre_order: items, // SOLUCIÓN APLICADA AQUÍ: Se cambió details_json por pre_order
               payment_method: 'manual', 
               date_reserva: new Date().toISOString().split('T')[0],
           }]);

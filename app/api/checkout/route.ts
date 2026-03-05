@@ -38,7 +38,7 @@ export async function POST(request: Request) {
           phone: customerDetails.phone,
           total_pre_order: total,
           status: 'pendiente_pago',
-          details_json: cart,
+          pre_order: cart, // SOLUCIÓN APLICADA AQUÍ: Se cambió details_json por pre_order
           payment_method: 'getnet',
           date_reserva: new Date().toISOString().split('T')[0]
       }])
