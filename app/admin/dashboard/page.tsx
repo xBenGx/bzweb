@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw, AlertTriangle, FileCheck
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -25,7 +25,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "pagos_web", label: "Pagos Web", icon: Globe }, // NUEVO TAB
+    { id: "pagos_web", label: "Pagos Web", icon: Globe },
     { id: "ventas", label: "Caja Local", icon: DollarSign }, 
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
@@ -51,7 +51,6 @@ export default function DashboardPage() {
   const [candidatos, setCandidatos] = useState<any[]>([]); 
   const [clientes, setClientes] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<any[]>([]); 
-  // NUEVO ESTADO: VENTAS
   const [ventas, setVentas] = useState<any[]>([]);
 
   // --- NUEVOS ESTADOS PARA EL PANEL DE RESERVAS AVANZADO ---
@@ -86,12 +85,11 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- HELPER: FORMATO DE FECHA SEGURO (SOLUCIÓN ERROR ROJO) ---
+  // --- HELPER: FORMATO DE FECHA SEGURO ---
   const formatDateSafe = (dateString: string) => {
       if (!dateString) return "Sin Fecha";
-      // Agregamos T12:00:00 para asegurar que no se reste un día por zona horaria
       const date = new Date(`${dateString}T12:00:00`); 
-      if (isNaN(date.getTime())) return dateString; // Si falla, devuelve el string original para debug
+      if (isNaN(date.getTime())) return dateString; 
       
       return date.toLocaleDateString('es-CL', { 
           weekday: 'short', 
@@ -100,19 +98,45 @@ export default function DashboardPage() {
       });
   };
 
-  // --- CARGA DE DATOS Y REALTIME (Conexión Supabase) ---
+  // --- FUNCION CRÍTICA: BORRAR TABLA COMPLETA (RESET) ---
+  const handleResetTable = async (tableName: string, displayName: string) => {
+      const confirm1 = window.confirm(`⚠️ ADVERTENCIA CRÍTICA ⚠️\n\n¿Estás seguro de que deseas ELIMINAR TODOS los registros de ${displayName}? Esta acción NO se puede deshacer y empezarás desde 0.`);
+      if (!confirm1) return;
+      
+      const confirm2 = window.prompt(`Para confirmar la eliminación total, escribe la palabra "BORRAR" en mayúsculas:`);
+      if (confirm2 !== "BORRAR") {
+          alert("Acción cancelada de seguridad.");
+          return;
+      }
+
+      setIsLoading(true);
+      try {
+          // Eliminar todo requiere un filtro que siempre sea verdadero
+          const { error } = await supabase.from(tableName).delete().neq('id', -1);
+          if (error) throw error;
+          alert(`✅ ÉXITO. Todos los registros de ${displayName} han sido eliminados. El módulo se ha reseteado.`);
+          fetchData();
+      } catch (error: any) {
+          alert("Error al vaciar la tabla: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  // --- CARGA DE DATOS Y REALTIME ---
   useEffect(() => {
     fetchData();
 
-    // Suscripción a cambios en tiempo real en las tablas críticas
     const channel = supabase
       .channel('realtime-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => fetchData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos_reserva' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData()) // Escuchar ventas
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData()) // <--- ESCUCHAR PROMOS
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData()) // <--- ESCUCHAR SHOWS
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventas_generales' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shows' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'candidatos' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -121,72 +145,58 @@ export default function DashboardPage() {
   }, []);
 
   const fetchData = async () => {
-      // 1. Promociones
       const { data: promosData } = await supabase.from('promociones').select('*').order('id', { ascending: false });
       if (promosData) setPromos(promosData);
 
-      // 2. Shows
       const { data: showsData } = await supabase.from('shows').select('*').order('created_at', { ascending: false });
       if (showsData) setShows(showsData);
 
-      // 3. Reservas (Incluye el JSON del pedido anticipado)
       const { data: reservasData } = await supabase.from('reservas').select('*').order('created_at', { ascending: false });
       if (reservasData) setReservas(reservasData);
 
-      // 4. Solicitudes / Eventos
+      // Solicitudes (Cotizaciones)
       const { data: solicitudesData } = await supabase.from('solicitudes').select('*').order('created_at', { ascending: false });
       if (solicitudesData) setSolicitudes(solicitudesData);
 
-      // 5. Clientes
+      // RRHH (Candidatos)
+      const { data: candsData } = await supabase.from('candidatos').select('*').order('created_at', { ascending: false });
+      if (candsData) setCandidatos(candsData);
+
       const { data: clientesData } = await supabase.from('clientes').select('*').order('nombre', { ascending: true });
       if (clientesData) setClientes(clientesData);
 
-      // 6. Menú Express (Productos que se muestran en la web)
       const { data: menuData } = await supabase.from('productos_reserva').select('*').order('name', { ascending: true });
       if (menuData) setMenuItems(menuData);
 
-      // 7. Ventas Generales (NUEVO)
       const { data: ventasData } = await supabase.from('ventas_generales').select('*').order('created_at', { ascending: false });
       if (ventasData) setVentas(ventasData);
   };
-  // --- LÓGICA CARRUSEL UNIFICADO (NUEVA) ---
-  // Fusiona Shows y Promos para visualizarlos en el panel de control del Carrusel
+
+  // --- LÓGICA CARRUSEL UNIFICADO ---
   const getCarouselItems = () => {
-      // Mapeamos para añadir tipo y normalizar datos
       const mappedPromos = promos.map(p => ({...p, type: 'promo', sourceId: p.id}));
       const mappedShows = shows.map(s => ({...s, type: 'show', sourceId: s.id}));
-      // Retornamos todo (activo e inactivo) ordenado por creación para gestión
       return [...mappedShows, ...mappedPromos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   };
   const carouselItems = getCarouselItems();
-  // Contamos solo los activos para el KPI
   const carouselItemsActiveCount = carouselItems.filter(i => i.active).length;
 
-  // Toggle rápido para activar/desactivar del carrusel
   const toggleVisibility = async (item: any) => {
       const table = item.type === 'promo' ? 'promociones' : 'shows';
       await supabase.from(table).update({ active: !item.active }).eq('id', item.sourceId);
-      // El fetch se hace automático por la suscripción realtime
   };
 
-  // --- CALCULOS FINANCIEROS (LÓGICA NUEVA INTEGRADA) ---
-  // 1. Ingresos por Ventas Manuales
+  // --- CALCULOS FINANCIEROS ---
   const ingresosManuales = ventas.reduce((acc, curr) => acc + (curr.monto || 0), 0);
-  // 2. Ingresos por Pre-orders de Reservas Web
   const ingresosPreOrder = reservas.reduce((acc, curr) => acc + (curr.total_pre_order || 0), 0);
-  // 3. Total Global
   const totalIngresosGlobal = ingresosManuales + ingresosPreOrder;
 
-  // 4. Desglose Específico
   const ventasEntradas = ventas.filter(v => v.tipo === 'entrada_manual').reduce((acc, curr) => acc + (curr.monto || 0), 0);
   const ventasMenuManual = ventas.filter(v => v.tipo === 'consumo_extra' || v.tipo === 'general').reduce((acc, curr) => acc + (curr.monto || 0), 0);
   const totalVentasMenu = ventasMenuManual + ingresosPreOrder;
 
-  // 5. Generar Historial Unificado de Clientes (Reservas + Ventas)
   const getClientHistory = () => {
       const history: any[] = [];
-      
-      // A. Desde Reservas (Gente que reservó y quizás compró menú anticipado)
       reservas.forEach(res => {
           history.push({
               id: `res-${res.id}`,
@@ -200,13 +210,9 @@ export default function DashboardPage() {
           });
       });
 
-      // B. Desde Ventas Manuales (Si se especificó cliente en la descripción)
       ventas.forEach(v => {
-          // Intentamos extraer nombre si está en formato "Nombre - Descripcion" o usamos el campo cliente si existe en tu logica futura
-          // Por ahora asumimos que descripcion trae info o es venta mostrador
           const parts = v.descripcion.split('-');
           const possibleName = parts.length > 1 ? parts[0].trim() : (v.tipo === 'entrada_manual' ? 'Venta Entrada' : 'Cliente Caja');
-          
           history.push({
               id: `ven-${v.id}`,
               cliente: possibleName,
@@ -219,41 +225,24 @@ export default function DashboardPage() {
           });
       });
 
-      // Ordenar por fecha más reciente
       return history.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   };
-  
   const clientHistory = getClientHistory();
 
-  // 6. LÓGICA DE SHOWS Y RESERVAS CON PEDIDO (NUEVO REQUERIMIENTO)
-  // Esta lógica cruza tus shows con las reservas para darte métricas exactas
   const getShowPerformance = () => {
     return shows.map(show => {
-        // Filtramos reservas que coincidan con la fecha del show y no estén rechazadas
         const matchReservas = reservas.filter(r => r.date_reserva === show.date_event && r.status !== 'rechazada');
-        
-        // Métricas
         const totalPax = matchReservas.reduce((acc, curr) => acc + parseInt(curr.guests || 0), 0);
         const reservasConPedido = matchReservas.filter(r => r.total_pre_order > 0).length;
         const totalDineroComida = matchReservas.reduce((acc, curr) => acc + (curr.total_pre_order || 0), 0);
-        
-        return {
-            ...show,
-            paxReal: totalPax,
-            pedidosCount: reservasConPedido,
-            dineroComida: totalDineroComida
-        };
+        return { ...show, paxReal: totalPax, pedidosCount: reservasConPedido, dineroComida: totalDineroComida };
     });
   };
-
   const showPerformance = getShowPerformance();
-  
-  // Filtramos solo las reservas que tienen pedidos para el panel de detalle
   const reservasConPedidoFull = reservas.filter(r => r.total_pre_order > 0);
 
-  // --- LÓGICA DE PAGOS WEB / GETNET (NUEVO) ---
+  // --- LÓGICA DE PAGOS WEB / GETNET ---
   const getWebPayments = () => {
-      // Filtramos reservas que tengan montos pagados o intento de pago
       return reservas
         .filter(r => r.total_pre_order > 0 || r.payment_id)
         .map(r => ({
@@ -264,8 +253,8 @@ export default function DashboardPage() {
             monto: r.total_pre_order,
             ref_getnet: r.payment_id || '---',
             status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') 
-                         ? 'APROBADO' 
-                         : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
+                          ? 'APROBADO' 
+                          : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
             detalle: `${r.pre_order?.length || 0} items`,
             reserva_obj: r
         }))
@@ -280,14 +269,13 @@ export default function DashboardPage() {
   const totalWebPending = webPayments.filter(p => p.status_pago === 'PENDIENTE').reduce((acc, curr) => acc + curr.monto, 0);
 
 
-  // --- MANEJADOR DE IMAGEN (Unificado para todos los módulos) ---
+  // --- MANEJADOR DE IMAGEN ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
           setSelectedFile(file);
           const reader = new FileReader();
           reader.onloadend = () => {
-              // Previsualización local
               if (type === 'promo') setCurrentPromo({ ...currentPromo, image_url: reader.result as string });
               if (type === 'show') setCurrentShow({ ...currentShow, image_url: reader.result as string });
               if (type === 'menu') setCurrentMenuItem({ ...currentMenuItem, image_url: reader.result as string });
@@ -302,7 +290,6 @@ export default function DashboardPage() {
       
       const fileExt = fileToUpload.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      // Asegúrate de tener un bucket llamado 'images' en Supabase Storage
       const { error } = await supabase.storage.from(bucket).upload(fileName, fileToUpload);
       if (error) {
           console.error("Error subiendo imagen:", error);
@@ -316,17 +303,12 @@ export default function DashboardPage() {
   const triggerFileInput = () => {
       fileInputRef.current?.click();
   };
+
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE VENTAS (NUEVO MODAL)
+  // LÓGICA GESTIÓN DE VENTAS
   // ---------------------------------------------------------
   const handleOpenVentaModal = () => {
-      setCurrentVenta({ 
-          descripcion: "", 
-          cliente: "", // Campo para nombre cliente manual
-          monto: 0, 
-          tipo: "consumo_extra", 
-          metodo_pago: "efectivo" 
-      });
+      setCurrentVenta({ descripcion: "", cliente: "", monto: 0, tipo: "consumo_extra", metodo_pago: "efectivo" });
       setIsVentaModalOpen(true);
   };
 
@@ -334,9 +316,7 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
-          // Combinamos nombre cliente en descripción para mantener simple la tabla
           const descFinal = currentVenta.cliente ? `${currentVenta.cliente} - ${currentVenta.descripcion}` : currentVenta.descripcion;
-
           const ventaData = {
               descripcion: descFinal,
               monto: currentVenta.monto,
@@ -344,10 +324,8 @@ export default function DashboardPage() {
               metodo_pago: currentVenta.metodo_pago,
               created_at: new Date().toISOString()
           };
-
           const { error } = await supabase.from('ventas_generales').insert([ventaData]);
           if (error) throw error;
-
           await fetchData();
           setIsVentaModalOpen(false);
       } catch (error: any) {
@@ -376,25 +354,14 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
-          const clientData = {
-              nombre: currentClient.nombre,
-              whatsapp: currentClient.whatsapp,
-              fecha_nacimiento: currentClient.fecha_nacimiento
-          };
-
+          const clientData = { nombre: currentClient.nombre, whatsapp: currentClient.whatsapp, fecha_nacimiento: currentClient.fecha_nacimiento };
           let result;
-          if (currentClient.id) {
-              result = await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
-          } else {
-              result = await supabase.from('clientes').insert([clientData]);
-          }
-
+          if (currentClient.id) result = await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
+          else result = await supabase.from('clientes').insert([clientData]);
           if (result.error) throw result.error;
-
           await fetchData();
           setIsClientModalOpen(false);
       } catch (error: any) {
-          console.error("Error al guardar cliente:", error);
           alert("Error al guardar: " + error.message);
       } finally {
           setIsLoading(false);
@@ -446,7 +413,7 @@ export default function DashboardPage() {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
       const filterMonth = filterDate.getMonth();
-      const filterDay = filterDate.getDate() + 1; // Ajuste por zona horaria simple
+      const filterDay = filterDate.getDate() + 1;
 
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
@@ -456,7 +423,6 @@ export default function DashboardPage() {
           return dMonth === filterMonth && dDay === filterDay;
       });
   };
-
   const birthdays = getBirthdays();
 
   // ---------------------------------------------------------
@@ -502,18 +468,11 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA GESTIÓN DE MENÚ EXPRESS / RESERVA
+  // LÓGICA GESTIÓN DE MENÚ EXPRESS
   // ---------------------------------------------------------
   const handleOpenMenuModal = (item: any = null) => {
       setSelectedFile(null);
-      setCurrentMenuItem(item || { 
-          name: "", 
-          description: "", 
-          price: 0, 
-          image_url: "", 
-          active: true, 
-          category: "General" 
-      });
+      setCurrentMenuItem(item || { name: "", description: "", price: 0, image_url: "", active: true, category: "General" });
       setIsMenuModalOpen(true);
   };
 
@@ -526,30 +485,16 @@ export default function DashboardPage() {
               const uploadedUrl = await uploadImageToSupabase();
               if (uploadedUrl) finalImageUrl = uploadedUrl;
           }
-
           const menuData = {
-              name: currentMenuItem.name,
-              description: currentMenuItem.description,
-              price: currentMenuItem.price,
-              active: currentMenuItem.active,
-              category: currentMenuItem.category,
-              image_url: finalImageUrl
+              name: currentMenuItem.name, description: currentMenuItem.description,
+              price: currentMenuItem.price, active: currentMenuItem.active,
+              category: currentMenuItem.category, image_url: finalImageUrl
           };
-
-          if (currentMenuItem.id) {
-              await supabase.from('productos_reserva').update(menuData).eq('id', currentMenuItem.id);
-          } else {
-              await supabase.from('productos_reserva').insert([menuData]);
-          }
-
+          if (currentMenuItem.id) await supabase.from('productos_reserva').update(menuData).eq('id', currentMenuItem.id);
+          else await supabase.from('productos_reserva').insert([menuData]);
           await fetchData();
           setIsMenuModalOpen(false);
-      } catch (error: any) {
-          console.error("Error guardando producto:", error);
-          alert("Error: " + error.message);
-      } finally {
-          setIsLoading(false);
-      }
+      } catch (error: any) { alert("Error: " + error.message); } finally { setIsLoading(false); }
   };
 
   const handleDeleteMenuItem = async (id: number) => {
@@ -604,10 +549,9 @@ export default function DashboardPage() {
   };
 
   // ---------------------------------------------------------
-  // LÓGICA RESERVAS & SOLICITUDES (ACTUALIZADA CON WHATSAPP + IMAGEN)
+  // LÓGICA RESERVAS & SOLICITUDES
   // ---------------------------------------------------------
    
-  // Función SIMPLE para actualizar estado (usada para rechazar)
   const updateReservaStatus = async (id: number, status: string) => {
       await supabase.from('reservas').update({ status }).eq('id', id);
       fetchData();
@@ -618,39 +562,25 @@ export default function DashboardPage() {
       fetchData();
   };
 
-  // --- FUNCIÓN CLAVE: CONFIRMAR, GENERAR IMAGEN Y SINCRONIZAR CÓDIGO ---
   const handleConfirmReservation = async (reserva: any) => {
     if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
-
     setProcessingId(reserva.id); 
-
     try {
-        // 1. GENERAR CÓDIGO BZ LOCALMENTE
-        // Lo generamos aquí para asegurar que lo que ve el usuario en la imagen es IDÉNTICO a lo que se guarda en la BD
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const codigoFinal = reserva.code || `BZ-${randomNum}`;
-        console.log("Generando ticket para código:", codigoFinal);
 
-        // 2. CREAR ELEMENTO VISUAL (Ticket Negro y Dorado)
         const ticketElement = document.createElement("div");
-        // Posicionamos fuera de pantalla pero visible para el render
         ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:1080px; height:1920px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #000;";
         
-        // HTML del Ticket usando el CÓDIGO FINAL
         ticketElement.innerHTML = `
           <div style="width: 100%; height: 100%; position: relative; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-              
               <img src="/ticket-bg.png" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; z-index:0; opacity: 0.6;" onerror="this.style.display='none'" />
-              
               <div style="z-index: 10; width: 100%; display: flex; flex-direction: column; align-items: center; border: 20px solid #DAA520; height: 100%; box-sizing: border-box; justify-content: center;">
-                  
                   <h1 style="font-size: 80px; color: #DAA520; margin: 0; letter-spacing: 10px; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">BOULEVARD</h1>
                   <h2 style="font-size: 50px; margin: 10px 0 60px 0; letter-spacing: 10px; color: #fff; text-shadow: 2px 2px 10px rgba(0,0,0,0.8);">ZAPALLAR</h2>
-                  
                   <div style="font-size: 130px; font-weight: bold; color: #DAA520; margin: 60px 0; background: rgba(0,0,0,0.8); padding: 40px 80px; border: 4px solid #DAA520; border-radius: 40px; text-shadow: 0 0 20px #DAA520;">
                       ${codigoFinal}
                   </div>
-                  
                   <div style="text-align: left; width: 80%; margin-top: 60px; font-size: 45px; line-height: 1.8; background: rgba(0,0,0,0.6); padding: 40px; border-radius: 30px; border: 1px solid #333;">
                       <p style="margin: 10px 0;"><strong style="color: #DAA520;">TITULAR:</strong> ${reserva.name}</p>
                       <p style="margin: 10px 0;"><strong style="color: #DAA520;">FECHA:</strong> ${reserva.date_reserva}</p>
@@ -658,57 +588,33 @@ export default function DashboardPage() {
                       <p style="margin: 10px 0;"><strong style="color: #DAA520;">ZONA:</strong> ${reserva.zone}</p>
                       <p style="margin: 10px 0;"><strong style="color: #DAA520;">CANTIDAD:</strong> ${reserva.guests} PAX</p>
                   </div>
-
                   <p style="margin-top: 100px; font-size: 35px; color: #aaa; text-transform: uppercase; letter-spacing: 2px; text-shadow: 1px 1px 2px black;">Presenta este código en recepción</p>
               </div>
           </div>
         `;
         document.body.appendChild(ticketElement);
 
-        // 3. GENERAR IMAGEN
-        // Pequeña espera para cargar recursos
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        const canvas = await html2canvas(ticketElement, { 
-            scale: 1, 
-            useCORS: true, 
-            allowTaint: true,
-            backgroundColor: null 
-        });
+        const canvas = await html2canvas(ticketElement, { scale: 1, useCORS: true, allowTaint: true, backgroundColor: null });
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-        document.body.removeChild(ticketElement); // Limpieza
+        document.body.removeChild(ticketElement);
 
         let ticketPublicUrl = null;
 
-        // 4. SUBIR A SUPABASE
         if (blob) {
-            // Nombre único con el código
             const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
-            // Subimos directamente usando lógica directa para asegurar bucket 'tickets'
-            const { error: uploadError } = await supabase.storage
-                .from('tickets') // Asegúrate que este bucket existe y es público
-                .upload(fileName, blob, { contentType: 'image/png', upsert: true });
-            
+            const { error: uploadError } = await supabase.storage.from('tickets').upload(fileName, blob, { contentType: 'image/png', upsert: true });
             if (!uploadError) {
                 const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
                 ticketPublicUrl = data.publicUrl;
-                console.log("Ticket subido:", ticketPublicUrl);
-            } else {
-                 console.warn("Error subiendo ticket:", uploadError);
             }
         }
 
-        // 5. ENVIAR A LA API (Sincronizando Código)
-        // Enviamos 'reservation_code' para forzar a la API a guardar ESTE mismo código
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                reservaId: reserva.id,
-                ticketUrl: ticketPublicUrl,
-                reservation_code: codigoFinal, // <--- CLAVE DE LA SINCRONIZACIÓN
-                phone: reserva.phone
-            }),
+            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone }),
         });
 
         const result = await response.json();
@@ -720,35 +626,20 @@ export default function DashboardPage() {
             alert("⚠️ Confirmado en BD, pero error al enviar: " + (result.error || "Desconocido"));
             fetchData();
         }
-
     } catch (error: any) {
-        console.error(error);
         alert("Error crítico al generar ticket: " + error.message);
     } finally {
         setProcessingId(null);
     }
   };
-  // ---------------------------------------------------------
-  // NUEVAS FUNCIONES PARA EL PANEL AVANZADO DE RESERVAS
-  // ---------------------------------------------------------
-  
-  // 1. Validar Entrada Manualmente (Check-in desde Dashboard)
+
   const handleManualCheckIn = async (reservaId: number) => {
       if(!confirm("¿Registrar el ingreso del cliente?")) return;
-      
-      const { error } = await supabase
-          .from('reservas')
-          .update({ 
-              status: 'realizado', 
-              check_in_time: new Date().toISOString() 
-          })
-          .eq('id', reservaId);
-          
+      const { error } = await supabase.from('reservas').update({ status: 'realizado', check_in_time: new Date().toISOString() }).eq('id', reservaId);
       if (error) alert("Error al registrar entrada");
-      else fetchData(); // El realtime lo actualizaría, pero forzamos por seguridad
+      else fetchData();
   };
 
-  // 2. Eliminar Reserva
   const handleDeleteReserva = async (id: number) => {
       if(confirm("¿ELIMINAR RESERVA? Esta acción es irreversible.")) {
           await supabase.from('reservas').delete().eq('id', id);
@@ -756,32 +647,28 @@ export default function DashboardPage() {
       }
   };
 
-  // 3. Filtrado Inteligente
   const filteredReservas = reservas.filter(r => {
-      // Filtro por Texto (Nombre, Email o Código BZ)
       const searchLower = reservaSearch.toLowerCase();
-      // Buscamos en el campo 'code' o 'reservation_code' dependiendo de tu DB
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
-      
-      const matchText = 
-          (r.name || "").toLowerCase().includes(searchLower) || 
-          codeMatch ||
-          (r.email || "").toLowerCase().includes(searchLower);
-
-      // Filtro por Estado
-      const matchStatus = reservaFilterStatus === "todos" 
-          ? true 
-          : reservaFilterStatus === "pendientes" 
-              ? r.status === "pendiente"
-              : reservaFilterStatus === "confirmadas"
-                  ? r.status === "confirmada"
-                  : r.status === reservaFilterStatus; // 'realizado', 'cancelada'
-
-      // Filtro por Fecha
+      const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
+      const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
       const matchDate = reservaDateFilter ? r.date_reserva === reservaDateFilter : true;
-
       return matchText && matchStatus && matchDate;
   });
+
+  // Funciones WhatsApp
+  const handleWhatsAppCotizacion = (phone: string, name: string) => {
+      const cleanPhone = phone.replace(/\D/g, '');
+      const url = `https://wa.me/${cleanPhone}?text=Hola%20${encodeURIComponent(name)},%20te%20contactamos%20de%20Boulevard%20Zapallar%20por%20tu%20cotizaci%C3%B3n.`;
+      window.open(url, '_blank');
+  }
+
+  const handleWhatsAppCandidato = (phone: string, name: string) => {
+      const cleanPhone = phone.replace(/\D/g, '');
+      const url = `https://wa.me/${cleanPhone}?text=Hola%20${encodeURIComponent(name)},%20hemos%20revisado%20tu%20postulaci%C3%B3n%20para%20unirte%20al%20equipo%20de%20Boulevard%20Zapallar.`;
+      window.open(url, '_blank');
+  }
+
   return (
     <div className={`min-h-screen bg-black text-white flex ${montserrat.className}`}>
       
@@ -882,8 +769,11 @@ export default function DashboardPage() {
             {/* 🔥🔥 NUEVA VISTA: PAGOS WEB (GETNET) 🔥🔥 */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                     
-                     {/* KPIs GetNet */}
+                     <div className="flex justify-end mb-4">
+                         <button onClick={() => handleResetTable('reservas', 'Pagos y Reservas Web')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                             <Trash2 className="w-4 h-4" /> Resetear Todo
+                         </button>
+                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                         <div className="bg-zinc-900 border border-green-500/20 p-6 rounded-2xl relative overflow-hidden">
                             <div className="absolute right-0 top-0 p-4 opacity-10"><CheckCircle className="w-20 h-20 text-green-500"/></div>
@@ -913,7 +803,7 @@ export default function DashboardPage() {
                             <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Registro de Transacciones Web</h3>
                             <div className="relative w-64">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                                <input type="text" placeholder="Buscar por Cliente o ID Pago..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
+                                <input type="text" placeholder="Buscar por Cliente o ID..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
                             </div>
                         </div>
                         <div className="overflow-x-auto custom-scrollbar flex-1">
@@ -951,12 +841,10 @@ export default function DashboardPage() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                {/* SI ESTÁ PENDIENTE PERO SE CONFIRMA PAGO MANUALMENTE */}
                                                 {p.status_pago === 'PENDIENTE' && (
                                                     <button 
                                                         onClick={() => handleConfirmReservation(p.reserva_obj)}
                                                         className="text-[10px] bg-white/10 hover:bg-green-600 hover:text-white px-3 py-1 rounded transition-colors"
-                                                        title="Confirmar Pago Manualmente y Emitir Ticket"
                                                     >
                                                         Confirmar Manual
                                                     </button>
@@ -971,14 +859,20 @@ export default function DashboardPage() {
                      </div>
                 </motion.div>
             )}
-            {/* --- 1.5 VISTA VENTAS / FINANZAS --- */}
+
+            {/* --- VISTA VENTAS / FINANZAS --- */}
             {activeTab === "ventas" && (
                 <motion.div key="ventas" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Gestión Financiera 360°</h3>
-                        <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
-                            <DollarSign className="w-4 h-4" /> Registrar Venta Manual
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => handleResetTable('ventas_generales', 'Ventas de Caja')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                                <Trash2 className="w-4 h-4" /> Resetear Ventas
+                            </button>
+                            <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
+                                <DollarSign className="w-4 h-4" /> Registrar Venta Manual
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -993,7 +887,7 @@ export default function DashboardPage() {
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Ticket className="w-24 h-24 text-[#DAA520]" /></div>
                             <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Entradas</p>
                             <h2 className="text-3xl font-black text-[#DAA520]">${ventasEntradas.toLocaleString('es-CL')}</h2>
-                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${(ventasEntradas/totalIngresosGlobal)*100}%` }} className="h-full bg-[#DAA520] rounded-full"></div></div>
+                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${totalIngresosGlobal > 0 ? (ventasEntradas/totalIngresosGlobal)*100 : 0}%` }} className="h-full bg-[#DAA520] rounded-full"></div></div>
                             <p className="text-[10px] text-zinc-500 mt-2">Tickets / Cover / Accesos</p>
                         </div>
 
@@ -1001,7 +895,7 @@ export default function DashboardPage() {
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Coffee className="w-24 h-24 text-blue-500" /></div>
                             <p className="text-xs text-zinc-400 uppercase font-bold mb-2">Venta de Menú / Carta</p>
                             <h2 className="text-3xl font-black text-blue-400">${totalVentasMenu.toLocaleString('es-CL')}</h2>
-                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${(totalVentasMenu/totalIngresosGlobal)*100}%` }} className="h-full bg-blue-500 rounded-full"></div></div>
+                            <div className="w-full h-1 bg-zinc-800 rounded-full mt-4"><div style={{ width: `${totalIngresosGlobal > 0 ? (totalVentasMenu/totalIngresosGlobal)*100 : 0}%` }} className="h-full bg-blue-500 rounded-full"></div></div>
                             <p className="text-[10px] text-zinc-500 mt-2">Consumo local + Pedidos anticipados</p>
                         </div>
                     </div>
@@ -1019,7 +913,7 @@ export default function DashboardPage() {
                                                 <th className="px-4 py-3">Show / Evento</th>
                                                 <th className="px-4 py-3 text-center">Entradas</th>
                                                 <th className="px-4 py-3 text-center">Con Pedido</th>
-                                                <th className="px-4 py-3 text-right">Recaudación (Comida)</th>
+                                                <th className="px-4 py-3 text-right">Recaudación</th>
                                             </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
@@ -1160,10 +1054,16 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS AVANZADA (PANEL BZ) */}
+            {/* 2. GESTIÓN DE RESERVAS AVANZADA */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     
+                    <div className="flex justify-end mb-4">
+                         <button onClick={() => handleResetTable('reservas', 'Reservas')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                             <Trash2 className="w-4 h-4" /> Resetear Reservas
+                         </button>
+                    </div>
+
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 shrink-0">
                         <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center">
                             <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Reservas</span>
@@ -1171,7 +1071,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="bg-zinc-900 border border-yellow-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute right-0 top-0 p-3 opacity-10"><AlertCircle className="w-12 h-12 text-yellow-500"/></div>
-                            <span className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">Pendientes Pago</span>
+                            <span className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">Pendientes</span>
                             <span className="text-3xl font-bold text-white mt-1">{reservas.filter(r => r.status === 'pendiente').length}</span>
                         </div>
                         <div className="bg-zinc-900 border border-green-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
@@ -1191,7 +1091,7 @@ export default function DashboardPage() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
                             <input 
                                 type="text" 
-                                placeholder="Buscar por Nombre, Código BZ..." 
+                                placeholder="Buscar por Nombre, Código..." 
                                 className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors placeholder:text-zinc-600"
                                 value={reservaSearch}
                                 onChange={(e) => setReservaSearch(e.target.value)}
@@ -1243,7 +1143,7 @@ export default function DashboardPage() {
                                         <tr>
                                             <td colSpan={6} className="px-6 py-20 text-center flex flex-col items-center justify-center gap-2">
                                                 <Search className="w-8 h-8 text-zinc-700"/>
-                                                <span className="text-zinc-500 font-medium">No se encontraron reservas con estos filtros.</span>
+                                                <span className="text-zinc-500 font-medium">No se encontraron reservas.</span>
                                             </td>
                                         </tr>
                                     ) : (
@@ -1251,16 +1151,12 @@ export default function DashboardPage() {
                                             <tr key={res.id} className="hover:bg-white/[0.02] transition-colors group">
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-1">
-                                                        {/* AQUÍ MOSTRAMOS EL CÓDIGO BZ */}
                                                         <span className="font-mono font-black text-[#DAA520] tracking-widest text-xs bg-[#DAA520]/10 px-2 py-0.5 rounded w-fit border border-[#DAA520]/20">
                                                             {res.reservation_code || res.code || "SIN-CODIGO"}
                                                         </span>
                                                         <span className="text-white font-bold flex items-center gap-1.5 mt-1">
                                                             <Clock className="w-3 h-3 text-zinc-500"/> {res.time_reserva} hrs
                                                         </span>
-                                                        
-                                                        {/* --- SOLUCIÓN ERROR INVALID DATE --- */}
-                                                        {/* Usamos la función formatDateSafe en lugar de toLocaleDateString directo */}
                                                         <span className="text-[10px] text-zinc-500 font-medium uppercase">
                                                             {formatDateSafe(res.date_reserva)}
                                                         </span>
@@ -1291,10 +1187,9 @@ export default function DashboardPage() {
                                                             <CheckCircle className="w-3 h-3"/> Listo QR
                                                         </span>
                                                     )}
-                                                    {/* --- VISUALIZACIÓN CLIENTE INGRESADO --- */}
                                                     {(res.status === 'realizado' || res.status === 'ingresado') && (
                                                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase tracking-wide shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-                                                            <QrCode className="w-3 h-3"/> Cliente con QR Utilizado
+                                                            <QrCode className="w-3 h-3"/> Ingresado
                                                         </span>
                                                     )}
                                                     {res.status === 'rechazada' && (
@@ -1330,14 +1225,13 @@ export default function DashboardPage() {
                                                             </button>
                                                         )}
                                                         {res.status === 'confirmada' && (
-                                                            /* --- BOTÓN DE INGRESO ACTUALIZADO --- */
                                                             <button 
                                                                 onClick={() => handleManualCheckIn(res.id)}
                                                                 className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-lg shadow-blue-900/20 text-xs font-bold uppercase tracking-wide group/btn"
                                                                 title="Registrar Ingreso Manualmente"
                                                             >
                                                                 <UserCheck className="w-3 h-3"/>
-                                                                <span className="hidden group-hover/btn:inline">REGISTRAR ENTRADA</span>
+                                                                <span className="hidden group-hover/btn:inline">INGRESO</span>
                                                             </button>
                                                         )}
                                                         {(res.status !== 'realizado' && res.status !== 'ingresado') && (
@@ -1360,14 +1254,20 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
             )}
-{/* 3. MENÚ RESERVA / EXPRESS */}
+
+            {/* 3. MENÚ RESERVA / EXPRESS */}
             {activeTab === "menu_express" && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                      <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Menú para Reservas (Pre-order)</h3>
-                        <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                            <Plus className="w-4 h-4" /> Nuevo Producto
-                        </button>
+                        <div className="flex gap-2">
+                             <button onClick={() => handleResetTable('productos_reserva', 'Catálogo del Menú')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                                 <Trash2 className="w-4 h-4" /> Resetear Menú
+                             </button>
+                            <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <Plus className="w-4 h-4" /> Nuevo Producto
+                            </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {menuItems.map((item) => (
@@ -1395,6 +1295,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* CLIENTES */}
             {activeTab === "clientes" && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -1430,9 +1331,14 @@ export default function DashboardPage() {
                     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-bold">Base de Clientes ({clientes.length})</h3>
-                            <button onClick={() => handleOpenClientModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                                <UserPlus className="w-4 h-4" /> Nuevo Cliente
-                            </button>
+                            <div className="flex gap-2">
+                                 <button onClick={() => handleResetTable('clientes', 'Todos los Clientes')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                                     <Trash2 className="w-4 h-4" /> Resetear BD
+                                 </button>
+                                <button onClick={() => handleOpenClientModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                    <UserPlus className="w-4 h-4" /> Nuevo Cliente
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm text-zinc-400">
@@ -1463,16 +1369,22 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* SHOWS */}
             {activeTab === "shows" && (
                 <motion.div key="shows" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="flex justify-between mb-4">
+                    <div className="flex justify-between items-center mb-6">
                         <div className="relative w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                             <input type="text" placeholder="Buscar show..." className="w-full bg-zinc-900 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:border-[#DAA520]" />
                         </div>
-                        <button onClick={() => handleOpenShowModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                            <Plus className="w-4 h-4" /> Nuevo Show
-                        </button>
+                        <div className="flex gap-2">
+                             <button onClick={() => handleResetTable('shows', 'Todos los Shows')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                                 <Trash2 className="w-4 h-4" /> Resetear Shows
+                             </button>
+                            <button onClick={() => handleOpenShowModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <Plus className="w-4 h-4" /> Nuevo Show
+                            </button>
+                        </div>
                     </div>
                     <div className="grid gap-4">
                         {shows.map((show) => (
@@ -1503,13 +1415,19 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* PROMOCIONES */}
             {activeTab === "promos" && (
                 <motion.div key="promos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Promociones Activas</h3>
-                        <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
-                            <Plus className="w-4 h-4" /> Nuevo Promo
-                        </button>
+                        <div className="flex gap-2">
+                             <button onClick={() => handleResetTable('promociones', 'Promociones')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                                 <Trash2 className="w-4 h-4" /> Resetear Promos
+                             </button>
+                            <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <Plus className="w-4 h-4" /> Nueva Promo
+                            </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {promos.map((promo) => (
@@ -1535,24 +1453,49 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* EVENTOS / COTIZACIONES */}
             {activeTab === "eventos" && (
                 <motion.div key="eventos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="space-y-3">
-                        {solicitudes.length === 0 ? <p className="text-zinc-500">No hay cotizaciones.</p> : solicitudes.map((req) => (
-                            <div key={req.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold flex items-center gap-2"><FileText className="w-5 h-5 text-[#DAA520]"/> Solicitudes de Cotización</h3>
+                        <button onClick={() => handleResetTable('solicitudes', 'Cotizaciones')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                            <Trash2 className="w-4 h-4" /> Resetear Solicitudes
+                        </button>
+                    </div>
+                    <div className="grid gap-4">
+                        {solicitudes.length === 0 ? <p className="text-zinc-500">No hay cotizaciones pendientes.</p> : solicitudes.map((req) => (
+                            <div key={req.id} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
-                                    <span className={`text-[10px] font-bold text-black px-2 py-0.5 rounded uppercase ${req.status === 'nueva' ? 'bg-[#DAA520]' : 'bg-zinc-500'}`}>{req.status === 'nueva' ? 'Nueva Solicitud' : req.status}</span>
-                                    <span className="text-[10px] text-zinc-500">{new Date(req.created_at).toLocaleDateString()}</span>
+                                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${req.status === 'nueva' ? 'bg-[#DAA520] text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+                                        {req.status === 'nueva' ? 'Nueva Solicitud' : 'Cotizada'}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 font-mono">{new Date(req.created_at).toLocaleDateString()}</span>
                                 </div>
-                                <h4 className="font-bold text-white text-lg">{req.type} - {req.name}</h4>
-                                <div className="flex flex-wrap gap-4 mt-2 text-xs text-zinc-400">
-                                    <span className="flex items-center gap-1"><Users className="w-3 h-3"/> {req.guests} pax</span>
-                                    <span className="flex items-center gap-1"><Mail className="w-3 h-3"/> {req.email}</span>
-                                    <span className="flex items-center gap-1"><Phone className="w-3 h-3"/> {req.phone}</span>
+                                
+                                <h4 className="font-black text-white text-xl uppercase mt-2">{req.type}</h4>
+                                <p className="text-sm text-zinc-400 font-medium">Titular: {req.name}</p>
+                                
+                                <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 text-xs text-zinc-300 bg-black/40 p-3 rounded-xl border border-white/5">
+                                    <span className="flex items-center gap-1.5"><Users className="w-4 h-4 text-[#DAA520]"/> {req.guests} personas</span>
+                                    <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-[#DAA520]"/> {req.date_event} a las {req.time_event} hrs</span>
+                                    <span className="flex items-center gap-1.5"><Phone className="w-4 h-4 text-blue-400"/> {req.phone}</span>
+                                    <span className="flex items-center gap-1.5"><Mail className="w-4 h-4 text-zinc-500"/> {req.email}</span>
                                 </div>
-                                <div className="mt-4 flex gap-2">
-                                    <button onClick={() => updateSolicitudStatus(req.id, 'cotizada')} className="flex-1 py-2 bg-white text-black rounded-lg text-xs font-bold hover:bg-zinc-200 transition-colors">Marcar como Cotizada</button>
-                                    <button className="flex-1 py-2 border border-white/10 text-white rounded-lg text-xs hover:bg-white/5 transition-colors">Contactar WhatsApp</button>
+                                
+                                <div className="mt-5 flex gap-3">
+                                    <button 
+                                        onClick={() => updateSolicitudStatus(req.id, 'cotizada')} 
+                                        className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all border ${req.status === 'cotizada' ? 'bg-zinc-800 border-zinc-700 text-zinc-500' : 'bg-white text-black border-white hover:bg-zinc-200'}`}
+                                        disabled={req.status === 'cotizada'}
+                                    >
+                                        {req.status === 'cotizada' ? 'Ya Cotizada' : 'Marcar como Atendida'}
+                                    </button>
+                                    <button 
+                                        onClick={() => handleWhatsAppCotizacion(req.phone, req.name)} 
+                                        className="flex-1 py-3 bg-[#25D366]/10 border border-[#25D366]/50 text-[#25D366] rounded-xl text-xs font-bold hover:bg-[#25D366] hover:text-black transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Send className="w-4 h-4"/> Escribir por WhatsApp
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -1560,9 +1503,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* ================================================================================== */}
-            {/* 🔥 NUEVA SECCIÓN: GESTIÓN DE CARRUSEL 🔥 */}
-            {/* ================================================================================== */}
+            {/* CARRUSEL */}
             {activeTab === "carrusel" && (
                 <motion.div key="carrusel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -1580,7 +1521,6 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* VISTA PREVIA DEL CARRUSEL (GRID) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {carouselItems.length === 0 ? (
                             <div className="col-span-full py-20 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-3xl">
@@ -1591,15 +1531,11 @@ export default function DashboardPage() {
                         ) : (
                             carouselItems.map((item) => (
                                 <div key={item.id} className={`group relative bg-zinc-900 border ${item.active ? 'border-[#DAA520]/50' : 'border-white/5 opacity-60 grayscale'} rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02]`}>
-                                    
-                                    {/* Etiqueta de Tipo */}
                                     <div className="absolute top-3 left-3 z-20">
                                         <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase shadow-sm ${item.type === 'show' ? 'bg-[#8338EC] text-white' : 'bg-[#DAA520] text-black'}`}>
                                             {item.type === 'show' ? 'Show / Evento' : 'Promoción'}
                                         </span>
                                     </div>
-
-                                    {/* Controles Rápidos */}
                                     <div className="absolute top-3 right-3 z-20 flex gap-1">
                                         <button onClick={() => toggleVisibility(item)} className="p-1.5 bg-black/50 hover:bg-white text-white hover:text-black rounded-lg backdrop-blur-sm transition-all" title={item.active ? "Ocultar del Carrusel" : "Mostrar en Carrusel"}>
                                             {item.active ? <Eye className="w-4 h-4"/> : <EyeOff className="w-4 h-4"/>}
@@ -1608,19 +1544,13 @@ export default function DashboardPage() {
                                             <Edit2 className="w-4 h-4"/>
                                         </button>
                                     </div>
-
-                                    {/* Imagen (Simulando Aspecto Carrusel) */}
                                     <div className="relative w-full aspect-video bg-black">
                                         <Image src={item.image_url || "/placeholder.jpg"} alt={item.title} fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                                        
-                                        {/* Overlay de Texto (Simulación) */}
                                         <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
                                             <h3 className="text-lg font-bold text-white uppercase italic leading-none mb-1">{item.title}</h3>
                                             <p className="text-xs text-zinc-300 line-clamp-1">{item.subtitle}</p>
                                         </div>
                                     </div>
-
-                                    {/* Footer Tarjeta */}
                                     <div className="p-3 flex justify-between items-center bg-black/40">
                                         <div className="flex items-center gap-2">
                                             <div className={`w-2 h-2 rounded-full ${item.active ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
@@ -1635,17 +1565,49 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
+            {/* RRHH / EQUIPO */}
             {activeTab === "rrhh" && (
                 <motion.div key="rrhh" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="grid gap-3">
-                        {candidatos.length === 0 ? <p className="text-zinc-500">No hay equipo registrado.</p> : candidatos.map((cand) => (
-                            <div key={cand.id} className="bg-zinc-900 border border-white/5 p-4 rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-500 font-bold">{cand.name.charAt(0)}</div>
-                                    <div>
-                                        <h4 className="font-bold text-white text-sm">{cand.name}</h4>
-                                        <p className="text-xs text-zinc-400">{cand.role} • {cand.exp}</p>
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="text-lg font-bold flex items-center gap-2"><Users className="w-5 h-5 text-blue-400"/> Candidatos / Postulaciones</h3>
+                            <p className="text-xs text-zinc-500 mt-1">Gente que quiere unirse al Equipo BZ</p>
+                        </div>
+                        <button onClick={() => handleResetTable('candidatos', 'Postulantes de Empleo')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                            <Trash2 className="w-4 h-4" /> Resetear BD Postulantes
+                        </button>
+                    </div>
+                    <div className="grid gap-4">
+                        {candidatos.length === 0 ? <p className="text-zinc-500 text-sm">No hay postulaciones registradas en este momento.</p> : candidatos.map((cand) => (
+                            <div key={cand.id} className="bg-zinc-900 border border-white/5 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:border-blue-500/30 transition-all">
+                                <div className="flex items-start gap-4 w-full md:w-auto">
+                                    <div className="w-12 h-12 bg-blue-900/20 rounded-full flex items-center justify-center text-blue-500 font-bold shrink-0 text-xl border border-blue-500/20">
+                                        {cand.name.charAt(0).toUpperCase()}
                                     </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h4 className="font-bold text-white text-lg">{cand.name}</h4>
+                                            <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white uppercase">{cand.role}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-xs text-zinc-400 mb-2">
+                                            <span className="flex items-center gap-1"><Mail className="w-3 h-3"/> {cand.email}</span>
+                                            <span className="flex items-center gap-1"><Phone className="w-3 h-3"/> {cand.phone}</span>
+                                        </div>
+                                        <p className="text-xs text-zinc-300 italic">" {cand.experience} "</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+                                    {cand.cv_url && (
+                                        <a href={cand.cv_url} target="_blank" rel="noopener noreferrer" className="w-full md:w-auto px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-2 transition-colors border border-white/10">
+                                            <FileCheck className="w-4 h-4"/> Ver CV
+                                        </a>
+                                    )}
+                                    <button 
+                                        onClick={() => handleWhatsAppCandidato(cand.phone, cand.name)} 
+                                        className="w-full md:w-auto px-4 py-2 bg-[#25D366]/10 text-[#25D366] border border-[#25D366]/30 hover:bg-[#25D366] hover:text-black rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <Send className="w-4 h-4"/> WhatsApp
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -1654,9 +1616,9 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODALES --- */}
+        {/* --- MODALES INFERIORES RESTANTES (NO BORRADOS) --- */}
 
-        {/* MODAL VENTA RÁPIDA (ACTUALIZADO CON CLIENTE Y TIPO) */}
+        {/* MODAL VENTA RÁPIDA */}
         <AnimatePresence>
             {isVentaModalOpen && (
                  <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
@@ -1692,23 +1654,12 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-{/* CLIENTES */}
+        {/* CLIENTES MODAL */}
         <AnimatePresence>
             {isClientModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
-                        exit={{ opacity: 0 }} 
-                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
-                        onClick={() => setIsClientModalOpen(false)} 
-                    />
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.95 }} 
-                        animate={{ opacity: 1, scale: 1 }} 
-                        exit={{ opacity: 0, scale: 0.95 }} 
-                        className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6"
-                    >
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsClientModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md relative z-70 shadow-2xl p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white uppercase">{currentClient.id ? "Editar" : "Nuevo"} Cliente</h3>
                             <button onClick={() => setIsClientModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
@@ -1735,23 +1686,12 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL MENÚ EXPRESS --- */}
+        {/* MODAL MENÚ EXPRESS */}
         <AnimatePresence>
             {isMenuModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
-                        exit={{ opacity: 0 }} 
-                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
-                        onClick={() => setIsMenuModalOpen(false)} 
-                    />
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        animate={{ opacity: 1, scale: 1, y: 0 }} 
-                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]"
-                    >
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[500px]">
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
                             <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
@@ -1782,23 +1722,12 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL EDICIÓN PROMOCIONES --- */}
+        {/* MODAL EDICIÓN PROMOCIONES */}
         <AnimatePresence>
             {isPromoModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
-                        exit={{ opacity: 0 }} 
-                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
-                        onClick={() => setIsPromoModalOpen(false)} 
-                    />
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        animate={{ opacity: 1, scale: 1, y: 0 }} 
-                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[600px]"
-                    >
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsPromoModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[600px]">
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
                             <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'promo')} accept="image/*" className="hidden" />
                             <div onClick={triggerFileInput} className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
@@ -1834,106 +1763,46 @@ export default function DashboardPage() {
             )}
         </AnimatePresence>
 
-        {/* --- MODAL EDICIÓN SHOWS (AVANZADO) --- */}
+        {/* MODAL EDICIÓN SHOWS */}
         <AnimatePresence>
             {isShowModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
-                        exit={{ opacity: 0 }} 
-                        className="absolute inset-0 bg-black/80 backdrop-blur-md" 
-                        onClick={() => setIsShowModalOpen(false)} 
-                    />
-                    <motion.div 
-                        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        animate={{ opacity: 1, scale: 1, y: 0 }} 
-                        exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-                        className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[700px]"
-                    >
-                        
-                        {/* Panel Izquierdo: Imagen */}
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsShowModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[700px]">
                         <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group">
                             <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'show')} accept="image/*" className="hidden" />
                             <div onClick={triggerFileInput} className="relative w-full aspect-[3/4] rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                                 {currentShow.image_url ? <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100" /> : <div className="text-center text-zinc-500"><ImageIcon className="w-8 h-8 mx-auto mb-2"/><p className="text-xs font-bold text-zinc-400 uppercase">Poster Show</p></div>}
                             </div>
                         </div>
-
-                        {/* Panel Derecho: Formulario Completo */}
                         <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
                             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white uppercase">{currentShow.id ? "Editar Show" : "Nuevo Show"}</h3><button onClick={() => setIsShowModalOpen(false)}><X className="w-6 h-6 text-zinc-500 hover:text-white"/></button></div>
                             <form onSubmit={handleSaveShow} className="space-y-6">
-                                
-                                {/* Información Básica */}
                                 <div className="space-y-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título del Evento</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentShow.title} onChange={e => setCurrentShow({...currentShow, title: e.target.value})} /></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo (Corto)</label><input type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.subtitle || ""} onChange={e => setCurrentShow({...currentShow, subtitle: e.target.value})} /></div>
-                                    
-                                    {/* FECHA (CALENDARIO) Y HORA */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label>
-                                            <input 
-                                                type="date" 
-                                                className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                value={currentShow.date_event} 
-                                                onChange={e => setCurrentShow({...currentShow, date_event: e.target.value})} 
-                                            />
-                                        </div>
+                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.date_event} onChange={e => setCurrentShow({...currentShow, date_event: e.target.value})} /></div>
                                         <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inicio</label>
-                                                <input 
-                                                    type="time" 
-                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                    value={currentShow.time_event} 
-                                                    onChange={e => setCurrentShow({...currentShow, time_event: e.target.value})} 
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Término</label>
-                                                <input 
-                                                    type="time" 
-                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" 
-                                                    value={currentShow.end_time || ""} 
-                                                    onChange={e => setCurrentShow({...currentShow, end_time: e.target.value})} 
-                                                />
-                                            </div>
+                                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inicio</label><input type="time" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.time_event} onChange={e => setCurrentShow({...currentShow, time_event: e.target.value})} /></div>
+                                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Término</label><input type="time" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.end_time || ""} onChange={e => setCurrentShow({...currentShow, end_time: e.target.value})} /></div>
                                         </div>
                                     </div>
-
-                                    {/* UBICACIÓN FIJA */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label>
-                                            <input 
-                                                type="text" 
-                                                readOnly 
-                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-zinc-400 text-sm outline-none cursor-not-allowed" 
-                                                value={currentShow.location} 
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta</label><input type="text" placeholder="Ej: DESTACADO" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} />
-                                        </div>
+                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label><input type="text" readOnly className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-zinc-400 text-sm outline-none cursor-not-allowed" value={currentShow.location} /></div>
+                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta</label><input type="text" placeholder="Ej: DESTACADO" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} /></div>
                                     </div>
-
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Detallada</label><textarea rows={3} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none resize-none" value={currentShow.description || ""} onChange={e => setCurrentShow({...currentShow, description: e.target.value})} /></div>
-                                    
                                     <div className="flex items-center gap-3 py-2">
                                         <input type="checkbox" id="adult" checked={currentShow.is_adult || false} onChange={e => setCurrentShow({...currentShow, is_adult: e.target.checked})} className="w-4 h-4 accent-[#DAA520]" />
                                         <label htmlFor="adult" className="text-xs font-bold text-white uppercase flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-red-500"/> Evento para mayores de 18 años</label>
                                     </div>
                                 </div>
-
-                                {/* Configuración de Tickets (Dinámico) */}
                                 <div className="border-t border-white/10 pt-4">
                                     <div className="flex justify-between items-center mb-3">
                                         <label className="block text-[10px] uppercase font-bold text-[#DAA520]">Configuración de Entradas</label>
                                         <button type="button" onClick={addTicketType} className="text-[10px] bg-zinc-800 px-3 py-1 rounded hover:bg-white hover:text-black transition-colors font-bold">+ Agregar Tipo</button>
                                     </div>
-                                    
                                     <div className="space-y-3">
                                         {currentShow.tickets && currentShow.tickets.map((ticket: any, index: number) => (
                                             <div key={index} className="flex gap-2 items-start bg-black/40 p-2 rounded-lg border border-white/5">
@@ -1942,13 +1811,7 @@ export default function DashboardPage() {
                                                     <input type="text" placeholder="Descripción (Ej: Ingreso hasta 00:00)" className="w-full bg-transparent border-b border-zinc-700 text-[10px] text-zinc-400 p-1 outline-none" value={ticket.desc} onChange={(e) => updateTicketType(index, 'desc', e.target.value)} />
                                                 </div>
                                                 <div className="w-24">
-                                                    <input 
-                                                        type="number" 
-                                                        placeholder="Precio" 
-                                                        className="w-full bg-transparent border-b border-zinc-700 text-xs text-[#DAA520] font-bold p-1 outline-none" 
-                                                        value={ticket.price} 
-                                                        onChange={(e) => updateTicketType(index, 'price', e.target.value === '' ? 0 : parseInt(e.target.value))} 
-                                                    />
+                                                    <input type="number" placeholder="Precio" className="w-full bg-transparent border-b border-zinc-700 text-xs text-[#DAA520] font-bold p-1 outline-none" value={ticket.price} onChange={(e) => updateTicketType(index, 'price', e.target.value === '' ? 0 : parseInt(e.target.value))} />
                                                 </div>
                                                 <button type="button" onClick={() => removeTicketType(index)} className="p-2 text-zinc-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                                             </div>
@@ -1956,13 +1819,10 @@ export default function DashboardPage() {
                                         {(!currentShow.tickets || currentShow.tickets.length === 0) && <p className="text-[10px] text-zinc-600 text-center py-2">No hay tickets configurados. Se usará entrada general por defecto.</p>}
                                     </div>
                                 </div>
-
-                                {/* Totales Generales */}
                                 <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Entradas Vendidas (Manual)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.sold} onChange={e => setCurrentShow({...currentShow, sold: parseInt(e.target.value)})} /></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Capacidad Total</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentShow.total} onChange={e => setCurrentShow({...currentShow, total: parseInt(e.target.value)})} /></div>
                                 </div>
-
                                 <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2">{isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Save className="w-4 h-4"/> Guardar Show</>}</button>
                             </form>
                         </div>
@@ -1970,6 +1830,7 @@ export default function DashboardPage() {
                 </div>
             )}
         </AnimatePresence>
+
       </main>
     </div>
   );

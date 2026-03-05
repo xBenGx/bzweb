@@ -36,18 +36,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Reserva no encontrada' }, { status: 404 });
     }
 
-    // Extraer datos del cliente (Aseguramos que coincida con CartContext)
+    // Extraer datos del cliente
     const nombreCliente = reserva.name || 'Cliente'; 
     const emailCliente = reserva.email;
-    const carritoItems = reserva.details_json || [];
+    
+    // 🔥 CORRECCIÓN CRÍTICA APLICADA: Ahora lee desde 'pre_order' en lugar de 'details_json'
+    const carritoItems = reserva.pre_order || [];
 
     // Filtrar solo los items que son tickets/entradas
     const ticketItems = carritoItems.filter((item: any) => item.category === 'ticket');
 
     if (ticketItems.length === 0) {
-       // Si solo compraron comida/delivery, podrías enviar un correo simple de recibo aquí
-       console.log('La reserva no contiene entradas, solo productos.');
-       return NextResponse.json({ status: 'OK', message: 'Sin tickets para generar' });
+       // Si solo compraron comida/delivery, actualizamos la reserva a pagado de todas formas
+       await supabase.from('reservas').update({ status: 'pagado' }).eq('id', reference);
+       console.log('La reserva no contiene entradas, solo productos. Estado actualizado a pagado.');
+       return NextResponse.json({ status: 'OK', message: 'Sin tickets para generar, pero pago validado.' });
     }
 
     // ==========================================
@@ -159,7 +162,9 @@ export async function POST(req: Request) {
 
     console.log('✅ Correo enviado con PDF multipágina adjunto:', emailData);
 
-    // Actualizar la reserva a estado pagado/completado
+    // ==========================================
+    // PASO 5: ACTUALIZAR LA RESERVA COMO PAGADA
+    // ==========================================
     await supabase
       .from('reservas')
       .update({ status: 'pagado' })
