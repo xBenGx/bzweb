@@ -74,7 +74,7 @@ const LARGE_LINKS = [
     id: "carta", 
     title: "Nuestra Carta", 
     icon: Utensils, 
-    href: "https://menu.fu.do/boulevardzapallar/qr-menu", 
+    href: "https://www.restomovil.com/mkt/carta/MTk1_landing.html?fbclid=PARlRTSAQWdaNleHRuA2FlbQIxMQBzcnRjBmFwcF9pZA8xMjQwMjQ1NzQyODc0MTQAAacbLEklgMilPJwsWdMBGdUFS13jfM9nJQoIABDsi49Lgy7aYNXGp1CblHWjjw_aem_4qSbbHpHHunhpLg_K-yVFA", 
     image: "/menu.jpeg",
     overlay: "from-[#FF4500]/80 via-black/50 via-25% to-transparent",
     iconStyle: "bg-white/20 text-white border-white/30",
