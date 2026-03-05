@@ -744,7 +744,7 @@ export default function BookingPage() {
                              <span className="text-[10px] text-white font-bold uppercase bg-amber-900/30 px-2 py-1 rounded">Pendiente</span>
                         </div>
                         <p className="text-[11px] text-zinc-300 leading-relaxed">
-                            Hola <strong>{userData.name.split('')[0]}</strong>, hemos recibido tu solicitud para el <strong>{selectedDate} de {currentMonthName}</strong> a las <strong>{time}</strong>.
+                            Hola <strong>{userData.name}</strong>, hemos recibido tu solicitud para el <strong>{selectedDate} de {currentMonthName}</strong> a las <strong>{time}</strong>.
                         </p>
                         <p className="text-[11px] text-[#DAA520] font-bold">
                             Un ejecutivo confirmará la disponibilidad en la zona {ZONES.find(z => z.id === selectedZone)?.name} y te enviará tu ticket oficial por WhatsApp a la brevedad.
