@@ -36,6 +36,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Reserva no encontrada' }, { status: 404 });
     }
 
+    // 🔥 MEJORA CRÍTICA: ACTUALIZAMOS LA BD INMEDIATAMENTE
+    // Esto destraba la pantalla de "Validando Transacción..." del cliente en tiempo récord.
+    await supabase
+      .from('reservas')
+      .update({ status: 'pagado' })
+      .eq('id', reference);
+      
+    console.log('✅ BD actualizada a PAGADO. Destrabando pantalla del cliente...');
+
     // Extraer datos del cliente
     const nombreCliente = reserva.name || 'Cliente'; 
     // const emailCliente = reserva.email; // Se comenta por ahora en modo prueba
@@ -46,9 +55,7 @@ export async function POST(req: Request) {
     const ticketItems = carritoItems.filter((item: any) => item.category === 'ticket');
 
     if (ticketItems.length === 0) {
-       // Si solo compraron comida/delivery, actualizamos la reserva a pagado de todas formas
-       await supabase.from('reservas').update({ status: 'pagado' }).eq('id', reference);
-       console.log('La reserva no contiene entradas, solo productos. Estado actualizado a pagado.');
+       console.log('La reserva no contiene entradas, solo productos. Proceso finalizado.');
        return NextResponse.json({ status: 'OK', message: 'Sin tickets para generar, pero pago validado.' });
     }
 
@@ -160,14 +167,6 @@ export async function POST(req: Request) {
     });
 
     console.log('✅ Correo de prueba enviado exitosamente a balfaroy2.0@gmail.com:', emailData);
-
-    // ==========================================
-    // PASO 5: ACTUALIZAR LA RESERVA COMO PAGADA
-    // ==========================================
-    await supabase
-      .from('reservas')
-      .update({ status: 'pagado' })
-      .eq('id', reference);
 
     return NextResponse.json({ status: 'OK', ticketsGenerados: generatedTicketsData.length });
 
