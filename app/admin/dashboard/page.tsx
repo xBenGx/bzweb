@@ -19,7 +19,6 @@ import { supabase } from "@/lib/supabaseClient";
 import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "900"] });
-const [sendingGiftId, setSendingGiftId] = useState<number | null>(null);
 
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
@@ -520,71 +519,10 @@ export default function DashboardPage() {
         const codigoFinal = reserva.code || `TKT-${randomNum}`;
         const { tickets, menu } = getTicketDetails(reserva.pre_order);
         const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(', ');
-
-        // --- ENVÍO DE GIFT CARD DE CUMPLEAÑOS ---
-const handleSendBirthdayGift = async (cliente: any) => {
-    if (!confirm(`¿Enviar Gift Card de 2 Pisco Sour a ${cliente.nombre}?`)) return;
-    setSendingGiftId(cliente.id);
-    try {
-        const giftCode = `CUMPLE-${Math.floor(1000 + Math.random() * 9000)}`;
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://bzweb.vercel.app';
-        // IMPORTANTE: Aquí también corregimos a /admin/ para evitar el 404
-        const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${origin}/admin/validar-ticket/gift-${cliente.id}`;
-
-        const giftElement = document.createElement("div");
-        giftElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:800px; height:1200px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #0a0a0a;";
-        giftElement.innerHTML = `
-            <div style="width: 100%; height: 100%; display: flex; flex-direction: column; border: 15px solid #DAA520; box-sizing: border-box; position: relative;">
-                <div style="padding: 60px 20px; background: #000;">
-                    <h1 style="font-size: 60px; margin: 0; color: #DAA520; letter-spacing: 8px; font-weight: 900;">¡FELIZ CUMPLEAÑOS!</h1>
-                    <h2 style="font-size: 45px; margin: 20px 0 0 0; text-transform: uppercase;">${cliente.nombre}</h2>
-                </div>
-                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; background: #111;">
-                    <p style="font-size: 30px; color: #ccc; margin-bottom: 20px;">Boulevard Zapallar te regala:</p>
-                    <div style="background: #DAA520; color: black; padding: 30px 60px; border-radius: 20px; font-size: 50px; font-weight: 900; margin-bottom: 50px;">🍸 2X PISCO SOUR</div>
-                    <div style="background: white; padding: 25px; border-radius: 20px;">
-                        <img src="${qrDataUrl}" crossorigin="anonymous" style="width: 300px; height: 300px;" />
-                    </div>
-                    <p style="font-size: 35px; font-weight: bold; color: #DAA520; margin-top: 30px;">${giftCode}</p>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(giftElement);
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-        const canvas = await html2canvas(giftElement, { scale: 1, useCORS: true, allowTaint: true });
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-        document.body.removeChild(giftElement);
-
-        let giftUrl = null;
-        if (blob) {
-            const fileName = `gift-${cliente.id}-${Date.now()}.png`;
-            const { error: uploadError } = await supabase.storage.from('tickets').upload(fileName, blob, { contentType: 'image/png', upsert: true });
-            if (!uploadError) {
-                const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
-                giftUrl = data.publicUrl;
-            }
-        }
-
-        await fetch("/api/admin/enviar-regalo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                phone: cliente.whatsapp, 
-                imageUrl: giftUrl, 
-                message: `¡Feliz cumpleaños ${cliente.nombre}! 🎂🎉\n\nTe enviamos esta *Gift Card válida por 2 Pisco Sour* 🍹🍹 para celebrar tu día.\n\nSimplemente muestra la imagen adjunta en barra para validarla.\n\n¡Te esperamos!`
-            })
-        });
-        alert("✅ Gift Card enviada exitosamente.");
-    } catch (error) { 
-        console.error(error);
-        alert("Error al generar la Gift Card."); 
-    } finally { 
-        setSendingGiftId(null); 
-    }
-};
         
-        // URL para validación del QR (Apunta a tu nueva ruta)
-        const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://boulevardzapallar.cl/validar-ticket/${reserva.id}`;
+        // URL CORREGIDA: Apunta a /admin/validar-ticket/ para evitar el 404
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://bzweb.vercel.app';
+        const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${origin}/admin/validar-ticket/${reserva.id}`;
 
         const ticketElement = document.createElement("div");
         ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:800px; height:1400px; font-family: 'Arial', sans-serif; color: black; text-align: center; background: #fff;";
@@ -622,7 +560,7 @@ const handleSendBirthdayGift = async (cliente: any) => {
             </div>
         `;
         document.body.appendChild(ticketElement);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Damos tiempo para que cargue la imagen del QR externo
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
         const canvas = await html2canvas(ticketElement, { scale: 1, useCORS: true, allowTaint: true });
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         document.body.removeChild(ticketElement);
@@ -647,7 +585,7 @@ const handleSendBirthdayGift = async (cliente: any) => {
                 ticketUrl: ticketPublicUrl, 
                 reservation_code: codigoFinal, 
                 phone: reserva.phone,
-                customMessage: customMessage // Endpoint enviará este texto exacto
+                customMessage: customMessage
             }),
         });
 
@@ -655,6 +593,82 @@ const handleSendBirthdayGift = async (cliente: any) => {
         if (response.ok && result.success) { alert(`✅ ENTRADA SHOW generada.\nWhatsApp enviado con éxito.`); fetchData(); } 
         else { alert("⚠️ Error al conectar con API de WhatsApp: " + (result.error || "Desconocido")); fetchData(); }
     } catch (error: any) { alert("Error crítico al generar ticket E-Pass: " + error.message); } finally { setProcessingId(null); }
+  };
+
+  // --- FUNCIÓN PARA ENVIAR GIFT CARD DE CUMPLEAÑOS AUTOMÁTICA ---
+  const handleSendBirthdayGift = async (cliente: any) => {
+      if (!confirm(`¿Enviar Gift Card de 2 Pisco Sour a ${cliente.nombre} por WhatsApp?`)) return;
+      setSendingGiftId(cliente.id);
+      
+      try {
+          const giftCode = `BZ-GIFT-${Math.floor(1000 + Math.random() * 9000)}`;
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://bzweb.vercel.app';
+          
+          // RUTA CORREGIDA: Apuntando a /admin/validar-ticket/ para evitar el 404
+          const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${origin}/admin/validar-ticket/gift-${cliente.id}`;
+
+          const giftElement = document.createElement("div");
+          giftElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:800px; height:1200px; font-family: 'Arial', sans-serif; color: white; text-align: center; background: #0a0a0a;";
+          giftElement.innerHTML = `
+              <div style="width: 100%; height: 100%; display: flex; flex-direction: column; border: 15px solid #DAA520; box-sizing: border-box; position: relative;">
+                  <div style="padding: 60px 20px; background: #000;">
+                      <h1 style="font-size: 60px; margin: 0; color: #DAA520; letter-spacing: 8px; font-weight: 900;">¡FELIZ CUMPLEAÑOS!</h1>
+                      <h2 style="font-size: 45px; margin: 20px 0 0 0; text-transform: uppercase;">${cliente.nombre}</h2>
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; background: #111;">
+                      <p style="font-size: 30px; color: #ccc; margin-bottom: 20px;">Boulevard Zapallar te regala:</p>
+                      <div style="background: #DAA520; color: black; padding: 30px 60px; border-radius: 20px; font-size: 50px; font-weight: 900; margin-bottom: 50px; box-shadow: 0 10px 30px rgba(218,165,32,0.3);">
+                          🍸 2X PISCO SOUR
+                      </div>
+                      <div style="background: white; padding: 25px; border-radius: 20px;">
+                          <img src="${qrDataUrl}" crossorigin="anonymous" style="width: 300px; height: 300px;" />
+                      </div>
+                      <p style="font-size: 35px; font-weight: bold; color: #DAA520; margin-top: 30px; letter-spacing: 5px;">${giftCode}</p>
+                  </div>
+                  <div style="background: #000; padding: 30px; border-top: 2px dashed #DAA520;">
+                      <p style="font-size: 20px; color: #888; margin: 0;">Presenta este código QR en barra. Válido por 15 días.</p>
+                  </div>
+              </div>
+          `;
+          document.body.appendChild(giftElement);
+          await new Promise(resolve => setTimeout(resolve, 1500)); // Esperar carga del QR
+          
+          const canvas = await html2canvas(giftElement, { scale: 1, useCORS: true, allowTaint: true });
+          const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+          document.body.removeChild(giftElement);
+
+          let giftUrl = null;
+          if (blob) {
+              const fileName = `gift-${cliente.id}-${Date.now()}.png`;
+              const { error: uploadError } = await supabase.storage.from('tickets').upload(fileName, blob, { contentType: 'image/png', upsert: true });
+              if (!uploadError) {
+                  const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
+                  giftUrl = data.publicUrl;
+              }
+          }
+
+          const res = await fetch("/api/admin/enviar-regalo", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                  phone: cliente.whatsapp, 
+                  imageUrl: giftUrl, 
+                  message: `¡Feliz cumpleaños ${cliente.nombre}! 🎂🎉\n\nDe parte de todo el equipo de *Boulevard Zapallar* te enviamos esta *Gift Card válida por 2 Pisco Sour* 🍹🍹 para celebrar tu día.\n\nSimplemente muestra la imagen adjunta en barra para validarla.\n\n¡Te esperamos!`
+              })
+          });
+
+          const result = await res.json();
+          if (result.success) {
+              alert("✅ Gift Card enviada exitosamente por WhatsApp.");
+          } else {
+              alert("⚠️ Error al enviar el regalo: " + result.error);
+          }
+      } catch (error) {
+          console.error(error);
+          alert("Error crítico al generar Gift Card.");
+      } finally {
+          setSendingGiftId(null);
+      }
   };
 
   const handleManualCheckIn = async (reservaId: number) => {
@@ -1472,28 +1486,27 @@ const handleSendBirthdayGift = async (cliente: any) => {
                                             <div className="w-8 h-8 rounded-full bg-[#DAA520]/20 flex items-center justify-center text-[#DAA520] font-bold"><Cake className="w-4 h-4"/></div>
                                             <div><span className="text-xs font-bold text-white block">{c.nombre}</span><span className="text-[10px] text-zinc-500">{c.whatsapp}</span></div>
                                         </div>
-        <div className="flex gap-2">
-            
-            {/* Botón de envío automatizado con QR */}
-             <button 
-                onClick={() => handleSendBirthdayGift(c)} 
-                disabled={sendingGiftId === c.id}
-                className="bg-[#DAA520]/10 text-[#DAA520] hover:bg-[#DAA520] hover:text-black p-2 rounded-lg transition-colors flex items-center justify-center" 
-                title="Enviar Gift Card QR Automática"
-    >
-        {sendingGiftId === c.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Gift className="w-4 h-4"/>}
-    </button>
-    
-    {/* Botón clásico manual de WhatsApp de respaldo */}
-        <button 
-            onClick={() => openWhatsApp(c.whatsapp, `¡Hola ${c.nombre}! De parte de Boulevard Zapallar te deseamos un muy feliz cumpleaños 🎂. Te tenemos un regalo especial...`)} 
-            className="bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white p-2 rounded-lg transition-colors" 
-            title="Abrir Chat Manual"
-    >
-            <Send className="w-4 h-4"/>
-        </button>
-    </div>
-</div>
+                                        <div className="flex gap-2">
+                                            {/* Botón de envío automatizado con QR */}
+                                            <button 
+                                                onClick={() => handleSendBirthdayGift(c)} 
+                                                disabled={sendingGiftId === c.id}
+                                                className="bg-[#DAA520]/10 text-[#DAA520] hover:bg-[#DAA520] hover:text-black p-2 rounded-lg transition-colors flex items-center justify-center" 
+                                                title="Enviar Gift Card QR Automática"
+                                            >
+                                                {sendingGiftId === c.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Gift className="w-4 h-4"/>}
+                                            </button>
+                                            
+                                            {/* Botón clásico manual de WhatsApp de respaldo */}
+                                            <button 
+                                                onClick={() => openWhatsApp(c.whatsapp, `¡Hola ${c.nombre}! De parte de Boulevard Zapallar te deseamos un muy feliz cumpleaños 🎂. Te tenemos un regalo especial...`)} 
+                                                className="bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white p-2 rounded-lg transition-colors" 
+                                                title="Abrir Chat Manual"
+                                            >
+                                                <Send className="w-4 h-4"/>
+                                            </button>
+                                        </div>
+                                    </div>
                                 )) : <div className="text-center py-6 border border-dashed border-zinc-800 rounded-xl"><p className="text-xs text-zinc-500 font-medium">No hay cumpleaños registrados para esta fecha.</p></div>}
                             </div>
                         </div>
