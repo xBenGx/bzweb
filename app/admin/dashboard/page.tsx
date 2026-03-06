@@ -9,9 +9,8 @@ import {
     CheckCircle, Bell, Clock, MapPin, 
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
-    Ticket, Coffee, UserCheck, ChevronRight, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw, AlertTriangle, 
-    FileCheck, Archive, Briefcase, FileSignature, Receipt
+    Ticket, UserCheck, AlertCircle,
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw, FileCheck, Archive, Briefcase, FileSignature, Receipt
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -24,7 +23,8 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "reservas", label: "Reservas", icon: Calendar },
+    { id: "ventas_show", label: "Ventas Show", icon: Ticket }, // NUEVO PANEL
+    { id: "reservas", label: "Reservas Mesa", icon: Calendar },
     { id: "pagos_web", label: "Pagos Web", icon: Globe },
     { id: "finanzas", label: "Finanzas ERP", icon: TrendingUp }, 
     { id: "shows", label: "Shows", icon: Music },
@@ -211,27 +211,15 @@ export default function DashboardPage() {
   const ventasCredito = ventas.filter(v => v.metodo_pago === 'credito').reduce((acc, c) => acc + c.monto, 0);
   const ventasTransferencia = ventas.filter(v => v.metodo_pago === 'transferencia').reduce((acc, c) => acc + c.monto, 0);
 
-  const getClientHistory = () => {
-      const history: any[] = [];
-      reservas.forEach(res => {
-          history.push({
-              id: `res-${res.id}`, cliente: res.name,
-              tipo: 'Reserva / Web', detalle: res.pre_order && res.pre_order.length > 0 ? `${res.pre_order.length} items menú` : 'Solo Reserva',
-              monto: res.total_pre_order || 0, fecha: res.created_at, estado: res.status, origen: 'Web'
-          });
-      });
-      ventas.forEach(v => {
-          const parts = v.descripcion.split('-');
-          const possibleName = parts.length > 1 ? parts[0].trim() : (v.tipo === 'entrada_manual' ? 'Venta Entrada' : 'Cliente Caja');
-          history.push({
-              id: `ven-${v.id}`, cliente: possibleName,
-              tipo: v.tipo === 'entrada_manual' ? 'Ticket Acceso' : 'Consumo Local',
-              detalle: v.descripcion, monto: v.monto, fecha: v.created_at, estado: 'pagado', origen: v.origen || 'Caja POS'
-          });
-      });
-      return history.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  // SEPARACIÓN DE RESERVAS vs TICKETS SHOW
+  const getTicketDetails = (pre_order: any) => {
+      const tickets = pre_order?.filter((i:any) => i.category === 'ticket') || [];
+      const menu = pre_order?.filter((i:any) => i.category !== 'ticket') || [];
+      return { tickets, menu, hasTickets: tickets.length > 0 };
   };
-  const clientHistory = getClientHistory();
+
+  const reservasTicketsOnly = reservas.filter(r => getTicketDetails(r.pre_order).hasTickets);
+  const reservasNormalesOnly = reservas.filter(r => !getTicketDetails(r.pre_order).hasTickets);
 
   // Calcular rendimiento de shows diferenciando entradas vs comida web
   const getShowPerformance = () => {
@@ -256,26 +244,23 @@ export default function DashboardPage() {
   };
   const showPerformance = getShowPerformance();
   
-  // Detalles Pedidos Web Mapeado para distinguir Ticket vs Carta
-  const reservasConPedidoFull = reservas.filter(r => r.total_pre_order > 0).map(r => {
-      let containsMenu = false;
-      let containsTicket = false;
-      if(r.pre_order) {
-          r.pre_order.forEach((item:any) => {
-              if(item.category === 'ticket') containsTicket = true;
-              else containsMenu = true;
-          });
-      }
-      return {...r, hasMenu: containsMenu, hasTicket: containsTicket};
-  });
-
+  // PAGOS WEB DETALLADOS
   const getWebPayments = () => {
-      return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => ({
-            id: r.id, cliente: r.name, email: r.email, fecha: r.created_at, monto: r.total_pre_order,
-            ref_getnet: r.payment_id || '---',
-            status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') ? 'APROBADO' : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
-            detalle: `${r.pre_order?.length || 0} items`, reserva_obj: r
-        })).filter(p => p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase())).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => {
+          const { tickets, menu } = getTicketDetails(r.pre_order);
+          let detalleArr = [];
+          if(tickets.length > 0) detalleArr.push(`${tickets.reduce((a:any,c:any) => a+c.quantity, 0)} Tickets`);
+          if(menu.length > 0) detalleArr.push(`${menu.reduce((a:any,c:any) => a+c.quantity, 0)} Platos`);
+
+          return {
+              id: r.id, cliente: r.name, email: r.email, fecha: r.created_at, monto: r.total_pre_order,
+              ref_getnet: r.payment_id || 'Transferencia/Otro',
+              status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') ? 'APROBADO' : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
+              detalle: detalleArr.join(' + ') || 'Reserva Normal', 
+              metodo: r.payment_id ? 'Webpay' : 'Transferencia',
+              reserva_obj: r
+          }
+      }).filter(p => p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase())).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   };
   const webPayments = getWebPayments();
   const totalWebApproved = webPayments.filter(p => p.status_pago === 'APROBADO').reduce((acc, curr) => acc + curr.monto, 0);
@@ -307,6 +292,21 @@ export default function DashboardPage() {
       return data.publicUrl;
   };
   const triggerFileInput = () => fileInputRef.current?.click();
+
+  // --- SINCRONIZACIÓN AUTOMÁTICA DE CLIENTES ---
+  const syncClientToDB = async (reserva: any) => {
+      try {
+          const { data: existing } = await supabase.from('clientes').select('id').eq('whatsapp', reserva.phone).single();
+          if(!existing) {
+              await supabase.from('clientes').insert([{ 
+                  nombre: reserva.name, 
+                  email: reserva.email || null, 
+                  whatsapp: reserva.phone, 
+                  fecha_nacimiento: null 
+              }]);
+          }
+      } catch(e) { console.error("Error silencioso al sincronizar cliente", e); }
+  };
 
   // --- CRUD FINANZAS (VENTAS POS) ---
   const handleOpenVentaModal = () => {
@@ -358,7 +358,7 @@ export default function DashboardPage() {
           }
           await fetchData();
           setIsFinanceModalOpen(false);
-      } catch (err:any) { alert(err.message); } finally { setIsLoading(false); }
+      } catch (err:any) { alert(`Error guardando en ${financeModalType}: Verifica que la tabla en Supabase exista. Detalle: ${err.message}`); } finally { setIsLoading(false); }
   };
 
   const handleDeleteFinanceRecord = async (table: string, id: number) => {
@@ -427,11 +427,13 @@ export default function DashboardPage() {
   const handleSaveShow = async (e: React.FormEvent) => { e.preventDefault(); setIsLoading(true); try { let finalImageUrl = currentShow.image_url; if (selectedFile) { const uploadedUrl = await uploadImageToSupabase(); if (uploadedUrl) finalImageUrl = uploadedUrl; } const showData = { ...currentShow, image_url: finalImageUrl }; if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id); else await supabase.from('shows').insert([showData]); await fetchData(); setIsShowModalOpen(false); } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } };
   const handleDeleteShow = async (id: number) => { if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); } };
 
-  // --- CONFIRMACIÓN RESERVAS CON TICKET ---
+  // --- CONFIRMACIÓN RESERVAS NORMALES ---
   const handleConfirmReservation = async (reserva: any) => {
-    if (!confirm(`¿Confirmar a ${reserva.name}, generar ticket y enviar WhatsApp?`)) return;
+    if (!confirm(`¿Confirmar Reserva de Mesa a ${reserva.name} y enviar WhatsApp?`)) return;
     setProcessingId(reserva.id); 
     try {
+        await syncClientToDB(reserva); // Sincroniza cliente en DB
+
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const codigoFinal = reserva.code || `BZ-${randomNum}`;
 
@@ -463,7 +465,7 @@ export default function DashboardPage() {
 
         let ticketPublicUrl = null;
         if (blob) {
-            const fileName = `ticket-${codigoFinal}-${Date.now()}.png`;
+            const fileName = `reserva-${codigoFinal}-${Date.now()}.png`;
             const { error: uploadError } = await supabase.storage.from('tickets').upload(fileName, blob, { contentType: 'image/png', upsert: true });
             if (!uploadError) {
                 const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
@@ -478,21 +480,99 @@ export default function DashboardPage() {
         });
 
         const result = await response.json();
-        if (response.ok && result.success) { alert(`✅ Reserva confirmada.\nWhatsApp enviado.`); fetchData(); } 
+        if (response.ok && result.success) { alert(`✅ Reserva de Mesa confirmada.\nWhatsApp enviado.`); fetchData(); } 
         else { alert("⚠️ Error: " + (result.error || "Desconocido")); fetchData(); }
     } catch (error: any) { alert("Error crítico al generar ticket: " + error.message); } finally { setProcessingId(null); }
   };
 
+  // --- CONFIRMACIÓN ENTRADAS SHOW (TIPO PASSLINE) ---
+  const handleConfirmShowTicket = async (reserva: any) => {
+    if (!confirm(`¿Confirmar COMPRA DE ENTRADA a ${reserva.name}, generar ticket E-Pass y enviar WhatsApp?`)) return;
+    setProcessingId(reserva.id); 
+    try {
+        await syncClientToDB(reserva); // Sincroniza cliente en DB
+
+        const randomNum = Math.floor(100000 + Math.random() * 900000); 
+        const codigoFinal = reserva.code || `TKT-${randomNum}`;
+        const { tickets, menu } = getTicketDetails(reserva.pre_order);
+        const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(', ');
+
+        const ticketElement = document.createElement("div");
+        ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:800px; height:1400px; font-family: 'Arial', sans-serif; color: black; text-align: center; background: #fff;";
+        ticketElement.innerHTML = `
+            <div style="width: 100%; height: 100%; display: flex; flex-direction: column; border: 4px solid #000; box-sizing: border-box; position: relative;">
+                <div style="background: #000; padding: 60px 20px; color: #DAA520;">
+                    <h1 style="font-size: 70px; margin: 0; letter-spacing: 5px; font-weight: 900;">BOULEVARD ZAPALLAR</h1>
+                    <h2 style="font-size: 30px; margin: 10px 0 0 0; color: #fff; letter-spacing: 10px;">E-TICKET OFICIAL</h2>
+                </div>
+                <div style="padding: 60px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; text-align: left;">
+                    <div>
+                        <p style="font-size: 24px; color: #666; margin-bottom: 5px;">TITULAR DE LA ENTRADA</p>
+                        <p style="font-size: 50px; font-weight: 900; margin: 0; text-transform: uppercase;">${reserva.name}</p>
+                    </div>
+                    <div style="margin-top: 40px; border-top: 2px dashed #ccc; border-bottom: 2px dashed #ccc; padding: 40px 0;">
+                        <p style="font-size: 24px; color: #666; margin-bottom: 5px;">TIPO DE ENTRADA</p>
+                        <p style="font-size: 40px; font-weight: bold; margin: 0; color: #000;">${ticketNames || 'Entrada General'}</p>
+                        <p style="font-size: 24px; color: #666; margin-top: 30px; margin-bottom: 5px;">FECHA Y HORA DE ACCESO</p>
+                        <p style="font-size: 35px; font-weight: bold; margin: 0; color: #000;">${reserva.date_reserva} - ${reserva.time_reserva} HRS</p>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 40px;">
+                        <div style="flex: 1;">
+                            <p style="font-size: 20px; color: #666; margin-bottom: 5px;">CÓDIGO ÚNICO DE INGRESO</p>
+                            <p style="font-size: 45px; font-weight: 900; margin: 0; letter-spacing: 2px;">${codigoFinal}</p>
+                            ${menu.length > 0 ? `<div style="margin-top: 20px; background: #DAA520; padding: 10px 20px; border-radius: 10px; display: inline-block;"><p style="font-size: 18px; margin: 0; color: #000; font-weight:bold;">+ INCLUYE MENÚ ANTICIPADO</p></div>` : ''}
+                        </div>
+                        <div style="width: 250px; height: 250px; background: #000; display: flex; align-items: center; justify-content: center; border-radius: 20px; overflow: hidden; position: relative;">
+                            <div style="width: 230px; height: 230px; background: repeating-linear-gradient(45deg, #fff, #fff 10px, #000 10px, #000 20px);"></div>
+                            <div style="position: absolute; background: white; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 20px;">ESCANEAR</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="background: #f5f5f5; padding: 30px; text-align: center; border-top: 4px solid #000;">
+                    <p style="font-size: 20px; color: #333; margin: 0; font-weight: bold;">Este ticket es al portador y válido para ingreso. Presentar directamente en puerta.</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(ticketElement);
+        await new Promise(resolve => setTimeout(resolve, 800));
+        const canvas = await html2canvas(ticketElement, { scale: 1, useCORS: true, allowTaint: true });
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+        document.body.removeChild(ticketElement);
+
+        let ticketPublicUrl = null;
+        if (blob) {
+            const fileName = `ticket-show-${codigoFinal}-${Date.now()}.png`;
+            const { error: uploadError } = await supabase.storage.from('tickets').upload(fileName, blob, { contentType: 'image/png', upsert: true });
+            if (!uploadError) {
+                const { data } = supabase.storage.from('tickets').getPublicUrl(fileName);
+                ticketPublicUrl = data.publicUrl;
+            }
+        }
+
+        const response = await fetch("/api/admin/confirmar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // Enviamos un texto especial si quieres que el endpoint lo envíe distinto, o el endpoint usa la URL
+            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone }),
+        });
+
+        const result = await response.json();
+        if (response.ok && result.success) { alert(`✅ ENTRADA SHOW generada.\nWhatsApp enviado con éxito.`); fetchData(); } 
+        else { alert("⚠️ Error al conectar con API de WhatsApp: " + (result.error || "Desconocido")); fetchData(); }
+    } catch (error: any) { alert("Error crítico al generar ticket E-Pass: " + error.message); } finally { setProcessingId(null); }
+  };
+
   const handleManualCheckIn = async (reservaId: number) => {
-      if(!confirm("¿Registrar el ingreso del cliente?")) return;
+      if(!confirm("¿Registrar el ingreso del cliente (Escanear Entrada)?")) return;
       await supabase.from('reservas').update({ status: 'realizado', check_in_time: new Date().toISOString() }).eq('id', reservaId);
       fetchData();
   };
   const handleDeleteReserva = async (id: number) => {
-      if(confirm("¿ELIMINAR RESERVA? Esta acción es irreversible.")) { await supabase.from('reservas').delete().eq('id', id); fetchData(); }
+      if(confirm("¿ELIMINAR ESTE REGISTRO? Esta acción es irreversible.")) { await supabase.from('reservas').delete().eq('id', id); fetchData(); }
   };
 
-  const filteredReservas = reservas.filter(r => {
+  // Filtros aplicados sobre Reservas de Mesa (Excluye Tickets)
+  const filteredReservasMesa = reservasNormalesOnly.filter(r => {
       const searchLower = reservaSearch.toLowerCase();
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
       const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
@@ -501,17 +581,28 @@ export default function DashboardPage() {
       return matchText && matchStatus && matchDate;
   });
 
+  // Filtros aplicados sobre Ventas Show (Tickets)
+  const filteredReservasShow = reservasTicketsOnly.filter(r => {
+    const searchLower = reservaSearch.toLowerCase();
+    const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
+    const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
+    const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
+    const matchDate = reservaDateFilter ? r.date_reserva === reservaDateFilter : true;
+    return matchText && matchStatus && matchDate;
+  });
+
   const updateSolicitudStatus = async (id: number, status: string) => { await supabase.from('solicitudes').update({ status }).eq('id', id); fetchData(); };
 
   // --- BOTONES DE CONTACTO DIRECTO ---
   const openWhatsApp = (phone: string, msg: string) => {
+      if(!phone) return;
       const cleanPhone = phone.replace(/\D/g, '');
       window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
   const openMail = (email: string, subject: string) => {
       window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}`, '_blank');
   };
-  // 👉 PEGA ESTE BLOQUE JUSTO ANTES DEL RETURN:
+  
   const getBirthdays = () => {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
@@ -586,10 +677,10 @@ export default function DashboardPage() {
                 <motion.div key="resumen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                         {[
-                            { title: "Reservas Totales", value: reservas.length, color: "bg-blue-500" },
-                            { title: "Shows Activos", value: shows.length, color: "bg-[#DAA520]" },
+                            { title: "Reservas Totales", value: reservasNormalesOnly.length, color: "bg-blue-500" },
+                            { title: "Entradas Show (Vendidas)", value: reservasTicketsOnly.length, color: "bg-purple-500" },
                             { title: "Ingresos Global", value: `$${totalIngresosGlobal.toLocaleString('es-CL')}`, color: "bg-green-500" },
-                            { title: "Clientes Total", value: clientes.length, color: "bg-purple-500" },
+                            { title: "Clientes Total CRM", value: clientes.length, color: "bg-[#DAA520]" },
                         ].map((stat, i) => (
                             <div key={i} className="bg-zinc-900 border border-white/5 p-4 md:p-5 rounded-2xl shadow-lg flex flex-col justify-center">
                                 <div className={`w-2 h-2 rounded-full mb-2 md:mb-3 ${stat.color}`} />
@@ -599,21 +690,23 @@ export default function DashboardPage() {
                         ))}
                     </div>
                     <div className="bg-zinc-900 border border-white/5 rounded-3xl p-4 md:p-6 overflow-x-auto">
-                        <h3 className="text-lg font-bold mb-4">Últimas Reservas</h3>
+                        <h3 className="text-lg font-bold mb-4">Últimas Interacciones (Web)</h3>
                         <div className="space-y-3 min-w-[300px]">
-                            {reservas.length === 0 ? <p className="text-zinc-500 text-sm">No hay reservas recientes.</p> : reservas.slice(0, 5).map(res => (
+                            {reservas.length === 0 ? <p className="text-zinc-500 text-sm">No hay actividad reciente.</p> : reservas.slice(0, 5).map(res => (
                                 <div key={res.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5 gap-3">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0"><CheckCircle className="w-4 h-4 text-green-500"/></div>
+                                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                                            {getTicketDetails(res.pre_order).hasTickets ? <Ticket className="w-4 h-4 text-purple-400"/> : <CheckCircle className="w-4 h-4 text-blue-400"/>}
+                                        </div>
                                         <div>
                                             <p className="text-xs text-white font-bold">{res.name}</p>
-                                            <p className="text-[10px] text-zinc-500">{formatDateSafe(res.date_reserva)} • {res.zone}</p>
+                                            <p className="text-[10px] text-zinc-500">{formatDateSafe(res.date_reserva)} • {getTicketDetails(res.pre_order).hasTickets ? 'Venta Entrada' : 'Reserva Mesa'}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 self-end sm:self-auto">
                                         {res.total_pre_order > 0 && (
                                             <span className="text-[9px] font-bold text-[#DAA520] bg-[#DAA520]/10 px-2 py-1 rounded-full flex items-center gap-1">
-                                                <ShoppingBag className="w-3 h-3"/> Pedido
+                                                <DollarSign className="w-3 h-3"/> Pagó Web
                                             </span>
                                         )}
                                         <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${res.status === 'confirmada' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>{res.status}</span>
@@ -625,41 +718,161 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS AVANZADA */}
+            {/* 1.5 NUEVO: VENTAS SHOW */}
+            {activeTab === "ventas_show" && (
+                <motion.div key="ventas_show" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 className="text-xl font-black text-white flex items-center gap-2"><Ticket className="w-6 h-6 text-purple-500"/> Entradas Show y Eventos</h2>
+                            <p className="text-xs text-zinc-400">Administra únicamente las ventas de entradas, genera pases E-Ticket y envíalos.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
+                        <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center">
+                            <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Entradas Vendidas Web</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasTicketsOnly.length}</span>
+                        </div>
+                        <div className="bg-zinc-900 border border-yellow-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-3 opacity-10"><AlertCircle className="w-12 h-12 text-yellow-500"/></div>
+                            <span className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">Por Enviar Ticket</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasTicketsOnly.filter(r => r.status === 'pendiente').length}</span>
+                        </div>
+                        <div className="bg-zinc-900 border border-purple-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute right-0 top-0 p-3 opacity-10"><Ticket className="w-12 h-12 text-purple-500"/></div>
+                            <span className="text-purple-500 text-[10px] font-bold uppercase tracking-wider">Tickets Enviados</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasTicketsOnly.filter(r => r.status === 'confirmada').length}</span>
+                        </div>
+                        <div className="bg-green-600/10 border border-green-500/50 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                            <div className="absolute right-0 top-0 p-3 opacity-20"><QrCode className="w-12 h-12 text-green-400"/></div>
+                            <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider">ESCANEADOS (En Local)</span>
+                            <span className="text-2xl md:text-3xl font-black text-white mt-1">{reservasTicketsOnly.filter(r => r.status === 'realizado' || r.status === 'ingresado').length}</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col xl:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
+                        <div className="relative w-full xl:w-1/3 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-purple-500 transition-colors" />
+                            <input type="text" placeholder="Buscar comprador o ticket..." className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-purple-500 transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto w-full xl:w-auto pb-2 xl:pb-0 custom-scrollbar snap-x">
+                            {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Por Enviar' }, { id: 'confirmadas', label: 'Enviados' }, { id: 'realizado', label: 'Escaneados' }].map(filter => (
+                                <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-105' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden flex-1 min-h-[500px] flex flex-col">
+                        <div className="overflow-x-auto custom-scrollbar flex-1">
+                            <table className="w-full text-left text-sm text-zinc-400">
+                                <thead className="bg-black/80 text-zinc-500 text-[10px] uppercase font-bold tracking-wider sticky top-0 z-20 backdrop-blur-md">
+                                    <tr>
+                                        <th className="px-4 py-4 whitespace-nowrap">Código Ticket</th>
+                                        <th className="px-4 py-4 min-w-[150px]">Comprador</th>
+                                        <th className="px-4 py-4">Detalle Compra</th>
+                                        <th className="px-4 py-4 text-center">Estado</th>
+                                        <th className="px-4 py-4 text-right">Controles Ticket</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredReservasShow.length === 0 ? (
+                                        <tr><td colSpan={5} className="px-6 py-20 text-center"><Ticket className="w-8 h-8 text-zinc-700 mx-auto mb-2"/><span className="text-zinc-500 font-medium">No hay venta de entradas recientes.</span></td></tr>
+                                    ) : (
+                                        filteredReservasShow.map((res) => {
+                                            const { tickets, menu } = getTicketDetails(res.pre_order);
+                                            return (
+                                            <tr key={res.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-mono font-black text-purple-400 tracking-widest text-xs bg-purple-900/20 px-2 py-0.5 rounded w-fit border border-purple-500/20">{res.reservation_code || res.code || "TKT-PEND"}</span>
+                                                        <span className="text-white font-bold flex items-center gap-1.5 mt-1"><Clock className="w-3 h-3 text-zinc-500"/> Show: {res.date_reserva}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-white text-sm truncate">{res.name}</span>
+                                                        <span className="text-xs text-zinc-500 mt-0.5 truncate">{res.phone}</span>
+                                                        <span className="text-[10px] text-zinc-600 mt-1 flex items-center gap-1"><Mail className="w-3 h-3"/> {res.email || 'Sin mail'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        {tickets.map((t:any, i:number) => (
+                                                            <span key={i} className="text-xs font-bold text-white"><span className="text-purple-400">{t.quantity}x</span> {t.name}</span>
+                                                        ))}
+                                                        {menu.length > 0 && <span className="text-[10px] text-[#DAA520] font-bold uppercase mt-1">+ {menu.reduce((a:any,c:any)=>a+c.quantity,0)} Items de Menú Anticipado</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    {res.status === 'pendiente' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full text-[10px] font-bold uppercase"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"/> Por Enviar</span>}
+                                                    {res.status === 'confirmada' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full text-[10px] font-bold uppercase"><CheckCircle className="w-3 h-3"/> Enviado WP</span>}
+                                                    {(res.status === 'realizado' || res.status === 'ingresado') && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-[10px] font-bold uppercase"><QrCode className="w-3 h-3"/> Escaneado Local</span>}
+                                                </td>
+                                                <td className="px-4 py-4 text-right">
+                                                    <div className="flex flex-wrap justify-end gap-2 items-center">
+                                                        {res.status === 'pendiente' && (
+                                                            <button onClick={() => handleConfirmShowTicket(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg shadow-purple-900/20">
+                                                                {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Ticket className="w-3 h-3"/>} <span className="hidden xl:inline">Generar Ticket</span>
+                                                            </button>
+                                                        )}
+                                                        {res.status === 'confirmada' && (
+                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg">
+                                                                <QrCode className="w-3 h-3"/> <span className="hidden xl:inline">ESCANEAR / INGRESAR</span>
+                                                            </button>
+                                                        )}
+                                                        <button onClick={() => handleDeleteReserva(res.id)} className="p-2 bg-zinc-800 hover:bg-red-500/20 text-zinc-500 hover:text-red-500 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* 2. GESTIÓN DE RESERVAS DE MESA */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
-                    <div className="flex justify-end mb-4">
-                         <button onClick={() => handleResetTable('reservas', 'Reservas')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
-                             <Trash2 className="w-4 h-4" /> Resetear Reservas
-                         </button>
+                    <div className="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 className="text-xl font-black text-white flex items-center gap-2"><Calendar className="w-6 h-6 text-blue-400"/> Reservas de Mesa Normales</h2>
+                            <p className="text-xs text-zinc-400">Panel para gestionar ubicaciones y pedidos web de comida sin tickets asociados.</p>
+                        </div>
+                        <button onClick={() => handleResetTable('reservas', 'Reservas')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
+                            <Trash2 className="w-4 h-4" /> Resetear Reservas
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
                         <div className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col justify-center">
                             <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Reservas</span>
-                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservas.length}</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasNormalesOnly.length}</span>
                         </div>
                         <div className="bg-zinc-900 border border-yellow-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute right-0 top-0 p-3 opacity-10"><AlertCircle className="w-12 h-12 text-yellow-500"/></div>
                             <span className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">Pendientes</span>
-                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservas.filter(r => r.status === 'pendiente').length}</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasNormalesOnly.filter(r => r.status === 'pendiente').length}</span>
                         </div>
                         <div className="bg-zinc-900 border border-green-500/20 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute right-0 top-0 p-3 opacity-10"><CheckCircle className="w-12 h-12 text-green-500"/></div>
                             <span className="text-green-500 text-[10px] font-bold uppercase tracking-wider">Confirmados</span>
-                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservas.filter(r => r.status === 'confirmada').length}</span>
+                            <span className="text-2xl md:text-3xl font-bold text-white mt-1">{reservasNormalesOnly.filter(r => r.status === 'confirmada').length}</span>
                         </div>
                         <div className="bg-blue-600/10 border border-blue-500/50 p-4 rounded-2xl flex flex-col justify-center relative overflow-hidden shadow-[0_0_15px_rgba(37,99,235,0.2)]">
                             <div className="absolute right-0 top-0 p-3 opacity-20"><UserCheck className="w-12 h-12 text-blue-400"/></div>
                             <span className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">EN LOCAL</span>
-                            <span className="text-2xl md:text-3xl font-black text-white mt-1">{reservas.filter(r => r.status === 'realizado' || r.status === 'ingresado').length}</span>
+                            <span className="text-2xl md:text-3xl font-black text-white mt-1">{reservasNormalesOnly.filter(r => r.status === 'realizado' || r.status === 'ingresado').length}</span>
                         </div>
                     </div>
 
                     <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col xl:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
                         <div className="relative w-full xl:w-1/3 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
-                            <input type="text" placeholder="Buscar..." className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                            <input type="text" placeholder="Buscar reserva..." className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
                         </div>
                         <div className="flex gap-2 overflow-x-auto w-full xl:w-auto pb-2 xl:pb-0 custom-scrollbar snap-x">
                             {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'confirmadas', label: 'Confirmadas' }, { id: 'realizado', label: 'Ingresados' }].map(filter => (
@@ -674,19 +887,19 @@ export default function DashboardPage() {
                             <table className="w-full text-left text-sm text-zinc-400">
                                 <thead className="bg-black/80 text-zinc-500 text-[10px] uppercase font-bold tracking-wider sticky top-0 z-20 backdrop-blur-md">
                                     <tr>
-                                        <th className="px-4 py-4 whitespace-nowrap">Ticket / Hora</th>
+                                        <th className="px-4 py-4 whitespace-nowrap">Código / Hora</th>
                                         <th className="px-4 py-4 min-w-[150px]">Cliente</th>
                                         <th className="px-4 py-4 text-center">Pax</th>
                                         <th className="px-4 py-4 text-center">Estado</th>
-                                        <th className="px-4 py-4 text-center">Consumo</th>
+                                        <th className="px-4 py-4 text-center">Consumo Web</th>
                                         <th className="px-4 py-4 text-right">Controles</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {filteredReservas.length === 0 ? (
-                                        <tr><td colSpan={6} className="px-6 py-20 text-center"><Search className="w-8 h-8 text-zinc-700 mx-auto mb-2"/><span className="text-zinc-500 font-medium">No hay resultados.</span></td></tr>
+                                    {filteredReservasMesa.length === 0 ? (
+                                        <tr><td colSpan={6} className="px-6 py-20 text-center"><Search className="w-8 h-8 text-zinc-700 mx-auto mb-2"/><span className="text-zinc-500 font-medium">No hay reservas de mesa que coincidan.</span></td></tr>
                                     ) : (
-                                        filteredReservas.map((res) => (
+                                        filteredReservasMesa.map((res) => (
                                             <tr key={res.id} className="hover:bg-white/[0.02] transition-colors group">
                                                 <td className="px-4 py-4">
                                                     <div className="flex flex-col gap-1">
@@ -744,7 +957,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. PAGOS WEB (GETNET) */}
+            {/* 3. PAGOS WEB (DETALLADO) */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-end mb-4">
@@ -772,10 +985,10 @@ export default function DashboardPage() {
 
                      <div className="bg-zinc-900 border border-white/5 rounded-3xl p-4 lg:p-6 min-h-[500px] flex flex-col overflow-hidden">
                         <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
-                            <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Transacciones Web</h3>
+                            <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Libro de Transacciones Web</h3>
                             <div className="relative w-full md:w-64">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                                <input type="text" placeholder="Buscar cliente..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
+                                <input type="text" placeholder="Buscar cliente o ref..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
                             </div>
                         </div>
                         <div className="overflow-x-auto custom-scrollbar flex-1">
@@ -784,21 +997,29 @@ export default function DashboardPage() {
                                     <tr>
                                         <th className="px-4 py-3 whitespace-nowrap">Ref / Fecha</th>
                                         <th className="px-4 py-3 min-w-[120px]">Cliente</th>
-                                        <th className="px-4 py-3 text-center">Items</th>
+                                        <th className="px-4 py-3">Detalle Compra (Show/Menú)</th>
+                                        <th className="px-4 py-3 text-center">Método Pago</th>
                                         <th className="px-4 py-3 text-right">Monto</th>
                                         <th className="px-4 py-3 text-center">Estado</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {webPayments.length === 0 ? <tr className="text-center"><td colSpan={5} className="py-10">No hay pagos web.</td></tr> : webPayments.map((p) => (
+                                    {webPayments.length === 0 ? <tr className="text-center"><td colSpan={6} className="py-10">No hay pagos web.</td></tr> : webPayments.map((p) => (
                                         <tr key={p.id} className="hover:bg-white/5 transition-colors">
                                             <td className="px-4 py-3">
                                                 <p className="font-mono text-xs text-zinc-300">{p.ref_getnet}</p>
                                                 <p className="text-[10px] text-zinc-600">{new Date(p.fecha).toLocaleString()}</p>
                                             </td>
-                                            <td className="px-4 py-3"><p className="font-bold text-white text-xs truncate">{p.cliente}</p></td>
-                                            <td className="px-4 py-3 text-center text-xs">{p.detalle}</td>
-                                            <td className="px-4 py-3 text-right font-bold text-white">${p.monto.toLocaleString('es-CL')}</td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-white text-xs truncate">{p.cliente}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-xs font-bold text-white">
+                                                {p.detalle}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] uppercase font-bold">{p.metodo}</span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-black text-green-400">${p.monto.toLocaleString('es-CL')}</td>
                                             <td className="px-4 py-3 text-center">
                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${p.status_pago === 'APROBADO' ? 'bg-green-900/20 text-green-400 border-green-500/30' : p.status_pago === 'PENDIENTE' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' : 'bg-red-900/20 text-red-400 border-red-500/30'}`}>{p.status_pago}</span>
                                             </td>
@@ -810,6 +1031,7 @@ export default function DashboardPage() {
                      </div>
                 </motion.div>
             )}
+
             {/* 4. FINANZAS / ERP AVANZADO (NUEVO MÓDULO MASIVO) */}
             {activeTab === "finanzas" && (
                 <motion.div key="finanzas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full">
@@ -1160,7 +1382,7 @@ export default function DashboardPage() {
                         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                             <div>
                                 <h3 className="text-lg font-black uppercase tracking-wider flex items-center gap-2">Base de Clientes <span className="text-[#DAA520]">({clientes.length})</span></h3>
-                                <p className="text-xs text-zinc-500 mt-1">Directorio oficial para fidelización y marketing.</p>
+                                <p className="text-xs text-zinc-500 mt-1">Directorio oficial para fidelización y marketing. (Alimentado por reservas web y compras POS).</p>
                             </div>
                             <div className="flex gap-2">
                                  <button onClick={() => handleResetTable('clientes', 'Todos los Clientes')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
