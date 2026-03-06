@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
     // Extraer datos del cliente
     const nombreCliente = reserva.name || 'Cliente'; 
-    const emailCliente = reserva.email;
+    // const emailCliente = reserva.email; // Se comenta por ahora en modo prueba
     
     const carritoItems = reserva.pre_order || [];
 
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
           .from('tickets')
           .insert({
             event_id: item.id, // Guardamos el ID del producto/evento
-            user_email: emailCliente,
+            user_email: reserva.email, // Aquí sí guardamos el email real del cliente en la BD
             customer_name: nombreCliente,
             status: 'valid'
           })
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     const pdfBuffer = Buffer.from(pdfBytes);
 
     // ==========================================
-    // PASO 4: ENVIAR CORREO CON RESEND (ACTUALIZADO A PRODUCCIÓN)
+    // PASO 4: ENVIAR CORREO CON RESEND (MODO PRUEBA)
     // ==========================================
     
     // Tomamos el primer QR generado para mostrarlo de preview en el cuerpo del correo
@@ -135,13 +135,13 @@ export async function POST(req: Request) {
     const nombresEventos = [...new Set(ticketItems.map((i: any) => i.name))].join(', ');
 
     const emailData = await resend.emails.send({
-      // 🔥 REEMPLAZA "entradas@tudominio.cl" con tu correo real verificado en Resend
-      from: process.env.RESEND_FROM_EMAIL || 'Entradas Boulevard <entradas@tudominio.cl>', 
+      // 🔥 OBLIGATORIO EN MODO PRUEBA
+      from: 'onboarding@resend.dev', 
       
-      // 🔥 AHORA SE ENVÍA AL CORREO REAL DEL CLIENTE
-      to: [emailCliente], 
+      // 🔥 TU CORREO REGISTRADO EN RESEND (Llegarán todas las compras de prueba aquí)
+      to: ['balfaroy2.0@gmail.com'], 
       
-      subject: `🎟️ Tus entradas para ${nombresEventos} - Boulevard Zapallar`,
+      subject: `🎟️ PRUEBA - Tus entradas para ${nombresEventos} - Boulevard Zapallar`,
       
       react: TicketEmail({ 
         customerName: nombreCliente, 
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
       ],
     });
 
-    console.log('✅ Correo enviado exitosamente al cliente:', emailData);
+    console.log('✅ Correo de prueba enviado exitosamente a balfaroy2.0@gmail.com:', emailData);
 
     // ==========================================
     // PASO 5: ACTUALIZAR LA RESERVA COMO PAGADA
