@@ -9,8 +9,8 @@ import {
     CheckSquare, Square // Nuevos iconos para el checkbox
 } from "lucide-react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { useParams } from "next/navigation";
 import { Montserrat } from "next/font/google";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/components/CartContext"; 
@@ -19,6 +19,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 
 export default function EventDetailPage() {
   const params = useParams();
+  const router = useRouter(); // Agregado para la redirección
   const id = params?.id; 
   
   const { addItem } = useCart();
@@ -30,8 +31,6 @@ export default function EventDetailPage() {
 
   // Estados de interacción
   const [ticketsSelection, setTicketsSelection] = useState<{ [key: string]: number }>({});
-  const [showReservationModal, setShowReservationModal] = useState(false);
-  const [reservationData, setReservationData] = useState({ name: "", email: "", phone: "", guests: 1 });
   
   // NUEVO: Estado para aceptación de términos
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -123,19 +122,14 @@ export default function EventDetailPage() {
       }
   };
 
-  const handleOpenReservationModal = () => {
+  const handleGoToReservations = () => {
       // VALIDACIÓN DE TÉRMINOS TAMBIÉN PARA RESERVA GRATIS
       if (!termsAccepted) {
           alert("Por favor, acepta las políticas de compra y devolución para continuar.");
           return;
       }
-      setShowReservationModal(true);
-  };
-
-  const handleReservationSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      alert(`Reserva gratuita confirmada para ${reservationData.name}.`);
-      setShowReservationModal(false);
+      // Redirección al panel principal de reservas
+      router.push('/reservas');
   };
 
   // --- RENDERIZADO CONDICIONAL ---
@@ -276,7 +270,7 @@ export default function EventDetailPage() {
                     Estimado cliente, por normativa de <strong>Boulevard Zapallar</strong>, declaramos expresamente que <strong>no se realizarán cambios ni devoluciones de dinero</strong> una vez finalizado el proceso de compra.
                 </p>
                 <p>
-                    <strong>Excepción por Fuerza Mayor:</strong> Únicamente en caso de que el evento sea suspendido o cancelado por fuerza mayor, se procederá al reintegro del dinero.
+                    <strong>Excepción por Fuerza Mayor:</strong> Únicamente en caso de que el evento sea suspendido o cancelado por fuerza mayor, se procederá al reintegro del dinero. <strong className="uppercase text-zinc-300">El reembolso será hasta 15 días hábiles después de la compra.</strong>
                 </p>
                 <p>
                     Recomendamos revisar cuidadosamente los datos de su orden antes de confirmar la compra. Las entradas son nominativas y personalizadas.
@@ -306,7 +300,7 @@ export default function EventDetailPage() {
         
         {isFreeEvent ? (
             <button 
-                onClick={handleOpenReservationModal}
+                onClick={handleGoToReservations}
                 disabled={!termsAccepted}
                 className={`w-full px-8 py-4 rounded-xl font-bold uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 ${
                     termsAccepted 
@@ -339,47 +333,6 @@ export default function EventDetailPage() {
             </>
         )}
       </div>
-
-      {/* --- MODAL DE RESERVA (SOLO SI ES GRATIS) --- */}
-      <AnimatePresence>
-      {showReservationModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowReservationModal(false)} />
-            <motion.div 
-                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-md relative z-10 shadow-2xl"
-            >
-                <button onClick={() => setShowReservationModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button>
-                <h3 className="text-xl font-bold text-white uppercase mb-1">Reserva tu Mesa</h3>
-                <p className="text-xs text-zinc-400 mb-6">{event.title} - Entrada Liberada</p>
-                
-                <form onSubmit={handleReservationSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Completo</label>
-                        <input required type="text" className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-white text-sm focus:border-[#DAA520] outline-none" onChange={e => setReservationData({...reservationData, name: e.target.value})} />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Correo Electrónico</label>
-                        <input required type="email" className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-white text-sm focus:border-[#DAA520] outline-none" onChange={e => setReservationData({...reservationData, email: e.target.value})} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Teléfono</label>
-                            <input required type="tel" className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-white text-sm focus:border-[#DAA520] outline-none" onChange={e => setReservationData({...reservationData, phone: e.target.value})} />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Personas</label>
-                            <input required type="number" min="1" max="10" className="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 text-white text-sm focus:border-[#DAA520] outline-none" onChange={e => setReservationData({...reservationData, guests: parseInt(e.target.value)})} />
-                        </div>
-                    </div>
-                    <button type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-2 hover:bg-[#B8860B] transition-colors">
-                        Confirmar Reserva
-                    </button>
-                </form>
-            </motion.div>
-        </div>
-      )}
-      </AnimatePresence>
 
     </main>
   );

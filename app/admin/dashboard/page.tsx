@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, UserCheck, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw, FileCheck, Archive, Briefcase, FileSignature, Receipt
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, Globe, RefreshCw, Archive, Briefcase, FileSignature, Receipt
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -23,7 +23,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500"
 // --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
-    { id: "ventas_show", label: "Ventas Show", icon: Ticket }, // NUEVO PANEL
+    { id: "ventas_show", label: "Ventas Show", icon: Ticket },
     { id: "reservas", label: "Reservas Mesa", icon: Calendar },
     { id: "pagos_web", label: "Pagos Web", icon: Globe },
     { id: "finanzas", label: "Finanzas ERP", icon: TrendingUp }, 
@@ -427,12 +427,26 @@ export default function DashboardPage() {
   const handleSaveShow = async (e: React.FormEvent) => { e.preventDefault(); setIsLoading(true); try { let finalImageUrl = currentShow.image_url; if (selectedFile) { const uploadedUrl = await uploadImageToSupabase(); if (uploadedUrl) finalImageUrl = uploadedUrl; } const showData = { ...currentShow, image_url: finalImageUrl }; if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id); else await supabase.from('shows').insert([showData]); await fetchData(); setIsShowModalOpen(false); } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } };
   const handleDeleteShow = async (id: number) => { if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); } };
 
+  // --- ACTUALIZAR ESTADO DE PAGOS WEB ---
+  const handleUpdatePaymentStatus = async (reservaId: number, newStatus: string) => {
+    setIsLoading(true);
+    try {
+        await supabase.from('reservas').update({ status: newStatus }).eq('id', reservaId);
+        await fetchData();
+    } catch(e) {
+        console.error(e);
+        alert("Error al actualizar el estado");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   // --- CONFIRMACIÓN RESERVAS NORMALES ---
   const handleConfirmReservation = async (reserva: any) => {
     if (!confirm(`¿Confirmar Reserva de Mesa a ${reserva.name} y enviar WhatsApp?`)) return;
     setProcessingId(reserva.id); 
     try {
-        await syncClientToDB(reserva); // Sincroniza cliente en DB
+        await syncClientToDB(reserva);
 
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const codigoFinal = reserva.code || `BZ-${randomNum}`;
@@ -473,10 +487,18 @@ export default function DashboardPage() {
             }
         }
 
+        const customMessage = `Hola ${reserva.name} 👋,\n\n¡Tu reserva de mesa en *Boulevard Zapallar* está CONFIRMADA! 🥂\n\n🔑 *CÓDIGO DE ACCESO: ${codigoFinal}*\n\n📅 Fecha: ${reserva.date_reserva}\n👥 Personas: ${reserva.guests}\n\n👇 *IMPORTANTE: TICKET DE INGRESO*\nLa imagen adjunta es tu pase de reserva. Por favor muéstralo en recepción al llegar.\n\n¡Te esperamos!`;
+
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone }),
+            body: JSON.stringify({ 
+                reservaId: reserva.id, 
+                ticketUrl: ticketPublicUrl, 
+                reservation_code: codigoFinal, 
+                phone: reserva.phone,
+                customMessage: customMessage
+            }),
         });
 
         const result = await response.json();
@@ -485,17 +507,20 @@ export default function DashboardPage() {
     } catch (error: any) { alert("Error crítico al generar ticket: " + error.message); } finally { setProcessingId(null); }
   };
 
-  // --- CONFIRMACIÓN ENTRADAS SHOW (TIPO PASSLINE) ---
+  // --- CONFIRMACIÓN ENTRADAS SHOW (TIPO PASSLINE CON QR REAL) ---
   const handleConfirmShowTicket = async (reserva: any) => {
     if (!confirm(`¿Confirmar COMPRA DE ENTRADA a ${reserva.name}, generar ticket E-Pass y enviar WhatsApp?`)) return;
     setProcessingId(reserva.id); 
     try {
-        await syncClientToDB(reserva); // Sincroniza cliente en DB
+        await syncClientToDB(reserva);
 
         const randomNum = Math.floor(100000 + Math.random() * 900000); 
         const codigoFinal = reserva.code || `TKT-${randomNum}`;
         const { tickets, menu } = getTicketDetails(reserva.pre_order);
         const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(', ');
+        
+        // URL para validación del QR (Apunta a tu nueva ruta)
+        const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://boulevardzapallar.cl/validar-ticket/${reserva.id}`;
 
         const ticketElement = document.createElement("div");
         ticketElement.style.cssText = "position:fixed; top:-9999px; left:-9999px; width:800px; height:1400px; font-family: 'Arial', sans-serif; color: black; text-align: center; background: #fff;";
@@ -520,21 +545,20 @@ export default function DashboardPage() {
                         <div style="flex: 1;">
                             <p style="font-size: 20px; color: #666; margin-bottom: 5px;">CÓDIGO ÚNICO DE INGRESO</p>
                             <p style="font-size: 45px; font-weight: 900; margin: 0; letter-spacing: 2px;">${codigoFinal}</p>
-                            ${menu.length > 0 ? `<div style="margin-top: 20px; background: #DAA520; padding: 10px 20px; border-radius: 10px; display: inline-block;"><p style="font-size: 18px; margin: 0; color: #000; font-weight:bold;">+ INCLUYE MENÚ ANTICIPADO</p></div>` : ''}
+                            ${menu.length > 0 ? `<div style="margin-top: 20px; background: #DAA520; padding: 10px 20px; border-radius: 10px; display: inline-block;"><p style="font-size: 18px; margin: 0; color: #000; font-weight:bold;">+ INCLUYE MENÚ ANTICIPADO (${menu.reduce((a:any,c:any)=>a+c.quantity,0)} Items)</p></div>` : ''}
                         </div>
-                        <div style="width: 250px; height: 250px; background: #000; display: flex; align-items: center; justify-content: center; border-radius: 20px; overflow: hidden; position: relative;">
-                            <div style="width: 230px; height: 230px; background: repeating-linear-gradient(45deg, #fff, #fff 10px, #000 10px, #000 20px);"></div>
-                            <div style="position: absolute; background: white; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 20px;">ESCANEAR</div>
+                        <div style="width: 250px; height: 250px; display: flex; align-items: center; justify-content: center; border-radius: 20px; overflow: hidden;">
+                            <img src="${qrDataUrl}" crossorigin="anonymous" style="width: 250px; height: 250px;" />
                         </div>
                     </div>
                 </div>
                 <div style="background: #f5f5f5; padding: 30px; text-align: center; border-top: 4px solid #000;">
-                    <p style="font-size: 20px; color: #333; margin: 0; font-weight: bold;">Este ticket es al portador y válido para ingreso. Presentar directamente en puerta.</p>
+                    <p style="font-size: 20px; color: #333; margin: 0; font-weight: bold;">Este ticket es al portador y válido para ingreso. Presentar directamente en puerta para validación QR.</p>
                 </div>
             </div>
         `;
         document.body.appendChild(ticketElement);
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Damos tiempo para que cargue la imagen del QR externo
         const canvas = await html2canvas(ticketElement, { scale: 1, useCORS: true, allowTaint: true });
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
         document.body.removeChild(ticketElement);
@@ -549,11 +573,18 @@ export default function DashboardPage() {
             }
         }
 
+        const customMessage = `Hola ${reserva.name} 👋,\n\n¡Tu compra de entradas en *Boulevard Zapallar* está CONFIRMADA! 🥂\n\n🔑 *CÓDIGO DE ACCESO: ${codigoFinal}*\n\n📅 Fecha: ${reserva.date_reserva}\n👥 Tickets comprados: ${reserva.guests}\n\n👇 *IMPORTANTE: TICKET DE INGRESO*\nEste código QR es tu pase de entrada. Por favor muéstralo en recepción para ser escaneado.\n\n¡Te esperamos!`;
+
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            // Enviamos un texto especial si quieres que el endpoint lo envíe distinto, o el endpoint usa la URL
-            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone }),
+            body: JSON.stringify({ 
+                reservaId: reserva.id, 
+                ticketUrl: ticketPublicUrl, 
+                reservation_code: codigoFinal, 
+                phone: reserva.phone,
+                customMessage: customMessage // Endpoint enviará este texto exacto
+            }),
         });
 
         const result = await response.json();
@@ -607,7 +638,7 @@ export default function DashboardPage() {
       if (!birthdayFilterDate) return [];
       const filterDate = new Date(birthdayFilterDate);
       const filterMonth = filterDate.getMonth();
-      const filterDay = filterDate.getDate() + 1; // Ajuste zona horaria
+      const filterDay = filterDate.getDate() + 1;
 
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
@@ -805,18 +836,18 @@ export default function DashboardPage() {
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
                                                     {res.status === 'pendiente' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full text-[10px] font-bold uppercase"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"/> Por Enviar</span>}
-                                                    {res.status === 'confirmada' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full text-[10px] font-bold uppercase"><CheckCircle className="w-3 h-3"/> Enviado WP</span>}
-                                                    {(res.status === 'realizado' || res.status === 'ingresado') && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-[10px] font-bold uppercase"><QrCode className="w-3 h-3"/> Escaneado Local</span>}
+                                                    {res.status === 'confirmada' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-[10px] font-bold uppercase"><CheckCircle className="w-3 h-3"/> APROBADO</span>}
+                                                    {(res.status === 'realizado' || res.status === 'ingresado') && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase"><QrCode className="w-3 h-3"/> Escaneado Local</span>}
                                                 </td>
                                                 <td className="px-4 py-4 text-right">
                                                     <div className="flex flex-wrap justify-end gap-2 items-center">
                                                         {res.status === 'pendiente' && (
-                                                            <button onClick={() => handleConfirmShowTicket(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg shadow-purple-900/20">
-                                                                {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Ticket className="w-3 h-3"/>} <span className="hidden xl:inline">Generar Ticket</span>
+                                                            <button onClick={() => handleConfirmShowTicket(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg shadow-green-900/20">
+                                                                {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <CheckCircle className="w-3 h-3"/>} <span className="hidden xl:inline">Aprobar</span>
                                                             </button>
                                                         )}
                                                         {res.status === 'confirmada' && (
-                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg">
+                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg">
                                                                 <QrCode className="w-3 h-3"/> <span className="hidden xl:inline">ESCANEAR / INGRESAR</span>
                                                             </button>
                                                         )}
@@ -957,7 +988,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. PAGOS WEB (DETALLADO) */}
+            {/* 3. PAGOS WEB (DETALLADO CON ACCIONES) */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-end mb-4">
@@ -997,10 +1028,10 @@ export default function DashboardPage() {
                                     <tr>
                                         <th className="px-4 py-3 whitespace-nowrap">Ref / Fecha</th>
                                         <th className="px-4 py-3 min-w-[120px]">Cliente</th>
-                                        <th className="px-4 py-3">Detalle Compra (Show/Menú)</th>
+                                        <th className="px-4 py-3">Detalle Compra</th>
                                         <th className="px-4 py-3 text-center">Método Pago</th>
                                         <th className="px-4 py-3 text-right">Monto</th>
-                                        <th className="px-4 py-3 text-center">Estado</th>
+                                        <th className="px-4 py-3 text-right">Estado / Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
@@ -1020,8 +1051,27 @@ export default function DashboardPage() {
                                                 <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] uppercase font-bold">{p.metodo}</span>
                                             </td>
                                             <td className="px-4 py-3 text-right font-black text-green-400">${p.monto.toLocaleString('es-CL')}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${p.status_pago === 'APROBADO' ? 'bg-green-900/20 text-green-400 border-green-500/30' : p.status_pago === 'PENDIENTE' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' : 'bg-red-900/20 text-red-400 border-red-500/30'}`}>{p.status_pago}</span>
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="flex justify-end gap-2 items-center">
+                                                    <select 
+                                                        className={`bg-zinc-900 text-xs px-3 py-2 rounded-lg outline-none font-bold uppercase border ${p.reserva_obj.status === 'confirmada' ? 'text-green-500 border-green-500/30' : p.reserva_obj.status === 'pendiente' ? 'text-yellow-500 border-yellow-500/30' : 'text-red-500 border-red-500/30'}`}
+                                                        value={p.reserva_obj.status}
+                                                        onChange={(e) => handleUpdatePaymentStatus(p.reserva_obj.id, e.target.value)}
+                                                    >
+                                                        <option value="pendiente">Pendiente</option>
+                                                        <option value="confirmada">Aprobado</option>
+                                                        <option value="rechazada">Rechazado</option>
+                                                    </select>
+                                                    
+                                                    {p.reserva_obj.status === 'confirmada' && (
+                                                        <button 
+                                                            onClick={() => getTicketDetails(p.reserva_obj.pre_order).hasTickets ? handleConfirmShowTicket(p.reserva_obj) : handleConfirmReservation(p.reserva_obj)} 
+                                                            className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors shadow-lg flex items-center gap-1"
+                                                        >
+                                                            <Send className="w-3 h-3"/> Enviar
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
