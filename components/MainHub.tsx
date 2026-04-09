@@ -458,9 +458,9 @@ export default function MainHub() {
                     Staff Access
                 </Link>
                 
-                <p className="text-[10px] text-zinc-500 font-bold tracking-[0.3em] uppercase">
+                <a href="https://bayx.pro/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-zinc-500 font-bold tracking-[0.3em] uppercase hover:opacity-80 transition-opacity">
                     Powered By <span className="text-boulevard-red glow-text">BAYX</span>
-                </p>
+                </a>
             </div>
         </motion.div>
 
