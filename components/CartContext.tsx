@@ -21,9 +21,9 @@ export type CartItem = {
 
 // --- DATOS BANCARIOS ---
 const BANK_DETAILS = {
-    bank: "Mercado Pago",
-    accountType: "Cuenta Vista",
-    accountNumber: "1058303781",
+    bank: "Santander",
+    accountType: "Cuenta Corriente",
+    accountNumber: "88042522",
     rut: "77.186.391-4",
     email: "transferenciasbz@gmail.com",
     holder: "CENTRO GASTRONOMICO BOULEVARD ZAPALLAR SPA"
