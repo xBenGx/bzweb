@@ -46,6 +46,10 @@ const FINANZAS_TABS = [
 ];
 
 export default function DashboardPage() {
+  // --- 1. ESTADOS DE SEGURIDAD (AÑADIDOS PARA EL CAJERO) ---
+  const [isCajero, setIsCajero] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState("resumen");
   const [sendingGiftId, setSendingGiftId] = useState<number | null>(null);
   const [activeFinanzasTab, setActiveFinanzasTab] = useState("ingresos");
@@ -101,6 +105,26 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // --- 2. VERIFICACIÓN DE USUARIO AL INICIO ---
+  useEffect(() => {
+    const initSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || null);
+        // Si detectamos que es el cajero, activamos su modo y lo enviamos a su pestaña
+        if (user.email === "cajero@boulevardzapallar.cl") {
+          setIsCajero(true);
+          setActiveTab("ventas_show"); 
+        }
+      }
+    };
+
+    initSession();
+    // Nota: Asumo que aquí abajo tienes tu llamado a fetchData() y los canales de Supabase
+    // fetchData();
+    // const channel = supabase.channel(...)
+  }, []);
+
   const formatDateSafe = (dateString: string) => {
       if (!dateString) return "Sin Fecha";
       const date = new Date(`${dateString}T12:00:00`); 
@@ -121,7 +145,7 @@ export default function DashboardPage() {
           const { error } = await supabase.from(tableName).delete().neq('id', -1);
           if (error) throw error;
           alert(`✅ ÉXITO. Todos los registros de ${displayName} han sido eliminados. El módulo se ha reseteado.`);
-          fetchData();
+          // fetchData(); <-- Asegúrate de que esta función exista más abajo en tu código
       } catch (error: any) {
           alert("Error al vaciar la tabla: " + error.message);
       } finally {
@@ -739,7 +763,14 @@ export default function DashboardPage() {
             </div>
         </div>
         <nav className="flex-1 w-full space-y-1.5 px-2 overflow-y-auto custom-scrollbar pb-10">
-            {TABS.map((tab) => (
+            {TABS.filter((tab) => {
+                // El cajero solo puede ver estas 3 secciones
+                if (isCajero) {
+                    return ['ventas_show', 'reservas', 'pagos_web'].includes(tab.id);
+                }
+                // Si no es cajero (es admin), ve todo el menú
+                return true;
+            }).map((tab) => (
                 <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
@@ -780,9 +811,9 @@ export default function DashboardPage() {
             </div>
         </header>
 
-        <AnimatePresence mode="wait">
-            {/* 1. VISTA RESUMEN */}
-            {activeTab === "resumen" && (
+       <AnimatePresence mode="wait">
+            {/* 1. VISTA RESUMEN (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "resumen" && !isCajero && (
                 <motion.div key="resumen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                         {[
@@ -827,7 +858,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 1.5 NUEVO: VENTAS SHOW */}
+            {/* 1.5 NUEVO: VENTAS SHOW (PERMITIDO PARA CAJERO) */}
             {activeTab === "ventas_show" && (
                 <motion.div key="ventas_show" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -943,7 +974,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS DE MESA */}
+            {/* 2. GESTIÓN DE RESERVAS DE MESA (PERMITIDO PARA CAJERO) */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -1066,7 +1097,7 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. PAGOS WEB (DETALLADO CON ACCIONES) */}
+            {/* 3. PAGOS WEB (PERMITIDO PARA CAJERO) */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-end mb-4">
@@ -1160,8 +1191,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 4. FINANZAS / ERP AVANZADO (NUEVO MÓDULO MASIVO) */}
-            {activeTab === "finanzas" && (
+            {/* 4. FINANZAS / ERP AVANZADO (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "finanzas" && !isCajero && (
                 <motion.div key="finanzas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full">
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                         <div>
@@ -1423,8 +1454,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 5. MENÚ RESERVA / EXPRESS */}
-            {activeTab === "menu_express" && (
+            {/* 5. MENÚ RESERVA / EXPRESS (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "menu_express" && !isCajero && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                         <div>
@@ -1467,8 +1498,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 6. CLIENTES BOULEVARD */}
-            {activeTab === "clientes" && (
+            {/* 6. CLIENTES BOULEVARD (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "clientes" && !isCajero && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         {/* Cumpleaños */}
@@ -1582,8 +1613,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 7. SHOWS */}
-            {activeTab === "shows" && (
+            {/* 7. SHOWS (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "shows" && !isCajero && (
                 <motion.div key="shows" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                         <div className="relative w-full sm:w-64 group">
@@ -1636,8 +1667,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 8. PROMOCIONES */}
-            {activeTab === "promos" && (
+            {/* 8. PROMOCIONES (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "promos" && !isCajero && (
                 <motion.div key="promos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold">Promociones Activas</h3>
@@ -1685,8 +1716,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 9. EVENTOS / COTIZACIONES */}
-            {activeTab === "eventos" && (
+            {/* 9. EVENTOS / COTIZACIONES (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "eventos" && !isCajero && (
                 <motion.div key="eventos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                         <div>
@@ -1745,8 +1776,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 10. CARRUSEL */}
-            {activeTab === "carrusel" && (
+            {/* 10. CARRUSEL (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "carrusel" && !isCajero && (
                 <motion.div key="carrusel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="bg-zinc-900 border border-white/5 p-6 rounded-3xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
@@ -1805,8 +1836,8 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 11. RRHH / EQUIPO */}
-            {activeTab === "rrhh" && (
+            {/* 11. RRHH / EQUIPO (BLOQUEADO PARA CAJERO) */}
+            {activeTab === "rrhh" && !isCajero && (
                 <motion.div key="rrhh" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                         <div>
