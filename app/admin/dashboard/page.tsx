@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, UserCheck, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode, FileCheck, Globe, RefreshCw, Archive, Briefcase, FileSignature, Receipt
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, FileCheck, Globe, RefreshCw, Archive, Briefcase, FileSignature, Receipt, FileDown
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -66,6 +66,27 @@ export default function DashboardPage() {
   const [menuItems, setMenuItems] = useState<any[]>([]); 
   const [ventas, setVentas] = useState<any[]>([]);
 
+  // --- NUEVOS ESTADOS PARA PAGOS WEB ---
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("todos"); // "todos", "getnet", "transferencia"
+  const [isBoletaModalOpen, setIsBoletaModalOpen] = useState(false);
+  const [currentBoletaData, setCurrentBoletaData] = useState<any>(null);
+  const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(false);
+  const [currentComprobanteUrl, setCurrentComprobanteUrl] = useState<string | null>(null);
+  const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
+  const [newManualPayment, setNewManualPayment] = useState({ cliente: "", email: "", monto: 0, metodo: "Transferencia", detalle: "" });
+
+  // --- ESTADOS PARA VENTA DE ENTRADAS EN PUERTA ---
+  const [isVentaPuertaModalOpen, setIsVentaPuertaModalOpen] = useState(false);
+  const [ventaPuertaData, setVentaPuertaData] = useState({
+      showId: "",
+      ticketIndex: 0,
+      quantity: 1,
+      cliente: "",
+      whatsapp: "",
+      email: "",
+      metodo_pago: "efectivo"
+  });
+
   // --- NUEVOS ESTADOS ERP FINANZAS ---
   const [compras, setCompras] = useState<any[]>([]);
   const [inventario, setInventario] = useState<any[]>([]);
@@ -120,9 +141,6 @@ export default function DashboardPage() {
     };
 
     initSession();
-    // Nota: Asumo que aquí abajo tienes tu llamado a fetchData() y los canales de Supabase
-    // fetchData();
-    // const channel = supabase.channel(...)
   }, []);
 
   const formatDateSafe = (dateString: string) => {
@@ -145,7 +163,6 @@ export default function DashboardPage() {
           const { error } = await supabase.from(tableName).delete().neq('id', -1);
           if (error) throw error;
           alert(`✅ ÉXITO. Todos los registros de ${displayName} han sido eliminados. El módulo se ha reseteado.`);
-          // fetchData(); <-- Asegúrate de que esta función exista más abajo en tu código
       } catch (error: any) {
           alert("Error al vaciar la tabla: " + error.message);
       } finally {
@@ -269,7 +286,7 @@ export default function DashboardPage() {
   };
   const showPerformance = getShowPerformance();
   
-  // PAGOS WEB DETALLADOS
+  // PAGOS WEB DETALLADOS (ACTUALIZADO CON FILTROS Y COMPROBANTES)
   const getWebPayments = () => {
       return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => {
           const { tickets, menu } = getTicketDetails(r.pre_order);
@@ -282,10 +299,16 @@ export default function DashboardPage() {
               ref_getnet: r.payment_id || 'Transferencia/Otro',
               status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') ? 'APROBADO' : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
               detalle: detalleArr.join(' + ') || 'Reserva Normal', 
-              metodo: r.payment_id ? 'Webpay' : 'Transferencia',
-              reserva_obj: r
+              metodo: r.payment_id ? 'Getnet' : 'Transferencia',
+              reserva_obj: r,
+              comprobante_url: r.comprobante_url || null, 
+              detalle_completo: r.pre_order || []
           }
-      }).filter(p => p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase())).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      }).filter(p => {
+          const matchSearch = p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase());
+          const matchMethod = paymentMethodFilter === "todos" ? true : p.metodo.toLowerCase() === paymentMethodFilter.toLowerCase();
+          return matchSearch && matchMethod;
+      }).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   };
   const webPayments = getWebPayments();
   const totalWebApproved = webPayments.filter(p => p.status_pago === 'APROBADO').reduce((acc, curr) => acc + curr.monto, 0);
@@ -464,6 +487,120 @@ export default function DashboardPage() {
     } finally {
         setIsLoading(false);
     }
+  };
+
+  // --- FUNCIONES NUEVAS PAGOS WEB ---
+  const handleOpenBoleta = (payment: any) => {
+      setCurrentBoletaData(payment);
+      setIsBoletaModalOpen(true);
+  };
+
+  const generatePDFBoleta = async () => {
+      const element = document.getElementById('boleta-imprimible');
+      if(!element) return;
+      
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({
+          orientation: "portrait",
+          unit: "mm",
+          format: [80, 200]
+      });
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`boleta-${currentBoletaData.ref_getnet}-${currentBoletaData.cliente}.pdf`);
+  };
+
+  const handleSaveManualPayment = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          const fakeCode = `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
+          const { error } = await supabase.from('reservas').insert([{
+              name: newManualPayment.cliente,
+              email: newManualPayment.email,
+              total_pre_order: newManualPayment.monto,
+              status: 'confirmada',
+              payment_id: newManualPayment.metodo === 'Getnet' ? fakeCode : null,
+              reservation_code: fakeCode,
+              pre_order: [{ name: newManualPayment.detalle, price: newManualPayment.monto, quantity: 1, category: 'general' }]
+          }]);
+          
+          if (error) throw error;
+          await fetchData();
+          setIsAddPaymentModalOpen(false);
+          setNewManualPayment({ cliente: "", email: "", monto: 0, metodo: "Transferencia", detalle: "" });
+      } catch (error: any) {
+          alert("Error al registrar pago manual: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  // --- REGISTRAR VENTA DE ENTRADA MANUAL (PUERTA) ---
+  const handleSaveVentaPuerta = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsLoading(true);
+      try {
+          const show = shows.find(s => s.id.toString() === ventaPuertaData.showId);
+          if (!show) throw new Error("Debes seleccionar un show válido.");
+          
+          const ticket = show.tickets[ventaPuertaData.ticketIndex];
+          if (!ticket) throw new Error("Debes seleccionar un tipo de ticket válido.");
+
+          const total = ticket.price * ventaPuertaData.quantity;
+          const fakeCode = `PUERTA-${Math.floor(10000 + Math.random() * 90000)}`;
+
+          // Estructura JSON idéntica a la que genera el carrito web
+          const preOrderData = [{
+              category: "ticket",
+              name: ticket.name,
+              price: ticket.price,
+              quantity: ventaPuertaData.quantity,
+              show_id: show.id
+          }];
+
+          // 1. Insertamos el ticket en el panel de Ventas Show
+          const { error: reservaError } = await supabase.from('reservas').insert([{
+              name: ventaPuertaData.cliente,
+              phone: ventaPuertaData.whatsapp,
+              email: ventaPuertaData.email,
+              date_reserva: show.date_event,
+              time_reserva: show.time_event,
+              guests: ventaPuertaData.quantity,
+              status: 'pendiente', // Queda pendiente para que le des a "ENVIAR" y genere el QR
+              total_pre_order: total,
+              payment_id: `Puerta - ${ventaPuertaData.metodo_pago}`,
+              reservation_code: fakeCode,
+              pre_order: preOrderData
+          }]);
+
+          if (reservaError) throw reservaError;
+
+          // 2. Insertamos el dinero en el panel financiero (Caja POS)
+          await supabase.from('ventas_generales').insert([{
+              descripcion: `TKT Puerta: ${show.title} (${ventaPuertaData.quantity}x ${ticket.name})`,
+              monto: total,
+              tipo: 'entrada_manual',
+              metodo_pago: ventaPuertaData.metodo_pago,
+              origen: 'caja_pos'
+          }]);
+
+          alert("✅ Venta en puerta registrada con éxito.\nVe a la lista y presiona 'APROBAR / ENVIAR' para despachar el E-Ticket por WhatsApp.");
+          await fetchData();
+          setIsVentaPuertaModalOpen(false);
+          setVentaPuertaData({ showId: "", ticketIndex: 0, quantity: 1, cliente: "", whatsapp: "", email: "", metodo_pago: "efectivo" });
+      } catch (error: any) {
+          alert("Error: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   // --- CONFIRMACIÓN RESERVAS NORMALES ---
@@ -866,6 +1003,9 @@ export default function DashboardPage() {
                             <h2 className="text-xl font-black text-white flex items-center gap-2"><Ticket className="w-6 h-6 text-purple-500"/> Entradas Show y Eventos</h2>
                             <p className="text-xs text-zinc-400">Administra únicamente las ventas de entradas, genera pases E-Ticket y envíalos.</p>
                         </div>
+                        <button onClick={() => setIsVentaPuertaModalOpen(true)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
+                            <Plus className="w-4 h-4" /> Vender en Puerta
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 shrink-0">
@@ -1100,7 +1240,10 @@ export default function DashboardPage() {
             {/* 3. PAGOS WEB (PERMITIDO PARA CAJERO) */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                     <div className="flex justify-end mb-4">
+                     <div className="flex justify-end mb-4 gap-2">
+                         <button onClick={() => setIsAddPaymentModalOpen(true)} className="bg-[#DAA520] text-black border border-[#DAA520] hover:bg-[#B8860B] px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
+                             <Plus className="w-4 h-4" /> Añadir Pago Manual
+                         </button>
                          <button onClick={() => handleResetTable('reservas', 'Pagos y Reservas Web')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
                              <Trash2 className="w-4 h-4" /> Resetear Todo
                          </button>
@@ -1126,14 +1269,21 @@ export default function DashboardPage() {
                      <div className="bg-zinc-900 border border-white/5 rounded-3xl p-4 lg:p-6 min-h-[500px] flex flex-col overflow-hidden">
                         <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
                             <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Libro de Transacciones Web</h3>
-                            <div className="relative w-full md:w-64">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                                <input type="text" placeholder="Buscar cliente o ref..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
+                            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                                <div className="flex gap-2 overflow-x-auto custom-scrollbar snap-x">
+                                    {[{ id: 'todos', label: 'Todos' }, { id: 'getnet', label: 'Getnet' }, { id: 'transferencia', label: 'Transf.' }].map(filter => (
+                                        <button key={filter.id} onClick={() => setPaymentMethodFilter(filter.id)} className={`snap-start px-4 py-2 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${paymentMethodFilter === filter.id ? 'bg-blue-600 text-white border-blue-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                                    ))}
+                                </div>
+                                <div className="relative w-full sm:w-64">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                                    <input type="text" placeholder="Buscar cliente o ref..." className="w-full bg-black border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white outline-none focus:border-blue-500" value={webPaymentSearch} onChange={e => setWebPaymentSearch(e.target.value)} />
+                                </div>
                             </div>
                         </div>
                         <div className="overflow-x-auto custom-scrollbar flex-1">
                             <table className="w-full text-left text-sm text-zinc-400">
-                                <thead className="text-[10px] uppercase font-bold tracking-wider bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm">
+                                <thead className="text-[10px] uppercase font-bold tracking-wider bg-black/40 text-zinc-500 sticky top-0 backdrop-blur-sm z-10">
                                     <tr>
                                         <th className="px-4 py-3 whitespace-nowrap">Ref / Fecha</th>
                                         <th className="px-4 py-3 min-w-[120px]">Cliente</th>
@@ -1144,7 +1294,7 @@ export default function DashboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {webPayments.length === 0 ? <tr className="text-center"><td colSpan={6} className="py-10">No hay pagos web.</td></tr> : webPayments.map((p) => (
+                                    {webPayments.length === 0 ? <tr className="text-center"><td colSpan={6} className="py-10 text-zinc-500">No hay pagos que coincidan con la búsqueda.</td></tr> : webPayments.map((p) => (
                                         <tr key={p.id} className="hover:bg-white/5 transition-colors">
                                             <td className="px-4 py-3">
                                                 <p className="font-mono text-xs text-zinc-300">{p.ref_getnet}</p>
@@ -1152,16 +1302,27 @@ export default function DashboardPage() {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <p className="font-bold text-white text-xs truncate">{p.cliente}</p>
+                                                {p.email && <p className="text-[9px] text-zinc-500 truncate">{p.email}</p>}
                                             </td>
                                             <td className="px-4 py-3 text-xs font-bold text-white">
                                                 {p.detalle}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-[10px] uppercase font-bold">{p.metodo}</span>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${p.metodo === 'Getnet' ? 'bg-red-900/30 text-red-400' : 'bg-zinc-800 text-zinc-300'}`}>{p.metodo}</span>
+                                                    {p.metodo.toLowerCase() === 'transferencia' && p.comprobante_url && (
+                                                        <button onClick={() => { setCurrentComprobanteUrl(p.comprobante_url); setIsComprobanteModalOpen(true); }} className="text-[9px] text-blue-400 hover:text-blue-300 flex items-center gap-1 underline mt-1">
+                                                            <Eye className="w-3 h-3"/> Comprobante
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-right font-black text-green-400">${p.monto.toLocaleString('es-CL')}</td>
                                             <td className="px-4 py-3 text-right">
-                                                <div className="flex justify-end gap-2 items-center">
+                                                <div className="flex justify-end gap-2 items-center flex-wrap">
+                                                    <button onClick={() => handleOpenBoleta(p)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-2.5 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center gap-1">
+                                                        <Receipt className="w-3 h-3"/> Boleta
+                                                    </button>
                                                     <select 
                                                         className={`bg-zinc-900 text-xs px-3 py-2 rounded-lg outline-none font-bold uppercase border ${p.reserva_obj.status === 'confirmada' ? 'text-green-500 border-green-500/30' : p.reserva_obj.status === 'pendiente' ? 'text-yellow-500 border-yellow-500/30' : 'text-red-500 border-red-500/30'}`}
                                                         value={p.reserva_obj.status}
@@ -1885,9 +2046,207 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
             )}
-        </AnimatePresence>
+       </AnimatePresence>
 
         {/* --- MODALES COMPARTIDOS --- */}
+
+        {/* MODAL BOLETA DE PAGO WEB */}
+        <AnimatePresence>
+            {isBoletaModalOpen && currentBoletaData && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsBoletaModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-sm relative z-70 shadow-2xl p-6 flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Receipt className="w-4 h-4"/> Detalle y Boleta</h3>
+                            <button onClick={() => setIsBoletaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        
+                        <div className="overflow-y-auto custom-scrollbar mb-4 bg-white text-black p-4 rounded-lg flex-1" id="boleta-imprimible">
+                            <div className="text-center mb-4 border-b-2 border-black/20 pb-4">
+                                <h2 className="font-black text-xl tracking-widest">BOULEVARD</h2>
+                                <h3 className="font-bold text-sm tracking-widest">ZAPALLAR</h3>
+                                <p className="text-[10px] mt-1 font-bold">RUT: 76.000.000-K</p>
+                                <p className="text-[10px]">Giro: Restaurant y Espectáculos</p>
+                                <p className="text-[10px]">Curicó, Maule, Chile</p>
+                            </div>
+                            
+                            <div className="text-[10px] mb-4 space-y-1">
+                                <p><strong>BOLETA ELECTRÓNICA N°:</strong> {currentBoletaData.id}</p>
+                                <p><strong>FECHA:</strong> {new Date(currentBoletaData.fecha).toLocaleString('es-CL')}</p>
+                                <p><strong>CLIENTE:</strong> {currentBoletaData.cliente}</p>
+                                <p><strong>MÉTODO:</strong> {currentBoletaData.metodo} ({currentBoletaData.ref_getnet})</p>
+                            </div>
+
+                            <table className="w-full text-[10px] mb-4">
+                                <thead className="border-b border-black/20">
+                                    <tr><th className="text-left py-1">Cant</th><th className="text-left py-1">Detalle</th><th className="text-right py-1">Total</th></tr>
+                                </thead>
+                                <tbody className="border-b border-black/20">
+                                    {currentBoletaData.detalle_completo?.map((item:any, i:number) => (
+                                        <tr key={i}>
+                                            <td className="py-1 font-bold">{item.quantity}</td>
+                                            <td className="py-1 pr-2 truncate max-w-[120px]">{item.name}</td>
+                                            <td className="text-right py-1">${(item.price * item.quantity).toLocaleString('es-CL')}</td>
+                                        </tr>
+                                    ))}
+                                    {(!currentBoletaData.detalle_completo || currentBoletaData.detalle_completo.length === 0) && (
+                                        <tr><td colSpan={3} className="py-1 text-center italic text-zinc-500">Detalle genérico (Venta Manual)</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+
+                            <div className="text-right mb-6">
+                                <p className="text-sm font-black">TOTAL: ${currentBoletaData.monto.toLocaleString('es-CL')}</p>
+                                <p className="text-[8px] text-gray-500 mt-1">El IVA se encuentra incluido en el precio</p>
+                            </div>
+                            
+                            <div className="text-center text-[9px] border-t border-black/20 pt-2">
+                                <p>GRACIAS POR SU COMPRA</p>
+                                <p className="font-bold mt-1 tracking-widest">TIMBRE ELECTRÓNICO SII</p>
+                            </div>
+                        </div>
+
+                        <button onClick={generatePDFBoleta} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
+                            <FileDown className="w-4 h-4"/> Descargar PDF
+                        </button>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* MODAL COMPROBANTE DE TRANSFERENCIA */}
+        <AnimatePresence>
+            {isComprobanteModalOpen && currentComprobanteUrl && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsComprobanteModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-lg relative z-70 shadow-2xl p-6">
+                         <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Eye className="w-4 h-4 text-blue-400"/> Comprobante Subido</h3>
+                            <button onClick={() => setIsComprobanteModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <div className="relative w-full min-h-[400px] bg-black rounded-xl overflow-hidden flex items-center justify-center border border-white/5 p-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={currentComprobanteUrl} alt="Comprobante de Transferencia" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+                        </div>
+                        <a href={currentComprobanteUrl} target="_blank" rel="noreferrer" className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                            Abrir Imagen Original
+                        </a>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* MODAL INGRESAR PAGO MANUAL WEB */}
+        <AnimatePresence>
+            {isAddPaymentModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddPaymentModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-md relative z-70 shadow-2xl p-6 md:p-8">
+                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Plus className="w-5 h-5 text-[#DAA520]"/> Añadir Pago Externo</h3>
+                            <button onClick={() => setIsAddPaymentModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <form onSubmit={handleSaveManualPayment} className="space-y-4">
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Comprador</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.cliente} onChange={e => setNewManualPayment({...newManualPayment, cliente: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email Cliente (Para BD)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.email} onChange={e => setNewManualPayment({...newManualPayment, email: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Detalle Exacto</label><input required type="text" placeholder="Ej: 2 Entradas General + Botella Ramazzotti" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.detalle} onChange={e => setNewManualPayment({...newManualPayment, detalle: e.target.value})} /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Efectivo</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.metodo} onChange={e => setNewManualPayment({...newManualPayment, metodo: e.target.value})}>
+                                        <option value="Transferencia">Transferencia a Cuenta</option>
+                                        <option value="Getnet">Link Getnet</option>
+                                    </select>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
+                            </div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
+                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Registrar e Ingresar</>}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* MODAL VENTA ENTRADAS PUERTA */}
+        <AnimatePresence>
+            {isVentaPuertaModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaPuertaModalOpen(false)} />
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-purple-500/30 rounded-3xl w-full max-w-lg relative z-70 shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Ticket className="w-5 h-5 text-purple-500"/> Venta de Entrada Manual</h3>
+                            <button onClick={() => setIsVentaPuertaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        
+                        <form onSubmit={handleSaveVentaPuerta} className="space-y-4">
+                            {/* Selección de Show y Ticket */}
+                            <div className="bg-black/50 p-4 rounded-2xl border border-white/5 space-y-4">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Seleccionar Show</label>
+                                    <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.showId} onChange={e => setVentaPuertaData({...ventaPuertaData, showId: e.target.value, ticketIndex: 0})}>
+                                        <option value="">-- Elige un Evento --</option>
+                                        {shows.map(s => <option key={s.id} value={s.id}>{s.title} ({s.date_event})</option>)}
+                                    </select>
+                                </div>
+
+                                {ventaPuertaData.showId && (() => {
+                                    const selectedShow = shows.find(s => s.id.toString() === ventaPuertaData.showId);
+                                    const tickets = selectedShow?.tickets || [];
+                                    const currentTicketPrice = tickets[ventaPuertaData.ticketIndex]?.price || 0;
+                                    const calcTotal = currentTicketPrice * ventaPuertaData.quantity;
+
+                                    return (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Entrada</label>
+                                                    <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.ticketIndex} onChange={e => setVentaPuertaData({...ventaPuertaData, ticketIndex: parseInt(e.target.value)})}>
+                                                        {tickets.length === 0 && <option value="">Sin tickets creados</option>}
+                                                        {tickets.map((t:any, i:number) => <option key={i} value={i}>{t.name} - ${t.price}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cantidad</label>
+                                                    <input type="number" min="1" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500 text-center" value={ventaPuertaData.quantity} onChange={e => setVentaPuertaData({...ventaPuertaData, quantity: parseInt(e.target.value)})} />
+                                                </div>
+                                            </div>
+                                            <div className="text-right pt-2 border-t border-white/5">
+                                                <span className="text-[10px] text-zinc-500 uppercase font-bold mr-2">Total a cobrar:</span>
+                                                <span className="text-xl font-black text-purple-400">${calcTotal.toLocaleString('es-CL')}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Datos del Cliente y Pago */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.cliente} onChange={e => setVentaPuertaData({...ventaPuertaData, cliente: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.whatsapp} onChange={e => setVentaPuertaData({...ventaPuertaData, whatsapp: e.target.value})} /></div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.email} onChange={e => setVentaPuertaData({...ventaPuertaData, email: e.target.value})} /></div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio de Pago</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
+                                        <option value="efectivo">💵 Efectivo</option>
+                                        <option value="debito">💳 Débito / Tarjeta</option>
+                                        <option value="transferencia">📲 Transferencia</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button disabled={isLoading || !ventaPuertaData.showId} type="submit" className="w-full bg-purple-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-purple-500 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Ticket className="w-5 h-5"/> Generar Ticket</>}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
 
         {/* MODAL FINANZAS GENÉRICO (COMPRAS, GASTOS, INVENTARIO, ETC) */}
         <AnimatePresence>
@@ -2007,233 +2366,6 @@ export default function DashboardPage() {
                  </div>
             )}
         </AnimatePresence>
-
-        {/* MODAL VENTA POS RÁPIDA */}
-        <AnimatePresence>
-            {isVentaModalOpen && (
-                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaModalOpen(false)} />
-                    <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-sm relative z-70 shadow-2xl p-8">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2"><DollarSign className="w-6 h-6 text-green-500"/> Caja POS</h3><button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
-                        <form onSubmit={handleSaveVenta} className="space-y-4">
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cliente Asociado (Opcional)</label><input type="text" placeholder="Ej: Mesa 4 / Juan P." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.cliente} onChange={e => setCurrentVenta({...currentVenta, cliente: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Concepto de Venta</label><input required type="text" placeholder="Ej: 2 Pisco Sour + Tabla" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} /></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
-                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xs outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
-                                            <option value="consumo_extra">🍽️ Menú / Tragos</option>
-                                            <option value="entrada_manual">🎫 Entrada Puerta</option>
-                                            <option value="general">💰 Otro Ingreso</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Pago</label>
-                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xs outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
-                                            <option value="efectivo">💵 Efectivo</option>
-                                            <option value="debito">💳 Débito</option>
-                                            <option value="credito">💳 Crédito</option>
-                                            <option value="transferencia">📲 Transferencia</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="pt-2"><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-4 text-green-400 text-3xl font-black text-center outline-none" value={currentVenta.monto || ''} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} /></div>
-                            <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-green-900/20">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><CheckCircle className="w-5 h-5"/> Procesar Pago</>}</button>
-                        </form>
-                    </div>
-                 </div>
-            )}
-        </AnimatePresence>
-
-        {/* MODAL CLIENTES (AÑADIDO EMAIL Y FECHA OPCIONAL) */}
-        <AnimatePresence>
-            {isClientModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsClientModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-md relative z-70 shadow-2xl p-8">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                            <h3 className="text-xl font-black text-white uppercase tracking-wider">{currentClient.id ? "Editar Cliente" : "Nuevo Cliente"}</h3>
-                            <button onClick={() => setIsClientModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
-                        <form onSubmit={handleSaveClient} className="space-y-4">
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Completo</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.nombre} onChange={e => setCurrentClient({...currentClient, nombre: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.whatsapp} onChange={e => setCurrentClient({...currentClient, whatsapp: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="cliente@correo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.email || ""} onChange={e => setCurrentClient({...currentClient, email: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha de Nacimiento</label><input type="date" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentClient.fecha_nacimiento || ""} onChange={e => setCurrentClient({...currentClient, fecha_nacimiento: e.target.value})} /></div>
-                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
-                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Guardar en Base</>}
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* MODAL MENÚ EXPRESS */}
-        <AnimatePresence>
-            {isMenuModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsMenuModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
-                                {currentMenuItem.image_url ? (
-                                    <>
-                                        <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">Formato Cuadrado</p></div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider">{currentMenuItem.id ? "Editar Producto" : "Nuevo Producto"}</h3><button type="button" onClick={() => setIsMenuModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
-                            <form onSubmit={handleSaveMenuItem} className="space-y-5">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre del Producto</label><input required type="text" placeholder="Ej: Tabla Mar y Tierra" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentMenuItem.name} onChange={e => setCurrentMenuItem({...currentMenuItem, name: e.target.value})} /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría Web</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentMenuItem.category} onChange={e => setCurrentMenuItem({...currentMenuItem, category: e.target.value})}><option value="Entradas">Entradas</option><option value="Tablas">Tablas</option><option value="Tragos">Tragos de Autor</option><option value="Botellas">Botellas</option><option value="Bebidas">Bebidas/Mocktails</option></select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio de Venta ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-[#DAA520] font-bold text-lg outline-none" value={currentMenuItem.price || ''} onChange={e => setCurrentMenuItem({...currentMenuItem, price: parseInt(e.target.value)})} /></div>
-                                </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Corta (Ingredientes)</label><textarea rows={3} placeholder="Describa el producto para tentar al cliente..." className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none" value={currentMenuItem.description || ""} onChange={e => setCurrentMenuItem({...currentMenuItem, description: e.target.value})} /></div>
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-xl">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Publicar en Web</>}</button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* MODAL EDICIÓN PROMOCIONES */}
-        <AnimatePresence>
-            {isPromoModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsPromoModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'promo')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
-                                {currentPromo.image_url ? (
-                                    <>
-                                        <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar</p></div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Banner Promo</p></div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar">
-                            <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider">{currentPromo.id ? "Editar Promoción" : "Crear Promoción"}</h3><button type="button" onClick={() => setIsPromoModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
-                            <form onSubmit={handleSavePromo} className="space-y-4">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Gigante</label><input required type="text" placeholder="Ej: HAPPY HOUR 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Promoción</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}><option value="semana">Promoción Semanal</option><option value="pack">Pack / Cumpleaños</option><option value="banner">Banner Informativo</option></select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio Referencia ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-[#DAA520] font-bold text-lg outline-none" value={currentPromo.price || ''} onChange={e => setCurrentPromo({...currentPromo, price: parseInt(e.target.value)})} /></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Día de la semana</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.day} onChange={e => setCurrentPromo({...currentPromo, day: e.target.value})} disabled={currentPromo.category === 'pack'}><option value="">No Aplica</option><option value="todos">Todos los días</option>{["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta Visual</label><input type="text" placeholder="Ej: IMPERDIBLE" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentPromo.tag || ""} onChange={e => setCurrentPromo({...currentPromo, tag: e.target.value})} /></div>
-                                </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Bajada / Subtítulo</label><input required type="text" placeholder="Ej: Válido hasta las 21:00 hrs" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentPromo.subtitle} onChange={e => setCurrentPromo({...currentPromo, subtitle: e.target.value})} /></div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Condiciones o Descripción Larga</label><textarea rows={2} className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none" value={currentPromo.desc_text || ""} onChange={e => setCurrentPromo({...currentPromo, desc_text: e.target.value})} /></div>
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-xl">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Lanzar Promoción</>}</button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* MODAL EDICIÓN SHOWS */}
-        <AnimatePresence>
-            {isShowModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 py-6">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsShowModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-70 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh] md:max-h-[85vh]">
-                        <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 md:p-10 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
-                            <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'show')} accept="image/*" className="hidden" />
-                            <div onClick={triggerFileInput} className="relative w-full h-full max-w-[200px] md:max-w-[300px] aspect-[3/4] rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden shadow-2xl">
-                                {currentShow.image_url ? (
-                                    <>
-                                        <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-80 group-hover:opacity-100 transition-all duration-500" />
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Flyer</p></div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-zinc-500"><ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-50"/><p className="text-xs font-black tracking-widest text-zinc-400 uppercase">Flyer Vertical</p><p className="text-[10px] mt-1 text-zinc-600">1080x1350px Rec.</p></div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar bg-zinc-900">
-                            <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">{currentShow.id ? "Configurar Evento" : "Crear Nuevo Evento"}</h3><button type="button" onClick={() => setIsShowModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
-                            <form onSubmit={handleSaveShow} className="space-y-6">
-                                
-                                <div className="space-y-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-[#DAA520] mb-1 tracking-wider">Nombre del Show</label><input required type="text" placeholder="Ej: Fiesta de los 80s" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-lg font-bold outline-none focus:border-[#DAA520]" value={currentShow.title} onChange={e => setCurrentShow({...currentShow, title: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo o Artistas</label><input type="text" placeholder="Ej: Banda en vivo + DJ Invitado" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentShow.subtitle || ""} onChange={e => setCurrentShow({...currentShow, subtitle: e.target.value})} /></div>
-                                    
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black/30 p-4 rounded-2xl border border-white/5">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Fecha Exacta</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.date_event} onChange={e => setCurrentShow({...currentShow, date_event: e.target.value})} /></div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Inicio</label><input type="time" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.time_event} onChange={e => setCurrentShow({...currentShow, time_event: e.target.value})} /></div>
-                                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Término</label><input type="time" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.end_time || ""} onChange={e => setCurrentShow({...currentShow, end_time: e.target.value})} /></div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label><input type="text" readOnly className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-400 text-sm outline-none cursor-not-allowed" value={currentShow.location} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta Visual</label><input type="text" placeholder="Ej: SOLD OUT" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} /></div>
-                                    </div>
-                                    
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Web</label><textarea rows={3} placeholder="Describa el ambiente del evento..." className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none focus:border-[#DAA520]" value={currentShow.description || ""} onChange={e => setCurrentShow({...currentShow, description: e.target.value})} /></div>
-                                    
-                                    <div className="flex items-center gap-3 bg-red-900/10 p-4 rounded-xl border border-red-500/20">
-                                        <input type="checkbox" id="adult" checked={currentShow.is_adult || false} onChange={e => setCurrentShow({...currentShow, is_adult: e.target.checked})} className="w-5 h-5 accent-red-500 rounded" />
-                                        <label htmlFor="adult" className="text-xs font-bold text-red-400 uppercase flex items-center gap-2 cursor-pointer"><ShieldAlert className="w-4 h-4"/> Evento exclusivo para mayores de 18 años</label>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-white/10 pt-6">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <div>
-                                            <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2"><Ticket className="w-4 h-4 text-[#DAA520]"/> Entradas Web</h4>
-                                            <p className="text-[10px] text-zinc-500">Crea los tickets que la gente podrá comprar online.</p>
-                                        </div>
-                                        <button type="button" onClick={addTicketType} className="text-xs bg-white text-black px-4 py-2 rounded-xl hover:bg-zinc-200 transition-colors font-bold shadow-lg">+ Añadir Ticket</button>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {currentShow.tickets && currentShow.tickets.map((ticket: any, index: number) => (
-                                            <div key={index} className="flex flex-col sm:flex-row gap-3 items-center bg-black/60 p-4 rounded-2xl border border-white/5">
-                                                <div className="w-full sm:flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <input type="text" placeholder="Ej: General Fase 1" className="w-full bg-transparent border-b border-zinc-700 text-sm text-white p-2 outline-none focus:border-[#DAA520]" value={ticket.name} onChange={(e) => updateTicketType(index, 'name', e.target.value)} />
-                                                    <input type="text" placeholder="Ej: Ingreso válido hasta las 00:00" className="w-full bg-transparent border-b border-zinc-700 text-xs text-zinc-400 p-2 outline-none focus:border-[#DAA520]" value={ticket.desc} onChange={(e) => updateTicketType(index, 'desc', e.target.value)} />
-                                                </div>
-                                                <div className="w-full sm:w-32 flex items-center gap-3">
-                                                    <input type="number" placeholder="$ Valor" className="w-full bg-transparent border-b border-zinc-700 text-lg text-[#DAA520] font-black p-2 outline-none text-right placeholder:text-zinc-600" value={ticket.price || ''} onChange={(e) => updateTicketType(index, 'price', e.target.value === '' ? 0 : parseInt(e.target.value))} />
-                                                    <button type="button" onClick={() => removeTicketType(index)} className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"><Trash2 className="w-5 h-5"/></button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {(!currentShow.tickets || currentShow.tickets.length === 0) && <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl"><p className="text-xs text-zinc-500 font-medium">Si no creas tickets, el evento se considerará "Solo con Reserva de Mesa".</p></div>}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-6">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Aforo / Capacidad Total</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-lg font-bold outline-none text-center focus:border-[#DAA520]" value={currentShow.total || ''} onChange={e => setCurrentShow({...currentShow, total: parseInt(e.target.value)})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cortesías / Vendidas Manual</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-zinc-400 text-lg font-bold outline-none text-center focus:border-green-500" value={currentShow.sold || ''} onChange={e => setCurrentShow({...currentShow, sold: parseInt(e.target.value)})} /></div>
-                                </div>
-                                
-                                <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-5 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-[0_10px_20px_rgba(218,165,32,0.2)] mt-6">
-                                    {isLoading ? <Loader2 className="w-6 h-6 animate-spin"/> : <><Save className="w-6 h-6"/> Publicar Evento</>}
-                                </button>
-                            </form>
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
       </main>
     </div>
   );
