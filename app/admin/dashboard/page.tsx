@@ -2182,8 +2182,8 @@ export default function DashboardPage() {
                                 <div>
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Efectivo</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.metodo} onChange={e => setNewManualPayment({...newManualPayment, metodo: e.target.value})}>
-                                        <option value="Transferencia">Transferencia a Cuenta</option>
-                                        <option value="Getnet">Link Getnet</option>
+                                        <option value="Transferencia">Transferencia a Boulevard Zapallar</option>
+                                        <option value="Getnet">Pago vía Getnet</option>
                                     </select>
                                 </div>
                                 <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
@@ -2269,7 +2269,7 @@ export default function DashboardPage() {
                                     <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio de Pago</label>
                                     <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
                                         <option value="efectivo">💵 Efectivo</option>
-                                        <option value="debito">💳 Débito / Tarjeta</option>
+                                        <option value="debito">💳 Débito / Crédito</option>
                                         <option value="transferencia">📲 Transferencia</option>
                                     </select>
                                 </div>
