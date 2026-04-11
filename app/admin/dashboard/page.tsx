@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const [ventas, setVentas] = useState<any[]>([]);
 
   // --- NUEVOS ESTADOS PARA PAGOS WEB ---
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("todos"); // "todos", "getnet", "transferencia"
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("todos"); // "todos", "getnet", "transferencia", "manual", "puerta"
   const [isBoletaModalOpen, setIsBoletaModalOpen] = useState(false);
   const [currentBoletaData, setCurrentBoletaData] = useState<any>(null);
   const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(false);
@@ -260,6 +260,47 @@ export default function DashboardPage() {
       return { tickets, menu, hasTickets: tickets.length > 0 };
   };
 
+  // --- PAGOS WEB DETALLADOS (MOVIDO ARRIBA PARA EVITAR ERROR TS2304) ---
+  const getWebPayments = () => {
+      return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => {
+          const { tickets, menu } = getTicketDetails(r.pre_order);
+          let detalleArr = [];
+          if(tickets.length > 0) detalleArr.push(`${tickets.reduce((a:any,c:any) => a+c.quantity, 0)} Tickets`);
+          if(menu.length > 0) detalleArr.push(`${menu.reduce((a:any,c:any) => a+c.quantity, 0)} Platos`);
+
+          // Lógica mejorada para leer el método de pago real
+          let metodoCalculado = 'Transferencia';
+          if (r.payment_id) {
+              if (r.payment_id.toLowerCase().includes('puerta')) {
+                  metodoCalculado = r.payment_id.split('-')[1]?.trim().toUpperCase() || 'PUERTA';
+              } else if (r.payment_id.includes('MANUAL')) {
+                  metodoCalculado = r.payment_id.split('-')[1]?.trim().toUpperCase() || 'MANUAL';
+              } else {
+                  metodoCalculado = 'GETNET';
+              }
+          }
+
+          return {
+              id: r.id, cliente: r.name, email: r.email, fecha: r.created_at, monto: r.total_pre_order,
+              ref_getnet: r.payment_id || 'Transferencia/Otro',
+              status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') ? 'APROBADO' : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
+              detalle: detalleArr.join(' + ') || 'Reserva Normal', 
+              metodo: metodoCalculado,
+              reserva_obj: r,
+              comprobante_url: r.comprobante_url || null, 
+              detalle_completo: r.pre_order || []
+          }
+      }).filter(p => {
+          const matchSearch = p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase());
+          const matchMethod = paymentMethodFilter === "todos" ? true : p.metodo.toLowerCase() === paymentMethodFilter.toLowerCase();
+          return matchSearch && matchMethod;
+      }).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  };
+  
+  const webPayments = getWebPayments();
+  const totalWebApproved = webPayments.filter(p => p.status_pago === 'APROBADO').reduce((acc, curr) => acc + curr.monto, 0);
+  const totalWebPending = webPayments.filter(p => p.status_pago === 'PENDIENTE').reduce((acc, curr) => acc + curr.monto, 0);
+
   const reservasTicketsOnly = reservas.filter(r => getTicketDetails(r.pre_order).hasTickets);
   const reservasNormalesOnly = reservas.filter(r => !getTicketDetails(r.pre_order).hasTickets);
 
@@ -286,34 +327,6 @@ export default function DashboardPage() {
   };
   const showPerformance = getShowPerformance();
   
-  // PAGOS WEB DETALLADOS (ACTUALIZADO CON FILTROS Y COMPROBANTES)
-  const getWebPayments = () => {
-      return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => {
-          const { tickets, menu } = getTicketDetails(r.pre_order);
-          let detalleArr = [];
-          if(tickets.length > 0) detalleArr.push(`${tickets.reduce((a:any,c:any) => a+c.quantity, 0)} Tickets`);
-          if(menu.length > 0) detalleArr.push(`${menu.reduce((a:any,c:any) => a+c.quantity, 0)} Platos`);
-
-          return {
-              id: r.id, cliente: r.name, email: r.email, fecha: r.created_at, monto: r.total_pre_order,
-              ref_getnet: r.payment_id || 'Transferencia/Otro',
-              status_pago: (r.status === 'confirmada' || r.status === 'pagado' || r.status === 'realizado') ? 'APROBADO' : (r.status === 'rechazada' ? 'RECHAZADO' : 'PENDIENTE'),
-              detalle: detalleArr.join(' + ') || 'Reserva Normal', 
-              metodo: r.payment_id ? 'Getnet' : 'Transferencia',
-              reserva_obj: r,
-              comprobante_url: r.comprobante_url || null, 
-              detalle_completo: r.pre_order || []
-          }
-      }).filter(p => {
-          const matchSearch = p.cliente.toLowerCase().includes(webPaymentSearch.toLowerCase()) || p.ref_getnet.toLowerCase().includes(webPaymentSearch.toLowerCase());
-          const matchMethod = paymentMethodFilter === "todos" ? true : p.metodo.toLowerCase() === paymentMethodFilter.toLowerCase();
-          return matchSearch && matchMethod;
-      }).sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  };
-  const webPayments = getWebPayments();
-  const totalWebApproved = webPayments.filter(p => p.status_pago === 'APROBADO').reduce((acc, curr) => acc + curr.monto, 0);
-  const totalWebPending = webPayments.filter(p => p.status_pago === 'PENDIENTE').reduce((acc, curr) => acc + curr.monto, 0);
-
   // --- MANEJADOR DE IMAGEN ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
@@ -521,21 +534,31 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
+          // 1. Subir comprobante si el cliente seleccionó uno
+          let comprobanteUrl = null;
+          if (selectedFile) {
+              comprobanteUrl = await uploadImageToSupabase('tickets'); 
+          }
+
           const fakeCode = `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
+          const finalPaymentId = newManualPayment.metodo === 'Getnet' ? fakeCode : `MANUAL - ${newManualPayment.metodo}`;
+
           const { error } = await supabase.from('reservas').insert([{
               name: newManualPayment.cliente,
               email: newManualPayment.email,
               total_pre_order: newManualPayment.monto,
               status: 'confirmada',
-              payment_id: newManualPayment.metodo === 'Getnet' ? fakeCode : null,
+              payment_id: finalPaymentId,
               reservation_code: fakeCode,
-              pre_order: [{ name: newManualPayment.detalle, price: newManualPayment.monto, quantity: 1, category: 'general' }]
+              pre_order: [{ name: newManualPayment.detalle, price: newManualPayment.monto, quantity: 1, category: 'general' }],
+              comprobante_url: comprobanteUrl 
           }]);
           
           if (error) throw error;
           await fetchData();
           setIsAddPaymentModalOpen(false);
           setNewManualPayment({ cliente: "", email: "", monto: 0, metodo: "Transferencia", detalle: "" });
+          setSelectedFile(null);
       } catch (error: any) {
           alert("Error al registrar pago manual: " + error.message);
       } finally {
@@ -554,10 +577,15 @@ export default function DashboardPage() {
           const ticket = show.tickets[ventaPuertaData.ticketIndex];
           if (!ticket) throw new Error("Debes seleccionar un tipo de ticket válido.");
 
+          // 1. Subir comprobante si el cliente seleccionó uno
+          let comprobanteUrl = null;
+          if (selectedFile) {
+              comprobanteUrl = await uploadImageToSupabase('tickets');
+          }
+
           const total = ticket.price * ventaPuertaData.quantity;
           const fakeCode = `PUERTA-${Math.floor(10000 + Math.random() * 90000)}`;
 
-          // Estructura JSON idéntica a la que genera el carrito web
           const preOrderData = [{
               category: "ticket",
               name: ticket.name,
@@ -566,7 +594,6 @@ export default function DashboardPage() {
               show_id: show.id
           }];
 
-          // 1. Insertamos el ticket en el panel de Ventas Show
           const { error: reservaError } = await supabase.from('reservas').insert([{
               name: ventaPuertaData.cliente,
               phone: ventaPuertaData.whatsapp,
@@ -574,16 +601,16 @@ export default function DashboardPage() {
               date_reserva: show.date_event,
               time_reserva: show.time_event,
               guests: ventaPuertaData.quantity,
-              status: 'pendiente', // Queda pendiente para que le des a "ENVIAR" y genere el QR
+              status: 'pendiente', 
               total_pre_order: total,
               payment_id: `Puerta - ${ventaPuertaData.metodo_pago}`,
               reservation_code: fakeCode,
-              pre_order: preOrderData
+              pre_order: preOrderData,
+              comprobante_url: comprobanteUrl 
           }]);
 
           if (reservaError) throw reservaError;
 
-          // 2. Insertamos el dinero en el panel financiero (Caja POS)
           await supabase.from('ventas_generales').insert([{
               descripcion: `TKT Puerta: ${show.title} (${ventaPuertaData.quantity}x ${ticket.name})`,
               monto: total,
@@ -592,10 +619,11 @@ export default function DashboardPage() {
               origen: 'caja_pos'
           }]);
 
-          alert("✅ Venta en puerta registrada con éxito.\nVe a la lista y presiona 'APROBAR / ENVIAR' para despachar el E-Ticket por WhatsApp.");
+          alert("✅ Venta registrada con éxito.");
           await fetchData();
           setIsVentaPuertaModalOpen(false);
           setVentaPuertaData({ showId: "", ticketIndex: 0, quantity: 1, cliente: "", whatsapp: "", email: "", metodo_pago: "efectivo" });
+          setSelectedFile(null);
       } catch (error: any) {
           alert("Error: " + error.message);
       } finally {
@@ -1003,7 +1031,7 @@ export default function DashboardPage() {
                             <h2 className="text-xl font-black text-white flex items-center gap-2"><Ticket className="w-6 h-6 text-purple-500"/> Entradas Show y Eventos</h2>
                             <p className="text-xs text-zinc-400">Administra únicamente las ventas de entradas, genera pases E-Ticket y envíalos.</p>
                         </div>
-                        <button onClick={() => setIsVentaPuertaModalOpen(true)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
+                        <button onClick={() => { setIsVentaPuertaModalOpen(true); setSelectedFile(null); }} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
                             <Plus className="w-4 h-4" /> Vender en Puerta
                         </button>
                     </div>
@@ -1241,7 +1269,7 @@ export default function DashboardPage() {
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-end mb-4 gap-2">
-                         <button onClick={() => setIsAddPaymentModalOpen(true)} className="bg-[#DAA520] text-black border border-[#DAA520] hover:bg-[#B8860B] px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
+                         <button onClick={() => { setIsAddPaymentModalOpen(true); setSelectedFile(null); }} className="bg-[#DAA520] text-black border border-[#DAA520] hover:bg-[#B8860B] px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all shadow-lg">
                              <Plus className="w-4 h-4" /> Añadir Pago Manual
                          </button>
                          <button onClick={() => handleResetTable('reservas', 'Pagos y Reservas Web')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
@@ -1271,7 +1299,7 @@ export default function DashboardPage() {
                             <h3 className="text-lg font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-400"/> Libro de Transacciones Web</h3>
                             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                                 <div className="flex gap-2 overflow-x-auto custom-scrollbar snap-x">
-                                    {[{ id: 'todos', label: 'Todos' }, { id: 'getnet', label: 'Getnet' }, { id: 'transferencia', label: 'Transf.' }].map(filter => (
+                                    {[{ id: 'todos', label: 'Todos' }, { id: 'getnet', label: 'Getnet' }, { id: 'transferencia', label: 'Transf.' }, { id: 'puerta', label: 'Puerta' }, { id: 'manual', label: 'Manual' }].map(filter => (
                                         <button key={filter.id} onClick={() => setPaymentMethodFilter(filter.id)} className={`snap-start px-4 py-2 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${paymentMethodFilter === filter.id ? 'bg-blue-600 text-white border-blue-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
                                     ))}
                                 </div>
@@ -1309,8 +1337,8 @@ export default function DashboardPage() {
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <div className="flex flex-col items-center gap-1">
-                                                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${p.metodo === 'Getnet' ? 'bg-red-900/30 text-red-400' : 'bg-zinc-800 text-zinc-300'}`}>{p.metodo}</span>
-                                                    {p.metodo.toLowerCase() === 'transferencia' && p.comprobante_url && (
+                                                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${p.metodo === 'GETNET' ? 'bg-red-900/30 text-red-400' : p.metodo === 'PUERTA' ? 'bg-purple-900/30 text-purple-400' : 'bg-zinc-800 text-zinc-300'}`}>{p.metodo}</span>
+                                                    {p.comprobante_url && (
                                                         <button onClick={() => { setCurrentComprobanteUrl(p.comprobante_url); setIsComprobanteModalOpen(true); }} className="text-[9px] text-blue-400 hover:text-blue-300 flex items-center gap-1 underline mt-1">
                                                             <Eye className="w-3 h-3"/> Comprobante
                                                         </button>
@@ -2160,6 +2188,14 @@ export default function DashboardPage() {
                                 </div>
                                 <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
                             </div>
+                            
+                            {newManualPayment.metodo === 'Transferencia' && (
+                                <div className="col-span-2 mt-2">
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante (Opcional)</label>
+                                    <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#DAA520] file:text-black hover:file:bg-[#B8860B] transition-colors outline-none cursor-pointer" />
+                                </div>
+                            )}
+
                             <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
                                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Registrar e Ingresar</>}
                             </button>
@@ -2238,6 +2274,13 @@ export default function DashboardPage() {
                                     </select>
                                 </div>
                             </div>
+
+                            {ventaPuertaData.metodo_pago === 'transferencia' && (
+                                <div className="col-span-2 mt-2">
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante de Transferencia</label>
+                                    <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 transition-colors outline-none cursor-pointer" />
+                                </div>
+                            )}
 
                             <button disabled={isLoading || !ventaPuertaData.showId} type="submit" className="w-full bg-purple-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-purple-500 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
                                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Ticket className="w-5 h-5"/> Generar Ticket</>}
