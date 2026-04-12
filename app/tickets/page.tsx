@@ -9,60 +9,58 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
-import { supabase } from "@/lib/supabaseClient"; // Conexión Real
+import { supabase } from "@/lib/supabaseClient";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
 export default function TicketsPage() {
   // --- ESTADOS ---
-  const [events, setEvents] = useState<any[]>([]); // Almacena los eventos reales de Supabase
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("semana");
-  const [visibleCount, setVisibleCount] = useState(4); 
+  const [visibleCount, setVisibleCount] = useState(10); // Aumentado a 10 para mostrar más en celulares de entrada
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // --- HELPER: Formatear Fecha para UI (YYYY-MM-DD -> Sáb 07 Feb) ---
+  // --- HELPER: Formatear Fecha para UI (100% Cross-Browser / Anti-Safari Bug) ---
   const formatDateForUI = (dateString: string) => {
     if (!dateString) return "Fecha Pendiente";
-    // Crear fecha asumiendo mediodía para evitar desfases de zona horaria al formatear
-    const date = new Date(dateString + "T12:00:00"); 
-    const dayName = date.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
-    const dayNum = date.getDate().toString().padStart(2, '0');
-    const monthName = date.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '');
-    
-    // Retorna string compatible con el split(" ") de tu diseño: "Sáb 07 Feb"
-    return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${dayNum} ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+    try {
+        // Separamos manualmente para que NINGÚN navegador (Safari, Chrome móvil) se confunda con la zona horaria
+        const [year, month, day] = dateString.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0); 
+        
+        const dayName = date.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
+        const dayNum = date.getDate().toString().padStart(2, '0');
+        const monthName = date.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '');
+        
+        return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${dayNum} ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+    } catch (error) {
+        return dateString; // Fallback de seguridad
+    }
   };
 
   // --- CONEXIÓN A BASE DE DATOS (CARGA INICIAL) ---
   useEffect(() => {
     const fetchShows = async () => {
         try {
-            // Solicitamos todos los shows activos desde la tabla 'shows'
             const { data, error } = await supabase
                 .from('shows')
                 .select('*')
                 .eq('active', true)
-                // AQUÍ EL CAMBIO CLAVE: Ordenar por fecha del evento (Próximos primero)
                 .order('date_event', { ascending: true }); 
 
             if (error) throw error;
 
             if (data) {
-                // Mapeamos los datos de la DB (snake_case) a la estructura que usa tu UI
                 const mappedEvents = data.map(evt => ({
                     id: evt.id,
                     title: evt.title,
                     subtitle: evt.subtitle || "Evento Exclusivo", 
-                    
-                    // Guardamos la fecha cruda para filtrar lógicamente
                     rawDate: evt.date_event, 
-                    // Guardamos la fecha formateada para mostrar visualmente
                     date: formatDateForUI(evt.date_event), 
-
                     fullDate: evt.date_event, 
-                    time: evt.time_event?.slice(0, 5) || "22:00", // Aseguramos formato HH:MM
+                    time: evt.time_event?.slice(0, 5) || "22:00",
                     endTime: "05:00",
                     location: evt.location || "Boulevard Zapallar",
                     address: "Av. Manuel Labra Lillo 430, Curicó",
@@ -85,31 +83,35 @@ export default function TicketsPage() {
     fetchShows();
   }, []);
 
-  // --- LÓGICA DE FILTRADO REAL (POR FECHA) ---
+  // --- LÓGICA DE FILTRADO (A Prueba de Móviles) ---
   const filteredEvents = events.filter(event => {
       // 1. Filtro por Texto (Buscador)
       const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase());
       
-      // 2. Filtro por Pestañas (Fecha)
+      // 2. Filtro por Pestañas (Fecha) convertido a texto para no fallar en celulares
       let matchesTab = true;
-      const today = new Date();
-      // Ajustamos a medianoche para comparar solo días
-      today.setHours(0,0,0,0);
       
-      const evtDate = new Date(event.rawDate + "T00:00:00");
+      // Construimos el string "YYYY-MM-DD" de hoy
+      const today = new Date();
+      const tYear = today.getFullYear();
+      const tMonth = String(today.getMonth() + 1).padStart(2, '0');
+      const tDay = String(today.getDate()).padStart(2, '0');
+      const todayString = `${tYear}-${tMonth}-${tDay}`;
+
+      // Construimos el string "YYYY-MM-DD" de mañana
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tmYear = tomorrow.getFullYear();
+      const tmMonth = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const tmDay = String(tomorrow.getDate()).padStart(2, '0');
+      const tomorrowString = `${tmYear}-${tmMonth}-${tmDay}`;
 
       if (activeTab === "hoy") {
-          // Coincide si la fecha es hoy
-          matchesTab = evtDate.getTime() === today.getTime();
+          matchesTab = event.rawDate === todayString;
       } else if (activeTab === "manana") {
-          // Coincide si la fecha es mañana
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          matchesTab = evtDate.getTime() === tomorrow.getTime();
+          matchesTab = event.rawDate === tomorrowString;
       } else if (activeTab === "semana") {
-          // Semana muestra TODO lo que viene (o podrías limitar a 7 días)
-          // Por ahora dejamos que muestre todo lo futuro ordenado
-          matchesTab = true; 
+          matchesTab = true; // Fuerzo a que muestre TODO el catálogo activo
       }
 
       return matchesSearch && matchesTab;
@@ -121,7 +123,7 @@ export default function TicketsPage() {
   const handleLoadMore = () => {
     setIsLoadingMore(true);
     setTimeout(() => {
-        setVisibleCount(prev => prev + 3);
+        setVisibleCount(prev => prev + 4); // Carga de 4 en 4
         setIsLoadingMore(false);
     }, 800); 
   };
@@ -135,7 +137,6 @@ export default function TicketsPage() {
             <ArrowLeft className="w-5 h-5 text-white" />
         </Link>
         
-        {/* LOGO AUMENTADO (w-60) */}
         <div className="relative w-60 h-16"> 
             <Image src="/logo.png" alt="Boulevard Zapallar" fill className="object-contain" priority />
         </div>
@@ -184,12 +185,10 @@ export default function TicketsPage() {
       </div>
 
       {/* --- PRÓXIMOS HITS (CARRUSEL INFINITO) --- */}
-      {/* Solo mostramos esto si hay eventos cargados */}
       {!loading && events.length > 0 && (
           <div className="mb-8 overflow-hidden relative">
             <h3 className="px-4 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Próximos Hits</h3>
             <div className="flex gap-4 w-[200%] animate-marquee hover:pause">
-                {/* Duplicamos el array para el efecto infinito */}
                 {[...events, ...events].map((evt, index) => (
                     <Link href={`/tickets/${evt.id}`} key={`${evt.id}-${index}`} className="min-w-[160px] h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0">
                         <Image src={evt.image} alt={evt.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
@@ -289,7 +288,7 @@ export default function TicketsPage() {
         ) : (
             <div className="text-center py-10 text-zinc-500">
                 <Filter className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No hay eventos disponibles para esta fecha.</p>
+                <p className="text-sm">No hay eventos disponibles para este filtro.</p>
             </div>
         )}
 
