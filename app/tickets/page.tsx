@@ -58,10 +58,20 @@ export default function TicketsPage() {
     const fetchShows = async () => {
         try {
             setFetchError(null);
+
+            // Obtenemos la fecha actual en formato YYYY-MM-DD local
+            const now = new Date();
+            const tYear = now.getFullYear();
+            const tMonth = String(now.getMonth() + 1).padStart(2, '0');
+            const tDay = String(now.getDate()).padStart(2, '0');
+            const todayString = `${tYear}-${tMonth}-${tDay}`;
+
             const { data, error } = await supabase
                 .from('shows')
                 .select('*')
                 .eq('active', true)
+                // FILTRO CLAVE: Solo traer shows cuya fecha sea mayor o igual a hoy
+                .gte('date_event', todayString) 
                 .order('date_event', { ascending: true }); 
 
             if (error) throw error;
