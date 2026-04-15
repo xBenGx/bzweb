@@ -2077,338 +2077,546 @@ export default function DashboardPage() {
        </AnimatePresence>
 
         {/* --- MODALES COMPARTIDOS --- */}
+        {/* Renderizamos todos los modales ANTES del cierre del main, pero SIN el AnimatePresence exterior que causaba conflictos */}
 
         {/* MODAL BOLETA DE PAGO WEB */}
-        <AnimatePresence>
-            {isBoletaModalOpen && currentBoletaData && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsBoletaModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-sm relative z-70 shadow-2xl p-6 flex flex-col max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Receipt className="w-4 h-4"/> Detalle y Boleta</h3>
-                            <button onClick={() => setIsBoletaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+        {isBoletaModalOpen && currentBoletaData && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsBoletaModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-sm relative z-50 shadow-2xl p-6 flex flex-col max-h-[90vh]">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-black text-white uppercase flex items-center gap-2"><Receipt className="w-4 h-4"/> Detalle y Boleta</h3>
+                        <button onClick={() => setIsBoletaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    
+                    <div className="overflow-y-auto custom-scrollbar mb-4 bg-white text-black p-4 rounded-lg flex-1" id="boleta-imprimible">
+                        <div className="text-center mb-4 border-b-2 border-black/20 pb-4">
+                            <h2 className="font-black text-xl tracking-widest">BOULEVARD</h2>
+                            <h3 className="font-bold text-sm tracking-widest">ZAPALLAR</h3>
+                            <p className="text-[10px] mt-1 font-bold">RUT: 76.000.000-K</p>
+                            <p className="text-[10px]">Giro: Restaurant y Espectáculos</p>
+                            <p className="text-[10px]">Curicó, Maule, Chile</p>
                         </div>
                         
-                        <div className="overflow-y-auto custom-scrollbar mb-4 bg-white text-black p-4 rounded-lg flex-1" id="boleta-imprimible">
-                            <div className="text-center mb-4 border-b-2 border-black/20 pb-4">
-                                <h2 className="font-black text-xl tracking-widest">BOULEVARD</h2>
-                                <h3 className="font-bold text-sm tracking-widest">ZAPALLAR</h3>
-                                <p className="text-[10px] mt-1 font-bold">RUT: 76.000.000-K</p>
-                                <p className="text-[10px]">Giro: Restaurant y Espectáculos</p>
-                                <p className="text-[10px]">Curicó, Maule, Chile</p>
-                            </div>
-                            
-                            <div className="text-[10px] mb-4 space-y-1">
-                                <p><strong>BOLETA ELECTRÓNICA N°:</strong> {currentBoletaData.id}</p>
-                                <p><strong>FECHA:</strong> {new Date(currentBoletaData.fecha).toLocaleString('es-CL')}</p>
-                                <p><strong>CLIENTE:</strong> {currentBoletaData.cliente}</p>
-                                <p><strong>MÉTODO:</strong> {currentBoletaData.metodo} ({currentBoletaData.ref_getnet})</p>
-                            </div>
-
-                            <table className="w-full text-[10px] mb-4">
-                                <thead className="border-b border-black/20">
-                                    <tr><th className="text-left py-1">Cant</th><th className="text-left py-1">Detalle</th><th className="text-right py-1">Total</th></tr>
-                                </thead>
-                                <tbody className="border-b border-black/20">
-                                    {currentBoletaData.detalle_completo?.map((item:any, i:number) => (
-                                        <tr key={i}>
-                                            <td className="py-1 font-bold">{item.quantity}</td>
-                                            <td className="py-1 pr-2 truncate max-w-[120px]">{item.name}</td>
-                                            <td className="text-right py-1">${(item.price * item.quantity).toLocaleString('es-CL')}</td>
-                                        </tr>
-                                    ))}
-                                    {(!currentBoletaData.detalle_completo || currentBoletaData.detalle_completo.length === 0) && (
-                                        <tr><td colSpan={3} className="py-1 text-center italic text-zinc-500">Detalle genérico (Venta Manual)</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-
-                            <div className="text-right mb-6">
-                                <p className="text-sm font-black">TOTAL: ${currentBoletaData.monto.toLocaleString('es-CL')}</p>
-                                <p className="text-[8px] text-gray-500 mt-1">El IVA se encuentra incluido en el precio</p>
-                            </div>
-                            
-                            <div className="text-center text-[9px] border-t border-black/20 pt-2">
-                                <p>GRACIAS POR SU COMPRA</p>
-                                <p className="font-bold mt-1 tracking-widest">TIMBRE ELECTRÓNICO SII</p>
-                            </div>
+                        <div className="text-[10px] mb-4 space-y-1">
+                            <p><strong>BOLETA ELECTRÓNICA N°:</strong> {currentBoletaData.id}</p>
+                            <p><strong>FECHA:</strong> {new Date(currentBoletaData.fecha).toLocaleString('es-CL')}</p>
+                            <p><strong>CLIENTE:</strong> {currentBoletaData.cliente}</p>
+                            <p><strong>MÉTODO:</strong> {currentBoletaData.metodo} ({currentBoletaData.ref_getnet})</p>
                         </div>
 
-                        <button onClick={generatePDFBoleta} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
-                            <FileDown className="w-4 h-4"/> Descargar PDF
-                        </button>
-                    </motion.div>
+                        <table className="w-full text-[10px] mb-4">
+                            <thead className="border-b border-black/20">
+                                <tr><th className="text-left py-1">Cant</th><th className="text-left py-1">Detalle</th><th className="text-right py-1">Total</th></tr>
+                            </thead>
+                            <tbody className="border-b border-black/20">
+                                {currentBoletaData.detalle_completo?.map((item:any, i:number) => (
+                                    <tr key={i}>
+                                        <td className="py-1 font-bold">{item.quantity}</td>
+                                        <td className="py-1 pr-2 truncate max-w-[120px]">{item.name}</td>
+                                        <td className="text-right py-1">${(item.price * item.quantity).toLocaleString('es-CL')}</td>
+                                    </tr>
+                                ))}
+                                {(!currentBoletaData.detalle_completo || currentBoletaData.detalle_completo.length === 0) && (
+                                    <tr><td colSpan={3} className="py-1 text-center italic text-zinc-500">Detalle genérico (Venta Manual)</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+
+                        <div className="text-right mb-6">
+                            <p className="text-sm font-black">TOTAL: ${currentBoletaData.monto.toLocaleString('es-CL')}</p>
+                            <p className="text-[8px] text-gray-500 mt-1">El IVA se encuentra incluido en el precio</p>
+                        </div>
+                        
+                        <div className="text-center text-[9px] border-t border-black/20 pt-2">
+                            <p>GRACIAS POR SU COMPRA</p>
+                            <p className="font-bold mt-1 tracking-widest">TIMBRE ELECTRÓNICO SII</p>
+                        </div>
+                    </div>
+
+                    <button onClick={generatePDFBoleta} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
+                        <FileDown className="w-4 h-4"/> Descargar PDF
+                    </button>
                 </div>
-            )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* MODAL COMPROBANTE DE TRANSFERENCIA */}
-        <AnimatePresence>
-            {isComprobanteModalOpen && currentComprobanteUrl && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsComprobanteModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-lg relative z-70 shadow-2xl p-6">
-                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Eye className="w-4 h-4 text-blue-400"/> Comprobante Subido</h3>
-                            <button onClick={() => setIsComprobanteModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
-                        <div className="relative w-full min-h-[400px] bg-black rounded-xl overflow-hidden flex items-center justify-center border border-white/5 p-2">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={currentComprobanteUrl} alt="Comprobante de Transferencia" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
-                        </div>
-                        <a href={currentComprobanteUrl} target="_blank" rel="noreferrer" className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
-                            Abrir Imagen Original
-                        </a>
-                    </motion.div>
+        {isComprobanteModalOpen && currentComprobanteUrl && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsComprobanteModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-lg relative z-50 shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-black text-white uppercase flex items-center gap-2"><Eye className="w-4 h-4 text-blue-400"/> Comprobante Subido</h3>
+                        <button onClick={() => setIsComprobanteModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    <div className="relative w-full min-h-[400px] bg-black rounded-xl overflow-hidden flex items-center justify-center border border-white/5 p-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={currentComprobanteUrl} alt="Comprobante de Transferencia" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+                    </div>
+                    <a href={currentComprobanteUrl} target="_blank" rel="noreferrer" className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        Abrir Imagen Original
+                    </a>
                 </div>
-            )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* MODAL INGRESAR PAGO MANUAL WEB */}
-        <AnimatePresence>
-            {isAddPaymentModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddPaymentModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-md relative z-70 shadow-2xl p-6 md:p-8">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Plus className="w-5 h-5 text-[#DAA520]"/> Añadir Pago Externo</h3>
-                            <button onClick={() => setIsAddPaymentModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
-                        <form onSubmit={handleSaveManualPayment} className="space-y-4">
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Comprador</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.cliente} onChange={e => setNewManualPayment({...newManualPayment, cliente: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email Cliente (Para BD)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.email} onChange={e => setNewManualPayment({...newManualPayment, email: e.target.value})} /></div>
-                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Detalle Exacto</label><input required type="text" placeholder="Ej: 2 Entradas General + Botella Ramazzotti" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.detalle} onChange={e => setNewManualPayment({...newManualPayment, detalle: e.target.value})} /></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Efectivo</label>
-                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.metodo} onChange={e => setNewManualPayment({...newManualPayment, metodo: e.target.value})}>
-                                        <option value="Transferencia">Transferencia a Boulevard Zapallar</option>
-                                        <option value="Getnet">Pago vía Getnet</option>
-                                    </select>
-                                </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
+        {isAddPaymentModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddPaymentModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-md relative z-50 shadow-2xl p-6 md:p-8">
+                    <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                        <h3 className="font-black text-white uppercase flex items-center gap-2"><Plus className="w-5 h-5 text-[#DAA520]"/> Añadir Pago Externo</h3>
+                        <button onClick={() => setIsAddPaymentModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    <form onSubmit={handleSaveManualPayment} className="space-y-4">
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Comprador</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.cliente} onChange={e => setNewManualPayment({...newManualPayment, cliente: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email Cliente (Para BD)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.email} onChange={e => setNewManualPayment({...newManualPayment, email: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Detalle Exacto</label><input required type="text" placeholder="Ej: 2 Entradas General + Botella Ramazzotti" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.detalle} onChange={e => setNewManualPayment({...newManualPayment, detalle: e.target.value})} /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Efectivo</label>
+                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.metodo} onChange={e => setNewManualPayment({...newManualPayment, metodo: e.target.value})}>
+                                    <option value="Transferencia">Transferencia a Cuenta</option>
+                                    <option value="Getnet">Link Getnet</option>
+                                </select>
                             </div>
-                            
-                            {newManualPayment.metodo === 'Transferencia' && (
-                                <div className="col-span-2 mt-2">
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante (Opcional)</label>
-                                    <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#DAA520] file:text-black hover:file:bg-[#B8860B] transition-colors outline-none cursor-pointer" />
-                                </div>
-                            )}
-
-                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
-                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Registrar e Ingresar</>}
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
-
-        {/* MODAL VENTA ENTRADAS PUERTA */}
-        <AnimatePresence>
-            {isVentaPuertaModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaPuertaModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-purple-500/30 rounded-3xl w-full max-w-lg relative z-70 shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                            <h3 className="font-black text-white uppercase flex items-center gap-2"><Ticket className="w-5 h-5 text-purple-500"/> Venta de Entrada Manual</h3>
-                            <button onClick={() => setIsVentaPuertaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                            <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
                         </div>
                         
-                        <form onSubmit={handleSaveVentaPuerta} className="space-y-4">
-                            {/* Selección de Show y Ticket */}
-                            <div className="bg-black/50 p-4 rounded-2xl border border-white/5 space-y-4">
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Seleccionar Show</label>
-                                    <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.showId} onChange={e => setVentaPuertaData({...ventaPuertaData, showId: e.target.value, ticketIndex: 0})}>
-                                        <option value="">-- Elige un Evento --</option>
-                                        {shows.map(s => <option key={s.id} value={s.id}>{s.title} ({s.date_event})</option>)}
-                                    </select>
-                                </div>
-
-                                {ventaPuertaData.showId && (() => {
-                                    const selectedShow = shows.find(s => s.id.toString() === ventaPuertaData.showId);
-                                    const tickets = selectedShow?.tickets || [];
-                                    const currentTicketPrice = tickets[ventaPuertaData.ticketIndex]?.price || 0;
-                                    const calcTotal = currentTicketPrice * ventaPuertaData.quantity;
-
-                                    return (
-                                        <>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Entrada</label>
-                                                    <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.ticketIndex} onChange={e => setVentaPuertaData({...ventaPuertaData, ticketIndex: parseInt(e.target.value)})}>
-                                                        {tickets.length === 0 && <option value="">Sin tickets creados</option>}
-                                                        {tickets.map((t:any, i:number) => <option key={i} value={i}>{t.name} - ${t.price}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cantidad</label>
-                                                    <input type="number" min="1" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500 text-center" value={ventaPuertaData.quantity} onChange={e => setVentaPuertaData({...ventaPuertaData, quantity: parseInt(e.target.value)})} />
-                                                </div>
-                                            </div>
-                                            <div className="text-right pt-2 border-t border-white/5">
-                                                <span className="text-[10px] text-zinc-500 uppercase font-bold mr-2">Total a cobrar:</span>
-                                                <span className="text-xl font-black text-purple-400">${calcTotal.toLocaleString('es-CL')}</span>
-                                            </div>
-                                        </>
-                                    );
-                                })()}
+                        {newManualPayment.metodo === 'Transferencia' && (
+                            <div className="col-span-2 mt-2">
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante (Opcional)</label>
+                                <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#DAA520] file:text-black hover:file:bg-[#B8860B] transition-colors outline-none cursor-pointer" />
                             </div>
+                        )}
 
-                            {/* Datos del Cliente y Pago */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.cliente} onChange={e => setVentaPuertaData({...ventaPuertaData, cliente: e.target.value})} /></div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.whatsapp} onChange={e => setVentaPuertaData({...ventaPuertaData, whatsapp: e.target.value})} /></div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.email} onChange={e => setVentaPuertaData({...ventaPuertaData, email: e.target.value})} /></div>
-                                <div>
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio de Pago</label>
-                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
-                                        <option value="efectivo">💵 Efectivo</option>
-                                        <option value="debito">💳 Débito / Crédito</option>
-                                        <option value="transferencia">📲 Transferencia</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {ventaPuertaData.metodo_pago === 'transferencia' && (
-                                <div className="col-span-2 mt-2">
-                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante de Transferencia</label>
-                                    <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 transition-colors outline-none cursor-pointer" />
-                                </div>
-                            )}
-
-                            <button disabled={isLoading || !ventaPuertaData.showId} type="submit" className="w-full bg-purple-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-purple-500 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Ticket className="w-5 h-5"/> Generar Ticket</>}
-                            </button>
-                        </form>
-                    </motion.div>
+                        <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
+                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Registrar e Ingresar</>}
+                        </button>
+                    </form>
                 </div>
-            )}
-        </AnimatePresence>
+            </div>
+        )}
+
+        {/* MODAL VENTA ENTRADAS PUERTA */}
+        {isVentaPuertaModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaPuertaModalOpen(false)} />
+                <div className="bg-zinc-900 border border-purple-500/30 rounded-3xl w-full max-w-lg relative z-50 shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                    <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                        <h3 className="font-black text-white uppercase flex items-center gap-2"><Ticket className="w-5 h-5 text-purple-500"/> Venta de Entrada Manual</h3>
+                        <button onClick={() => setIsVentaPuertaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    
+                    <form onSubmit={handleSaveVentaPuerta} className="space-y-4">
+                        {/* Selección de Show y Ticket */}
+                        <div className="bg-black/50 p-4 rounded-2xl border border-white/5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Seleccionar Show</label>
+                                <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.showId} onChange={e => setVentaPuertaData({...ventaPuertaData, showId: e.target.value, ticketIndex: 0})}>
+                                    <option value="">-- Elige un Evento --</option>
+                                    {shows.map(s => <option key={s.id} value={s.id}>{s.title} ({s.date_event})</option>)}
+                                </select>
+                            </div>
+
+                            {ventaPuertaData.showId && (() => {
+                                const selectedShow = shows.find(s => s.id.toString() === ventaPuertaData.showId);
+                                const tickets = selectedShow?.tickets || [];
+                                const currentTicketPrice = tickets[ventaPuertaData.ticketIndex]?.price || 0;
+                                const calcTotal = currentTicketPrice * ventaPuertaData.quantity;
+
+                                return (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Entrada</label>
+                                                <select required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.ticketIndex} onChange={e => setVentaPuertaData({...ventaPuertaData, ticketIndex: parseInt(e.target.value)})}>
+                                                    {tickets.length === 0 && <option value="">Sin tickets creados</option>}
+                                                    {tickets.map((t:any, i:number) => <option key={i} value={i}>{t.name} - ${t.price}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cantidad</label>
+                                                <input type="number" min="1" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500 text-center" value={ventaPuertaData.quantity} onChange={e => setVentaPuertaData({...ventaPuertaData, quantity: parseInt(e.target.value)})} />
+                                            </div>
+                                        </div>
+                                        <div className="text-right pt-2 border-t border-white/5">
+                                            <span className="text-[10px] text-zinc-500 uppercase font-bold mr-2">Total a cobrar:</span>
+                                            <span className="text-xl font-black text-purple-400">${calcTotal.toLocaleString('es-CL')}</span>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Datos del Cliente y Pago */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.cliente} onChange={e => setVentaPuertaData({...ventaPuertaData, cliente: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.whatsapp} onChange={e => setVentaPuertaData({...ventaPuertaData, whatsapp: e.target.value})} /></div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.email} onChange={e => setVentaPuertaData({...ventaPuertaData, email: e.target.value})} /></div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio de Pago</label>
+                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
+                                    <option value="efectivo">💵 Efectivo</option>
+                                    <option value="debito">💳 Débito / Tarjeta</option>
+                                    <option value="transferencia">📲 Transferencia</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {ventaPuertaData.metodo_pago === 'transferencia' && (
+                            <div className="col-span-2 mt-2">
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante de Transferencia</label>
+                                <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 transition-colors outline-none cursor-pointer" />
+                            </div>
+                        )}
+
+                        <button disabled={isLoading || !ventaPuertaData.showId} type="submit" className="w-full bg-purple-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-purple-500 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Ticket className="w-5 h-5"/> Generar Ticket</>}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
 
         {/* MODAL FINANZAS GENÉRICO (COMPRAS, GASTOS, INVENTARIO, ETC) */}
-        <AnimatePresence>
-            {isFinanceModalOpen && (
-                 <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsFinanceModalOpen(false)} />
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-lg relative z-70 shadow-2xl p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                            <h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-500"/> Gestión de {financeModalType}</h3>
-                            <button onClick={() => setIsFinanceModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
-                        </div>
-                        <form onSubmit={handleSaveFinanceRecord} className="space-y-4">
-                            
-                            {/* CAMPOS PARA COMPRAS */}
-                            {financeModalType === 'compras' && (
-                                <>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Proveedor / Tienda</label><input type="text" required placeholder="Ej: Macro Frío" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.proveedor || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, proveedor: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción de la compra</label><input type="text" required placeholder="Ej: Bebidas, Cervezas, Hielo" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.descripcion || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, descripcion: e.target.value})} /></div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
-                                            <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.categoria || 'Alimentos'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, categoria: e.target.value})}>
-                                                <option value="Alimentos">Alimentos</option><option value="Bebidas/Alcohol">Bebidas/Alcohol</option><option value="Insumos">Insumos (Aseo/Cocina)</option><option value="Equipamiento">Equipamiento</option>
-                                            </select>
-                                        </div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto Total ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-red-400 font-bold text-lg outline-none" value={currentFinanceRecord.monto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto: parseInt(e.target.value)})} /></div>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* CAMPOS PARA GASTOS */}
-                            {financeModalType === 'gastos' && (
-                                <>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción del Gasto</label><input type="text" required placeholder="Ej: Arriendo Local" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.descripcion || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, descripcion: e.target.value})} /></div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Gasto</label>
-                                            <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.categoria || 'Fijo'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, categoria: e.target.value})}>
-                                                <option value="Fijo">Gasto Fijo</option><option value="Variable">Gasto Variable</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
-                                            <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.subtipo || 'Servicios'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, subtipo: e.target.value})}>
-                                                <option value="Servicios">Servicios (Luz/Agua/Net)</option><option value="Arriendo">Arriendo</option><option value="Marketing">Marketing / RRSS</option><option value="Software">Software (POS/Vercel)</option><option value="Seguridad">Seguridad</option><option value="Otro">Otro</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-red-400 font-bold text-lg outline-none" value={currentFinanceRecord.monto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto: parseInt(e.target.value)})} /></div>
-                                </>
-                            )}
-
-                            {/* CAMPOS PARA INVENTARIO */}
-                            {financeModalType === 'inventario' && (
-                                <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mes Registro</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.mes || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mes: e.target.value})} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Producto / Insumo</label><input type="text" required placeholder="Ej: Cerveza Corona" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.producto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, producto: e.target.value})} /></div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inv. Inicial (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.inventario_inicial || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_inicial: parseInt(e.target.value)})} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Compras (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.compras || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, compras: parseInt(e.target.value)})} /></div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Mermas / Pérdidas (Un)</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-sm outline-none" value={currentFinanceRecord.mermas || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mermas: parseInt(e.target.value)})} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Inv. Final (Unidades)</label><input type="number" required className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.inventario_final || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_final: parseInt(e.target.value)})} /></div>
-                                    </div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Costo Total Asociado ($)</label><input type="number" required placeholder="Costo en dinero de las compras" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold text-lg outline-none" value={currentFinanceRecord.costo_total || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, costo_total: parseInt(e.target.value)})} /></div>
-                                </>
-                            )}
-
-                            {/* CAMPOS PARA TRABAJADORES */}
-                            {financeModalType === 'trabajadores' && (
-                                <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mes (Liquidación)</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.mes || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mes: e.target.value})} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Trabajador</label><input type="text" required placeholder="Nombre Empleado" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.nombre || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, nombre: e.target.value})} /></div>
-                                    </div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cargo</label><input type="text" required placeholder="Ej: Bartender, Garzón, Guardia" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.cargo || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, cargo: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sueldo Base Acordado ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-lg font-bold outline-none" value={currentFinanceRecord.sueldo_base || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, sueldo_base: parseInt(e.target.value)})} /></div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Horas Extras ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.horas_extras || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, horas_extras: parseInt(e.target.value)})} /></div>
-                                        <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Propinas ($)</label><input type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.propinas || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, propinas: parseInt(e.target.value)})} /></div>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* CAMPOS PARA TRIBUTARIO */}
-                            {financeModalType === 'tributario' && (
-                                <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Periodo (Mes/Año)</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.periodo || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, periodo: e.target.value})} /></div>
-                                        <div>
-                                            <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Declaración</label>
-                                            <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.documento || 'F29 (IVA)'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, documento: e.target.value})}>
-                                                <option value="F29 (IVA)">F29 (IVA Mensual)</option><option value="F22 (Renta)">F22 (Renta Anual)</option><option value="Previred">Previred (Leyes Sociales)</option><option value="Patente">Patente Municipal</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Monto a Pagar ($)</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-2xl font-black outline-none" value={currentFinanceRecord.monto_pagar || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto_pagar: parseInt(e.target.value)})} /></div>
+        {isFinanceModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsFinanceModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-lg relative z-50 shadow-2xl p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                    <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                        <h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-500"/> Gestión de {financeModalType}</h3>
+                        <button onClick={() => setIsFinanceModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    <form onSubmit={handleSaveFinanceRecord} className="space-y-4">
+                        
+                        {/* CAMPOS PARA COMPRAS */}
+                        {financeModalType === 'compras' && (
+                            <>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Proveedor / Tienda</label><input type="text" required placeholder="Ej: Macro Frío" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.proveedor || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, proveedor: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción de la compra</label><input type="text" required placeholder="Ej: Bebidas, Cervezas, Hielo" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.descripcion || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, descripcion: e.target.value})} /></div>
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Estado de Pago</label>
-                                        <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.estado || 'pendiente'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, estado: e.target.value})}>
-                                            <option value="pendiente">Pendiente de Pago</option><option value="pagado">Pagado y Declarado</option>
+                                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
+                                        <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.categoria || 'Alimentos'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, categoria: e.target.value})}>
+                                            <option value="Alimentos">Alimentos</option><option value="Bebidas/Alcohol">Bebidas/Alcohol</option><option value="Insumos">Insumos (Aseo/Cocina)</option><option value="Equipamiento">Equipamiento</option>
                                         </select>
                                     </div>
-                                </>
-                            )}
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto Total ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-red-400 font-bold text-lg outline-none" value={currentFinanceRecord.monto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto: parseInt(e.target.value)})} /></div>
+                                </div>
+                            </>
+                        )}
 
-                            <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg">
-                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Guardar Registro</>}
+                        {/* CAMPOS PARA GASTOS */}
+                        {financeModalType === 'gastos' && (
+                            <>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción del Gasto</label><input type="text" required placeholder="Ej: Arriendo Local" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.descripcion || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, descripcion: e.target.value})} /></div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Gasto</label>
+                                        <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.categoria || 'Fijo'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, categoria: e.target.value})}>
+                                            <option value="Fijo">Gasto Fijo</option><option value="Variable">Gasto Variable</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
+                                        <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.subtipo || 'Servicios'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, subtipo: e.target.value})}>
+                                            <option value="Servicios">Servicios (Luz/Agua/Net)</option><option value="Arriendo">Arriendo</option><option value="Marketing">Marketing / RRSS</option><option value="Software">Software (POS/Vercel)</option><option value="Seguridad">Seguridad</option><option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-red-400 font-bold text-lg outline-none" value={currentFinanceRecord.monto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto: parseInt(e.target.value)})} /></div>
+                            </>
+                        )}
+
+                        {/* CAMPOS PARA INVENTARIO */}
+                        {financeModalType === 'inventario' && (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mes Registro</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.mes || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mes: e.target.value})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Producto / Insumo</label><input type="text" required placeholder="Ej: Cerveza Corona" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.producto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, producto: e.target.value})} /></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inv. Inicial (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.inventario_inicial || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_inicial: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Compras (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.compras || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, compras: parseInt(e.target.value)})} /></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Mermas / Pérdidas (Un)</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-sm outline-none" value={currentFinanceRecord.mermas || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mermas: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Inv. Final (Unidades)</label><input type="number" required className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.inventario_final || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_final: parseInt(e.target.value)})} /></div>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Costo Total Asociado ($)</label><input type="number" required placeholder="Costo en dinero de las compras" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold text-lg outline-none" value={currentFinanceRecord.costo_total || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, costo_total: parseInt(e.target.value)})} /></div>
+                            </>
+                        )}
+
+                        {/* CAMPOS PARA TRABAJADORES */}
+                        {financeModalType === 'trabajadores' && (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mes (Liquidación)</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.mes || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mes: e.target.value})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Trabajador</label><input type="text" required placeholder="Nombre Empleado" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.nombre || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, nombre: e.target.value})} /></div>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cargo</label><input type="text" required placeholder="Ej: Bartender, Garzón, Guardia" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.cargo || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, cargo: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sueldo Base Acordado ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-lg font-bold outline-none" value={currentFinanceRecord.sueldo_base || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, sueldo_base: parseInt(e.target.value)})} /></div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Horas Extras ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.horas_extras || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, horas_extras: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Propinas ($)</label><input type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.propinas || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, propinas: parseInt(e.target.value)})} /></div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* CAMPOS PARA TRIBUTARIO */}
+                        {financeModalType === 'tributario' && (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Periodo (Mes/Año)</label><input type="month" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.periodo || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, periodo: e.target.value})} /></div>
+                                    <div>
+                                        <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Declaración</label>
+                                        <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.documento || 'F29 (IVA)'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, documento: e.target.value})}>
+                                            <option value="F29 (IVA)">F29 (IVA Mensual)</option><option value="F22 (Renta)">F22 (Renta Anual)</option><option value="Previred">Previred (Leyes Sociales)</option><option value="Patente">Patente Municipal</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Monto a Pagar ($)</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-2xl font-black outline-none" value={currentFinanceRecord.monto_pagar || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto_pagar: parseInt(e.target.value)})} /></div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Estado de Pago</label>
+                                    <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.estado || 'pendiente'} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, estado: e.target.value})}>
+                                        <option value="pendiente">Pendiente de Pago</option><option value="pagado">Pagado y Declarado</option>
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
+                        <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg">
+                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Guardar Registro</>}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL VENTA POS RÁPIDA */}
+        {isVentaModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-sm relative z-50 shadow-2xl p-8">
+                    <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider flex items-center gap-2"><DollarSign className="w-6 h-6 text-green-500"/> Caja POS</h3><button onClick={() => setIsVentaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
+                    <form onSubmit={handleSaveVenta} className="space-y-4">
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cliente Asociado (Opcional)</label><input type="text" placeholder="Ej: Mesa 4 / Juan P." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.cliente} onChange={e => setCurrentVenta({...currentVenta, cliente: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Concepto de Venta</label><input required type="text" placeholder="Ej: 2 Pisco Sour + Tabla" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-green-500" value={currentVenta.descripcion} onChange={e => setCurrentVenta({...currentVenta, descripcion: e.target.value})} /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría</label>
+                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xs outline-none focus:border-green-500" value={currentVenta.tipo} onChange={e => setCurrentVenta({...currentVenta, tipo: e.target.value})}>
+                                        <option value="consumo_extra">🍽️ Menú / Tragos</option>
+                                        <option value="entrada_manual">🎫 Entrada Puerta</option>
+                                        <option value="general">💰 Otro Ingreso</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Pago</label>
+                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xs outline-none focus:border-green-500" value={currentVenta.metodo_pago} onChange={e => setCurrentVenta({...currentVenta, metodo_pago: e.target.value})}>
+                                        <option value="efectivo">💵 Efectivo</option>
+                                        <option value="debito">💳 Débito</option>
+                                        <option value="credito">💳 Crédito</option>
+                                        <option value="transferencia">📲 Transferencia</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="pt-2"><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-4 text-green-400 text-3xl font-black text-center outline-none" value={currentVenta.monto || ''} onChange={e => setCurrentVenta({...currentVenta, monto: parseInt(e.target.value)})} /></div>
+                        <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-green-900/20">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><CheckCircle className="w-5 h-5"/> Procesar Pago</>}</button>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL CLIENTES (AÑADIDO EMAIL Y FECHA OPCIONAL) */}
+        {isClientModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsClientModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-md relative z-50 shadow-2xl p-8">
+                    <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                        <h3 className="text-xl font-black text-white uppercase tracking-wider">{currentClient.id ? "Editar Cliente" : "Nuevo Cliente"}</h3>
+                        <button onClick={() => setIsClientModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                    <form onSubmit={handleSaveClient} className="space-y-4">
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Completo</label><input required type="text" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.nombre} onChange={e => setCurrentClient({...currentClient, nombre: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.whatsapp} onChange={e => setCurrentClient({...currentClient, whatsapp: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="cliente@correo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={currentClient.email || ""} onChange={e => setCurrentClient({...currentClient, email: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha de Nacimiento</label><input type="date" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentClient.fecha_nacimiento || ""} onChange={e => setCurrentClient({...currentClient, fecha_nacimiento: e.target.value})} /></div>
+                        <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
+                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Guardar en Base</>}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL MENÚ EXPRESS */}
+        {isMenuModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsMenuModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-50 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                    <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
+                        <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'menu')} accept="image/*" className="hidden" />
+                        <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
+                            {currentMenuItem.image_url ? (
+                                <>
+                                    <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
+                                </>
+                            ) : (
+                                <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Foto Producto</p><p className="text-[9px] text-zinc-600 mt-1">Formato Cuadrado</p></div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider">{currentMenuItem.id ? "Editar Producto" : "Nuevo Producto"}</h3><button type="button" onClick={() => setIsMenuModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
+                        <form onSubmit={handleSaveMenuItem} className="space-y-5">
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre del Producto</label><input required type="text" placeholder="Ej: Tabla Mar y Tierra" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentMenuItem.name} onChange={e => setCurrentMenuItem({...currentMenuItem, name: e.target.value})} /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Categoría Web</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentMenuItem.category} onChange={e => setCurrentMenuItem({...currentMenuItem, category: e.target.value})}><option value="Entradas">Entradas</option><option value="Tablas">Tablas</option><option value="Tragos">Tragos de Autor</option><option value="Botellas">Botellas</option><option value="Bebidas">Bebidas/Mocktails</option></select></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio de Venta ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-[#DAA520] font-bold text-lg outline-none" value={currentMenuItem.price || ''} onChange={e => setCurrentMenuItem({...currentMenuItem, price: parseInt(e.target.value)})} /></div>
+                            </div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Corta (Ingredientes)</label><textarea rows={3} placeholder="Describa el producto para tentar al cliente..." className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none" value={currentMenuItem.description || ""} onChange={e => setCurrentMenuItem({...currentMenuItem, description: e.target.value})} /></div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-xl">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Publicar en Web</>}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL EDICIÓN PROMOCIONES */}
+        {isPromoModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsPromoModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-4xl relative z-50 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+                    <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
+                        <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'promo')} accept="image/*" className="hidden" />
+                        <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
+                            {currentPromo.image_url ? (
+                                <>
+                                    <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar</p></div>
+                                </>
+                            ) : (
+                                <div className="text-center text-zinc-500"><div className="p-4 bg-zinc-800 rounded-full mb-3 inline-block"><Upload className="w-6 h-6 text-zinc-400"/></div><p className="text-xs font-bold text-zinc-400 uppercase">Banner Promo</p></div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl font-black text-white uppercase tracking-wider">{currentPromo.id ? "Editar Promoción" : "Crear Promoción"}</h3><button type="button" onClick={() => setIsPromoModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button></div>
+                        <form onSubmit={handleSavePromo} className="space-y-4">
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Título Gigante</label><input required type="text" placeholder="Ej: HAPPY HOUR 2x1" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520] transition-colors" value={currentPromo.title} onChange={e => setCurrentPromo({...currentPromo, title: e.target.value})} /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Tipo de Promoción</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.category} onChange={e => setCurrentPromo({...currentPromo, category: e.target.value})}><option value="semana">Promoción Semanal</option><option value="pack">Pack / Cumpleaños</option><option value="banner">Banner Informativo</option></select></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Precio Referencia ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-[#DAA520] font-bold text-lg outline-none" value={currentPromo.price || ''} onChange={e => setCurrentPromo({...currentPromo, price: parseInt(e.target.value)})} /></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Día de la semana</label><select className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentPromo.day} onChange={e => setCurrentPromo({...currentPromo, day: e.target.value})} disabled={currentPromo.category === 'pack'}><option value="">No Aplica</option><option value="todos">Todos los días</option>{["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta Visual</label><input type="text" placeholder="Ej: IMPERDIBLE" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentPromo.tag || ""} onChange={e => setCurrentPromo({...currentPromo, tag: e.target.value})} /></div>
+                            </div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Bajada / Subtítulo</label><input required type="text" placeholder="Ej: Válido hasta las 21:00 hrs" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentPromo.subtitle} onChange={e => setCurrentPromo({...currentPromo, subtitle: e.target.value})} /></div>
+                            <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Condiciones o Descripción Larga</label><textarea rows={2} className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none" value={currentPromo.desc_text || ""} onChange={e => setCurrentPromo({...currentPromo, desc_text: e.target.value})} /></div>
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-xl">{isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Lanzar Promoción</>}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* MODAL EDICIÓN SHOWS */}
+        {isShowModalOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsShowModalOpen(false)} />
+                <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl relative z-50 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh] md:max-h-[85vh]">
+                    <div className="w-full md:w-1/3 bg-black/50 border-r border-white/10 p-6 md:p-10 flex flex-col justify-center items-center relative group h-48 md:h-auto shrink-0">
+                        <input type="file" ref={fileInputRef} onChange={(e) => handleImageSelect(e, 'show')} accept="image/*" className="hidden" />
+                        <div onClick={triggerFileInput} className="relative w-full h-full max-w-[200px] md:max-w-[300px] aspect-[3/4] rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden shadow-2xl">
+                            {currentShow.image_url ? (
+                                <>
+                                    <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-80 group-hover:opacity-100 transition-all duration-500" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Flyer</p></div>
+                                </>
+                            ) : (
+                                <div className="text-center text-zinc-500"><ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-50"/><p className="text-xs font-black tracking-widest text-zinc-400 uppercase">Flyer Vertical</p><p className="text-[10px] mt-1 text-zinc-600">1080x1350px Rec.</p></div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar bg-zinc-900">
+                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">{currentShow.id ? "Configurar Evento" : "Crear Nuevo Evento"}</h3><button type="button" onClick={() => setIsShowModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
+                        <form onSubmit={handleSaveShow} className="space-y-6">
+                            
+                            <div className="space-y-4">
+                                <div><label className="block text-[10px] uppercase font-bold text-[#DAA520] mb-1 tracking-wider">Nombre del Show</label><input required type="text" placeholder="Ej: Fiesta de los 80s" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-lg font-bold outline-none focus:border-[#DAA520]" value={currentShow.title} onChange={e => setCurrentShow({...currentShow, title: e.target.value})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo o Artistas</label><input type="text" placeholder="Ej: Banda en vivo + DJ Invitado" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentShow.subtitle || ""} onChange={e => setCurrentShow({...currentShow, subtitle: e.target.value})} /></div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black/30 p-4 rounded-2xl border border-white/5">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Fecha Exacta</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.date_event} onChange={e => setCurrentShow({...currentShow, date_event: e.target.value})} /></div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Inicio</label><input type="time" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.time_event} onChange={e => setCurrentShow({...currentShow, time_event: e.target.value})} /></div>
+                                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Término</label><input type="time" required className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-white text-sm outline-none focus:border-[#DAA520] scheme-dark" value={currentShow.end_time || ""} onChange={e => setCurrentShow({...currentShow, end_time: e.target.value})} /></div>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label><input type="text" readOnly className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-400 text-sm outline-none cursor-not-allowed" value={currentShow.location} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta Visual</label><input type="text" placeholder="Ej: SOLD OUT" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} /></div>
+                                </div>
+                                
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Web</label><textarea rows={3} placeholder="Describa el ambiente del evento..." className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none focus:border-[#DAA520]" value={currentShow.description || ""} onChange={e => setCurrentShow({...currentShow, description: e.target.value})} /></div>
+                                
+                                <div className="flex items-center gap-3 bg-red-900/10 p-4 rounded-xl border border-red-500/20">
+                                    <input type="checkbox" id="adult" checked={currentShow.is_adult || false} onChange={e => setCurrentShow({...currentShow, is_adult: e.target.checked})} className="w-5 h-5 accent-red-500 rounded" />
+                                    <label htmlFor="adult" className="text-xs font-bold text-red-400 uppercase flex items-center gap-2 cursor-pointer"><ShieldAlert className="w-4 h-4"/> Evento exclusivo para mayores de 18 años</label>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-white/10 pt-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div>
+                                        <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2"><Ticket className="w-4 h-4 text-[#DAA520]"/> Entradas Web</h4>
+                                        <p className="text-[10px] text-zinc-500">Crea los tickets que la gente podrá comprar online.</p>
+                                    </div>
+                                    <button type="button" onClick={addTicketType} className="text-xs bg-white text-black px-4 py-2 rounded-xl hover:bg-zinc-200 transition-colors font-bold shadow-lg">+ Añadir Ticket</button>
+                                </div>
+                                <div className="space-y-3">
+                                    {currentShow.tickets && currentShow.tickets.map((ticket: any, index: number) => (
+                                        <div key={index} className="flex flex-col sm:flex-row gap-3 items-center bg-black/60 p-4 rounded-2xl border border-white/5">
+                                            <div className="w-full sm:flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <input type="text" placeholder="Ej: General Fase 1" className="w-full bg-transparent border-b border-zinc-700 text-sm text-white p-2 outline-none focus:border-[#DAA520]" value={ticket.name} onChange={(e) => updateTicketType(index, 'name', e.target.value)} />
+                                                <input type="text" placeholder="Ej: Ingreso válido hasta las 00:00" className="w-full bg-transparent border-b border-zinc-700 text-xs text-zinc-400 p-2 outline-none focus:border-[#DAA520]" value={ticket.desc} onChange={(e) => updateTicketType(index, 'desc', e.target.value)} />
+                                            </div>
+                                            <div className="w-full sm:w-32 flex items-center gap-3">
+                                                <input type="number" placeholder="$ Valor" className="w-full bg-transparent border-b border-zinc-700 text-lg text-[#DAA520] font-black p-2 outline-none text-right placeholder:text-zinc-600" value={ticket.price || ''} onChange={(e) => updateTicketType(index, 'price', e.target.value === '' ? 0 : parseInt(e.target.value))} />
+                                                <button type="button" onClick={() => removeTicketType(index)} className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"><Trash2 className="w-5 h-5"/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!currentShow.tickets || currentShow.tickets.length === 0) && <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl"><p className="text-xs text-zinc-500 font-medium">Si no creas tickets, el evento se considerará "Solo con Reserva de Mesa".</p></div>}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-6">
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Aforo / Capacidad Total</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-lg font-bold outline-none text-center focus:border-[#DAA520]" value={currentShow.total || ''} onChange={e => setCurrentShow({...currentShow, total: parseInt(e.target.value)})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cortesías / Vendidas Manual</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-zinc-400 text-lg font-bold outline-none text-center focus:border-green-500" value={currentShow.sold || ''} onChange={e => setCurrentShow({...currentShow, sold: parseInt(e.target.value)})} /></div>
+                            </div>
+                            
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-5 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-[0_10px_20px_rgba(218,165,32,0.2)] mt-6">
+                                {isLoading ? <Loader2 className="w-6 h-6 animate-spin"/> : <><Save className="w-6 h-6"/> Publicar Evento</>}
                             </button>
                         </form>
-                    </motion.div>
-                 </div>
-            )}
-        </AnimatePresence>
+                    </div>
+                </div>
+            </div>
+        )}
+
       </main>
     </div>
   );
