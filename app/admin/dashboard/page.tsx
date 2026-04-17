@@ -10,7 +10,7 @@ import {
     Mail, Phone, Loader2, ShieldAlert, UserPlus, Cake, FileSpreadsheet,
     Utensils, ShoppingBag, Send, DollarSign, TrendingUp, CreditCard, Banknote,
     Ticket, UserCheck, AlertCircle,
-    Presentation, Eye, EyeOff, MonitorPlay, QrCode, FileCheck, Globe, RefreshCw, Archive, Briefcase, FileSignature, Receipt, FileDown
+    Presentation, Eye, EyeOff, MonitorPlay, QrCode, FileCheck, Globe, RefreshCw, Archive, Briefcase, FileSignature, Receipt, FileDown, Link as LinkIcon
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,7 +20,6 @@ import html2canvas from "html2canvas";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700", "900"] });
 
-// --- TABS DE NAVEGACIÓN ---
 const TABS = [
     { id: "resumen", label: "Resumen", icon: LayoutDashboard },
     { id: "ventas_show", label: "Ventas Show", icon: Ticket },
@@ -46,7 +45,6 @@ const FINANZAS_TABS = [
 ];
 
 export default function DashboardPage() {
-  // --- 1. ESTADOS DE SEGURIDAD (AÑADIDOS PARA EL CAJERO) ---
   const [isCajero, setIsCajero] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -56,7 +54,6 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | number | null>(null);
   
-  // --- ESTADOS DE DATOS BASE ---
   const [promos, setPromos] = useState<any[]>([]);
   const [shows, setShows] = useState<any[]>([]);
   const [reservas, setReservas] = useState<any[]>([]);
@@ -66,8 +63,7 @@ export default function DashboardPage() {
   const [menuItems, setMenuItems] = useState<any[]>([]); 
   const [ventas, setVentas] = useState<any[]>([]);
 
-  // --- NUEVOS ESTADOS PARA PAGOS WEB ---
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("todos"); // "todos", "getnet", "transferencia", "manual", "puerta"
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("todos");
   const [isBoletaModalOpen, setIsBoletaModalOpen] = useState(false);
   const [currentBoletaData, setCurrentBoletaData] = useState<any>(null);
   const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(false);
@@ -75,33 +71,24 @@ export default function DashboardPage() {
   const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
   const [newManualPayment, setNewManualPayment] = useState({ cliente: "", email: "", monto: 0, metodo: "Transferencia", detalle: "" });
 
-  // --- ESTADOS PARA VENTA DE ENTRADAS EN PUERTA ---
   const [isVentaPuertaModalOpen, setIsVentaPuertaModalOpen] = useState(false);
-  const [ventaPuertaData, setVentaPuertaData] = useState({
-      showId: "",
-      ticketIndex: 0,
-      quantity: 1,
-      cliente: "",
-      whatsapp: "",
-      email: "",
-      metodo_pago: "efectivo"
-  });
+  const [ventaPuertaData, setVentaPuertaData] = useState({ showId: "", ticketIndex: 0, quantity: 1, cliente: "", whatsapp: "", email: "", metodo_pago: "efectivo" });
 
-  // --- NUEVOS ESTADOS ERP FINANZAS ---
   const [compras, setCompras] = useState<any[]>([]);
   const [inventario, setInventario] = useState<any[]>([]);
   const [gastos, setGastos] = useState<any[]>([]);
   const [trabajadores, setTrabajadores] = useState<any[]>([]);
   const [tributario, setTributario] = useState<any[]>([]);
 
-  // --- FILTROS ---
   const [reservaFilterStatus, setReservaFilterStatus] = useState("todos");
   const [reservaSearch, setReservaSearch] = useState("");
   const [reservaDateFilter, setReservaDateFilter] = useState("");
   const [webPaymentSearch, setWebPaymentSearch] = useState("");
   const [birthdayFilterDate, setBirthdayFilterDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- ESTADOS DE MODALES ---
+  const [showFilterShowId, setShowFilterShowId] = useState("");
+  const [showFilterDate, setShowFilterDate] = useState("");
+
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<any>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -118,7 +105,6 @@ export default function DashboardPage() {
   const [isVentaModalOpen, setIsVentaModalOpen] = useState(false);
   const [currentVenta, setCurrentVenta] = useState<any>(null);
 
-  // Modales Finanzas
   const [isFinanceModalOpen, setIsFinanceModalOpen] = useState(false);
   const [financeModalType, setFinanceModalType] = useState("");
   const [currentFinanceRecord, setCurrentFinanceRecord] = useState<any>(null);
@@ -126,20 +112,17 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // --- 2. VERIFICACIÓN DE USUARIO AL INICIO ---
   useEffect(() => {
     const initSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserEmail(user.email || null);
-        // Si detectamos que es el cajero, activamos su modo y lo enviamos a su pestaña
         if (user.email === "cajero@boulevardzapallar.cl") {
           setIsCajero(true);
           setActiveTab("ventas_show"); 
         }
       }
     };
-
     initSession();
   }, []);
 
@@ -163,6 +146,7 @@ export default function DashboardPage() {
           const { error } = await supabase.from(tableName).delete().neq('id', -1);
           if (error) throw error;
           alert(`✅ ÉXITO. Todos los registros de ${displayName} han sido eliminados. El módulo se ha reseteado.`);
+          fetchData();
       } catch (error: any) {
           alert("Error al vaciar la tabla: " + error.message);
       } finally {
@@ -243,7 +227,6 @@ export default function DashboardPage() {
       await supabase.from(table).update({ active: !item.active }).eq('id', item.sourceId);
   };
 
-  // --- CÁLCULOS FINANCIEROS AVANZADOS ---
   const ingresosManuales = ventas.reduce((acc, curr) => acc + (curr.monto || 0), 0);
   const ingresosPreOrder = reservas.reduce((acc, curr) => acc + (curr.total_pre_order || 0), 0);
   const totalIngresosGlobal = ingresosManuales + ingresosPreOrder;
@@ -253,14 +236,12 @@ export default function DashboardPage() {
   const ventasCredito = ventas.filter(v => v.metodo_pago === 'credito').reduce((acc, c) => acc + c.monto, 0);
   const ventasTransferencia = ventas.filter(v => v.metodo_pago === 'transferencia').reduce((acc, c) => acc + c.monto, 0);
 
-  // SEPARACIÓN DE RESERVAS vs TICKETS SHOW
   const getTicketDetails = (pre_order: any) => {
       const tickets = pre_order?.filter((i:any) => i.category === 'ticket') || [];
       const menu = pre_order?.filter((i:any) => i.category !== 'ticket') || [];
       return { tickets, menu, hasTickets: tickets.length > 0 };
   };
 
-  // --- PAGOS WEB DETALLADOS (MOVIDO ARRIBA PARA EVITAR ERROR TS2304) ---
   const getWebPayments = () => {
       return reservas.filter(r => r.total_pre_order > 0 || r.payment_id).map(r => {
           const { tickets, menu } = getTicketDetails(r.pre_order);
@@ -268,7 +249,6 @@ export default function DashboardPage() {
           if(tickets.length > 0) detalleArr.push(`${tickets.reduce((a:any,c:any) => a+c.quantity, 0)} Tickets`);
           if(menu.length > 0) detalleArr.push(`${menu.reduce((a:any,c:any) => a+c.quantity, 0)} Platos`);
 
-          // Lógica mejorada para leer el método de pago real
           let metodoCalculado = 'Transferencia';
           if (r.payment_id) {
               if (r.payment_id.toLowerCase().includes('puerta')) {
@@ -304,15 +284,12 @@ export default function DashboardPage() {
   const reservasTicketsOnly = reservas.filter(r => getTicketDetails(r.pre_order).hasTickets);
   const reservasNormalesOnly = reservas.filter(r => !getTicketDetails(r.pre_order).hasTickets);
 
-  // Calcular rendimiento de shows diferenciando entradas vs comida web
   const getShowPerformance = () => {
     return shows.map(show => {
         const matchReservas = reservas.filter(r => r.date_reserva === show.date_event && r.status !== 'rechazada');
         const totalPax = matchReservas.reduce((acc, curr) => acc + parseInt(curr.guests || 0), 0);
-        
         let ticketsAmount = 0;
         let foodAmount = 0;
-        
         matchReservas.forEach(r => {
             if(r.pre_order) {
                 r.pre_order.forEach((item:any) => {
@@ -321,13 +298,11 @@ export default function DashboardPage() {
                 });
             }
         });
-
         return { ...show, paxReal: totalPax, recaudacionTickets: ticketsAmount, recaudacionComida: foodAmount };
     });
   };
   const showPerformance = getShowPerformance();
   
-  // --- MANEJADOR DE IMAGEN ---
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'promo' | 'show' | 'menu') => {
       const file = e.target.files?.[0];
       if (file) {
@@ -354,7 +329,6 @@ export default function DashboardPage() {
   };
   const triggerFileInput = () => fileInputRef.current?.click();
 
-  // --- SINCRONIZACIÓN AUTOMÁTICA DE CLIENTES ---
   const syncClientToDB = async (reserva: any) => {
       try {
           const { data: existing } = await supabase.from('clientes').select('id').eq('whatsapp', reserva.phone).single();
@@ -369,7 +343,6 @@ export default function DashboardPage() {
       } catch(e) { console.error("Error silencioso al sincronizar cliente", e); }
   };
 
-  // --- CRUD FINANZAS (VENTAS POS) ---
   const handleOpenVentaModal = () => {
       setCurrentVenta({ descripcion: "", cliente: "", monto: 0, tipo: "consumo_extra", metodo_pago: "efectivo", origen: "caja_pos" });
       setIsVentaModalOpen(true);
@@ -394,7 +367,6 @@ export default function DashboardPage() {
       if(confirm("¿Eliminar registro de venta? Esto afectará el arqueo.")) { await supabase.from('ventas_generales').delete().eq('id', id); fetchData(); }
   };
 
-  // --- CRUD GENÉRICO FINANZAS (COMPRAS, GASTOS, ETC) ---
   const openFinanceModal = (type: string, record: any = null) => {
       setFinanceModalType(type);
       setCurrentFinanceRecord(record || {});
@@ -426,7 +398,6 @@ export default function DashboardPage() {
       if(confirm("¿Eliminar registro financiero?")) { await supabase.from(table).delete().eq('id', id); fetchData(); }
   };
 
-  // --- CRUD CLIENTES BOULEVARD ---
   const handleOpenClientModal = (client: any = null) => {
       setCurrentClient(client || { nombre: "", email: "", whatsapp: "", fecha_nacimiento: "" });
       setIsClientModalOpen(true);
@@ -470,7 +441,6 @@ export default function DashboardPage() {
       reader.readAsText(file);
   };
 
-  // --- OTRAS FUNCIONES (PROMOS, MENU, SHOWS) ---
   const handleOpenPromoModal = (promo: any = null) => { setSelectedFile(null); setCurrentPromo(promo || { title: "", subtitle: "", category: "semana", day: "", price: 0, tag: "", active: true, desc_text: "", image_url: "" }); setIsPromoModalOpen(true); };
   const handleSavePromo = async (e: React.FormEvent) => { e.preventDefault(); setIsLoading(true); try { let finalImageUrl = currentPromo.image_url; if (selectedFile) { const uploadedUrl = await uploadImageToSupabase(); if (uploadedUrl) finalImageUrl = uploadedUrl; } const promoData = { ...currentPromo, image_url: finalImageUrl }; if (currentPromo.id) await supabase.from('promociones').update(promoData).eq('id', currentPromo.id); else await supabase.from('promociones').insert([promoData]); await fetchData(); setIsPromoModalOpen(false); } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } };
   const handleDeletePromo = async (id: number) => { if(confirm("¿Eliminar promoción?")) { await supabase.from('promociones').delete().eq('id', id); fetchData(); } };
@@ -481,14 +451,36 @@ export default function DashboardPage() {
   const handleDeleteMenuItem = async (id: number) => { if(confirm("¿Eliminar producto?")) { await supabase.from('productos_reserva').delete().eq('id', id); fetchData(); } };
   const toggleMenuStatus = async (id: number, currentStatus: boolean) => { await supabase.from('productos_reserva').update({ active: !currentStatus }).eq('id', id); fetchData(); };
 
-  const handleOpenShowModal = (show: any = null) => { setSelectedFile(null); setCurrentShow(show || { title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", tag: "", is_adult: false, tickets: [] }); setIsShowModalOpen(true); };
+  const handleOpenShowModal = (show: any = null) => { 
+      setSelectedFile(null); 
+      setCurrentShow(show || { 
+          title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", 
+          location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", 
+          tag: "", is_adult: false, tickets: [], external_ticket_url: "", lock_time: "" // <- AGREGADOS NUEVOS CAMPOS AQUÍ
+      }); 
+      setIsShowModalOpen(true); 
+  };
   const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
   const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
   const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
-  const handleSaveShow = async (e: React.FormEvent) => { e.preventDefault(); setIsLoading(true); try { let finalImageUrl = currentShow.image_url; if (selectedFile) { const uploadedUrl = await uploadImageToSupabase(); if (uploadedUrl) finalImageUrl = uploadedUrl; } const showData = { ...currentShow, image_url: finalImageUrl }; if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id); else await supabase.from('shows').insert([showData]); await fetchData(); setIsShowModalOpen(false); } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } };
+  const handleSaveShow = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      setIsLoading(true); 
+      try { 
+          let finalImageUrl = currentShow.image_url; 
+          if (selectedFile) { 
+              const uploadedUrl = await uploadImageToSupabase(); 
+              if (uploadedUrl) finalImageUrl = uploadedUrl; 
+          } 
+          const showData = { ...currentShow, image_url: finalImageUrl }; 
+          if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id); 
+          else await supabase.from('shows').insert([showData]); 
+          await fetchData(); 
+          setIsShowModalOpen(false); 
+      } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } 
+  };
   const handleDeleteShow = async (id: number) => { if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); } };
 
-  // --- ACTUALIZAR ESTADO DE PAGOS WEB ---
   const handleUpdatePaymentStatus = async (reservaId: number, newStatus: string) => {
     setIsLoading(true);
     try {
@@ -502,7 +494,6 @@ export default function DashboardPage() {
     }
   };
 
-  // --- FUNCIONES NUEVAS PAGOS WEB ---
   const handleOpenBoleta = (payment: any) => {
       setCurrentBoletaData(payment);
       setIsBoletaModalOpen(true);
@@ -534,15 +525,12 @@ export default function DashboardPage() {
       e.preventDefault();
       setIsLoading(true);
       try {
-          // 1. Subir comprobante si el cliente seleccionó uno
           let comprobanteUrl = null;
           if (selectedFile) {
               comprobanteUrl = await uploadImageToSupabase('tickets'); 
           }
-
           const fakeCode = `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
           const finalPaymentId = newManualPayment.metodo === 'Getnet' ? fakeCode : `MANUAL - ${newManualPayment.metodo}`;
-
           const { error } = await supabase.from('reservas').insert([{
               name: newManualPayment.cliente,
               email: newManualPayment.email,
@@ -566,7 +554,6 @@ export default function DashboardPage() {
       }
   };
 
-  // --- REGISTRAR VENTA DE ENTRADA MANUAL (PUERTA) ---
   const handleSaveVentaPuerta = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
@@ -577,7 +564,6 @@ export default function DashboardPage() {
           const ticket = show.tickets[ventaPuertaData.ticketIndex];
           if (!ticket) throw new Error("Debes seleccionar un tipo de ticket válido.");
 
-          // 1. Subir comprobante si el cliente seleccionó uno
           let comprobanteUrl = null;
           if (selectedFile) {
               comprobanteUrl = await uploadImageToSupabase('tickets');
@@ -631,13 +617,11 @@ export default function DashboardPage() {
       }
   };
 
-  // --- CONFIRMACIÓN RESERVAS NORMALES ---
   const handleConfirmReservation = async (reserva: any) => {
     if (!confirm(`¿Confirmar Reserva de Mesa a ${reserva.name} y enviar WhatsApp?`)) return;
     setProcessingId(reserva.id); 
     try {
         await syncClientToDB(reserva);
-
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const codigoFinal = reserva.code || `BZ-${randomNum}`;
 
@@ -682,13 +666,7 @@ export default function DashboardPage() {
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                reservaId: reserva.id, 
-                ticketUrl: ticketPublicUrl, 
-                reservation_code: codigoFinal, 
-                phone: reserva.phone,
-                customMessage: customMessage
-            }),
+            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone, customMessage: customMessage }),
         });
 
         const result = await response.json();
@@ -697,19 +675,16 @@ export default function DashboardPage() {
     } catch (error: any) { alert("Error crítico al generar ticket: " + error.message); } finally { setProcessingId(null); }
   };
 
-  // --- CONFIRMACIÓN ENTRADAS SHOW (TIPO PASSLINE CON QR REAL) ---
   const handleConfirmShowTicket = async (reserva: any) => {
     if (!confirm(`¿Confirmar COMPRA DE ENTRADA a ${reserva.name}, generar ticket E-Pass y enviar WhatsApp?`)) return;
     setProcessingId(reserva.id); 
     try {
         await syncClientToDB(reserva);
-
         const randomNum = Math.floor(100000 + Math.random() * 900000); 
         const codigoFinal = reserva.code || `TKT-${randomNum}`;
         const { tickets, menu } = getTicketDetails(reserva.pre_order);
         const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(', ');
         
-        // URL CORREGIDA: Apunta a /admin/validar-ticket/ para evitar el 404
         const origin = typeof window !== 'undefined' ? window.location.origin : 'https://bzweb.vercel.app';
         const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${origin}/admin/validar-ticket/${reserva.id}`;
 
@@ -769,13 +744,7 @@ export default function DashboardPage() {
         const response = await fetch("/api/admin/confirmar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                reservaId: reserva.id, 
-                ticketUrl: ticketPublicUrl, 
-                reservation_code: codigoFinal, 
-                phone: reserva.phone,
-                customMessage: customMessage
-            }),
+            body: JSON.stringify({ reservaId: reserva.id, ticketUrl: ticketPublicUrl, reservation_code: codigoFinal, phone: reserva.phone, customMessage: customMessage }),
         });
 
         const result = await response.json();
@@ -784,7 +753,6 @@ export default function DashboardPage() {
     } catch (error: any) { alert("Error crítico al generar ticket E-Pass: " + error.message); } finally { setProcessingId(null); }
   };
 
-  // --- FUNCIÓN PARA ENVIAR GIFT CARD DE CUMPLEAÑOS AUTOMÁTICA ---
   const handleSendBirthdayGift = async (cliente: any) => {
       if (!confirm(`¿Enviar Gift Card de 2 Pisco Sour a ${cliente.nombre} por WhatsApp?`)) return;
       setSendingGiftId(cliente.id);
@@ -792,8 +760,6 @@ export default function DashboardPage() {
       try {
           const giftCode = `BZ-GIFT-${Math.floor(1000 + Math.random() * 9000)}`;
           const origin = typeof window !== 'undefined' ? window.location.origin : 'https://bzweb.vercel.app';
-          
-          // RUTA CORREGIDA: Apuntando a /admin/validar-ticket/ para evitar el 404
           const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${origin}/admin/validar-ticket/gift-${cliente.id}`;
 
           const giftElement = document.createElement("div");
@@ -820,7 +786,7 @@ export default function DashboardPage() {
               </div>
           `;
           document.body.appendChild(giftElement);
-          await new Promise(resolve => setTimeout(resolve, 1500)); // Esperar carga del QR
+          await new Promise(resolve => setTimeout(resolve, 1500)); 
           
           const canvas = await html2canvas(giftElement, { scale: 1, useCORS: true, allowTaint: true });
           const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -847,17 +813,8 @@ export default function DashboardPage() {
           });
 
           const result = await res.json();
-          if (result.success) {
-              alert("✅ Gift Card enviada exitosamente por WhatsApp.");
-          } else {
-              alert("⚠️ Error al enviar el regalo: " + result.error);
-          }
-      } catch (error) {
-          console.error(error);
-          alert("Error crítico al generar Gift Card.");
-      } finally {
-          setSendingGiftId(null);
-      }
+          if (result.success) { alert("✅ Gift Card enviada exitosamente por WhatsApp."); } else { alert("⚠️ Error al enviar el regalo: " + result.error); }
+      } catch (error) { console.error(error); alert("Error crítico al generar Gift Card."); } finally { setSendingGiftId(null); }
   };
 
   const handleManualCheckIn = async (reservaId: number) => {
@@ -869,7 +826,72 @@ export default function DashboardPage() {
       if(confirm("¿ELIMINAR ESTE REGISTRO? Esta acción es irreversible.")) { await supabase.from('reservas').delete().eq('id', id); fetchData(); }
   };
 
-  // Filtros aplicados sobre Reservas de Mesa (Excluye Tickets)
+  const generarPDFListaShow = async () => {
+    try {
+        const { jsPDF } = await import("jspdf");
+        const autoTable = (await import("jspdf-autotable")).default;
+
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("Lista Oficial de Entradas - Shows", 14, 20);
+
+        let filterText = `Fecha: ${showFilterDate || 'Todas'} | Show: ${showFilterShowId ? shows.find(s => s.id.toString() === showFilterShowId)?.title : 'Todos'} | Estado: ${reservaFilterStatus}`;
+        doc.setFontSize(10);
+        doc.text(filterText, 14, 28);
+
+        const tableData = filteredReservasShow.map(res => {
+            const { tickets } = getTicketDetails(res.pre_order);
+            const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join('\n');
+            return [ res.reservation_code || res.code || "TKT-PEND", res.name, res.phone || '-', ticketNames, res.status.toUpperCase() ];
+        });
+
+        autoTable(doc, {
+            startY: 35,
+            head: [['Código', 'Comprador', 'Teléfono', 'Entradas', 'Estado']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [131, 56, 236] } 
+        });
+
+        doc.save(`Lista_Shows_${new Date().getTime()}.pdf`);
+    } catch(e) {
+        console.error(e);
+        alert("Asegúrate de haber instalado 'jspdf' y 'jspdf-autotable' en tu proyecto.");
+    }
+  };
+
+  const generarPDFListaReservas = async () => {
+    try {
+        const { jsPDF } = await import("jspdf");
+        const autoTable = (await import("jspdf-autotable")).default;
+
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("Lista de Reservas de Mesa", 14, 20);
+
+        let filterText = `Fecha: ${reservaDateFilter || 'Todas'} | Estado: ${reservaFilterStatus}`;
+        doc.setFontSize(10);
+        doc.text(filterText, 14, 28);
+
+        const tableData = filteredReservasMesa.map(res => {
+            return [ res.reservation_code || res.code || "SIN-CODIGO", res.time_reserva, res.name, res.guests + " Pax", res.zone || "General", res.status.toUpperCase() ];
+        });
+
+        autoTable(doc, {
+            startY: 35,
+            head: [['Código', 'Hora', 'Cliente', 'Aforo', 'Zona', 'Estado']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [218, 165, 32] } 
+        });
+
+        doc.save(`Lista_Reservas_${new Date().getTime()}.pdf`);
+    } catch(e) {
+        console.error(e);
+        alert("Asegúrate de haber instalado 'jspdf' y 'jspdf-autotable' en tu proyecto.");
+    }
+  };
+
   const filteredReservasMesa = reservasNormalesOnly.filter(r => {
       const searchLower = reservaSearch.toLowerCase();
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
@@ -879,19 +901,21 @@ export default function DashboardPage() {
       return matchText && matchStatus && matchDate;
   });
 
-  // Filtros aplicados sobre Ventas Show (Tickets)
   const filteredReservasShow = reservasTicketsOnly.filter(r => {
     const searchLower = reservaSearch.toLowerCase();
     const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
     const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
     const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
-    const matchDate = reservaDateFilter ? r.date_reserva === reservaDateFilter : true;
-    return matchText && matchStatus && matchDate;
+    const matchDate = showFilterDate ? r.date_reserva === showFilterDate : true;
+    const matchShow = showFilterShowId ? (
+        getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId) ||
+        shows.find(s => s.id.toString() === showFilterShowId)?.date_event === r.date_reserva
+    ) : true;
+    return matchText && matchStatus && matchDate && matchShow;
   });
 
   const updateSolicitudStatus = async (id: number, status: string) => { await supabase.from('solicitudes').update({ status }).eq('id', id); fetchData(); };
 
-  // --- BOTONES DE CONTACTO DIRECTO ---
   const openWhatsApp = (phone: string, msg: string) => {
       if(!phone) return;
       const cleanPhone = phone.replace(/\D/g, '');
@@ -920,7 +944,6 @@ export default function DashboardPage() {
   return (
     <div className={`min-h-screen bg-black text-white flex ${montserrat.className}`}>
       
-      {/* SIDEBAR */}
       <aside className="fixed left-0 top-0 h-full w-20 md:w-64 bg-zinc-900 border-r border-white/10 z-40 flex flex-col items-center md:items-start py-6 transition-all overflow-hidden hover:overflow-y-auto">
         <div className="px-0 md:px-6 mb-8 w-full flex justify-center md:justify-start shrink-0">
             <div className="relative w-32 h-12">
@@ -929,11 +952,7 @@ export default function DashboardPage() {
         </div>
         <nav className="flex-1 w-full space-y-1.5 px-2 overflow-y-auto custom-scrollbar pb-10">
             {TABS.filter((tab) => {
-                // El cajero solo puede ver estas 3 secciones
-                if (isCajero) {
-                    return ['ventas_show', 'reservas', 'pagos_web'].includes(tab.id);
-                }
-                // Si no es cajero (es admin), ve todo el menú
+                if (isCajero) return ['ventas_show', 'reservas', 'pagos_web'].includes(tab.id);
                 return true;
             }).map((tab) => (
                 <button
@@ -954,7 +973,6 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 ml-20 md:ml-64 p-4 md:p-8 bg-black min-h-screen w-[calc(100%-5rem)] md:w-[calc(100%-16rem)]">
         <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
             <div>
@@ -977,7 +995,6 @@ export default function DashboardPage() {
         </header>
 
        <AnimatePresence mode="wait">
-            {/* 1. VISTA RESUMEN (BLOQUEADO PARA CAJERO) */}
             {activeTab === "resumen" && !isCajero && (
                 <motion.div key="resumen" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -1023,7 +1040,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 1.5 NUEVO: VENTAS SHOW (PERMITIDO PARA CAJERO) */}
             {activeTab === "ventas_show" && (
                 <motion.div key="ventas_show" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -1059,14 +1075,39 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col xl:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
-                        <div className="relative w-full xl:w-1/3 group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-purple-500 transition-colors" />
-                            <input type="text" placeholder="Buscar comprador o ticket..." className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-purple-500 transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
+                            <div className="relative w-full sm:w-64 group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-purple-500 transition-colors" />
+                                <input type="text" placeholder="Buscar comprador o ticket..." className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-purple-500 transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0 custom-scrollbar snap-x">
+                                {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Por Enviar' }, { id: 'confirmadas', label: 'Enviados' }, { id: 'realizado', label: 'Escaneados' }].map(filter => (
+                                    <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-purple-600 text-white border-purple-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex gap-2 overflow-x-auto w-full xl:w-auto pb-2 xl:pb-0 custom-scrollbar snap-x">
-                            {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Por Enviar' }, { id: 'confirmadas', label: 'Enviados' }, { id: 'realizado', label: 'Escaneados' }].map(filter => (
-                                <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-105' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
-                            ))}
+
+                        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                            <select 
+                                className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 font-bold uppercase tracking-wider"
+                                value={showFilterShowId} 
+                                onChange={(e) => setShowFilterShowId(e.target.value)}
+                            >
+                                <option value="">Todos los Shows</option>
+                                {shows.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                            </select>
+                            <input 
+                                type="date" 
+                                className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 scheme-dark font-bold uppercase tracking-wider" 
+                                value={showFilterDate} 
+                                onChange={(e) => setShowFilterDate(e.target.value)} 
+                            />
+                            <button 
+                                onClick={generarPDFListaShow}
+                                className="bg-white text-black hover:bg-zinc-200 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
+                            >
+                                <FileDown className="w-4 h-4" /> Exportar Lista
+                            </button>
                         </div>
                     </div>
 
@@ -1084,7 +1125,7 @@ export default function DashboardPage() {
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {filteredReservasShow.length === 0 ? (
-                                        <tr><td colSpan={5} className="px-6 py-20 text-center"><Ticket className="w-8 h-8 text-zinc-700 mx-auto mb-2"/><span className="text-zinc-500 font-medium">No hay venta de entradas recientes.</span></td></tr>
+                                        <tr><td colSpan={5} className="px-6 py-20 text-center"><Ticket className="w-8 h-8 text-zinc-700 mx-auto mb-2"/><span className="text-zinc-500 font-medium">No hay venta de entradas que coincidan.</span></td></tr>
                                     ) : (
                                         filteredReservasShow.map((res) => {
                                             const { tickets, menu } = getTicketDetails(res.pre_order);
@@ -1108,24 +1149,24 @@ export default function DashboardPage() {
                                                         {tickets.map((t:any, i:number) => (
                                                             <span key={i} className="text-xs font-bold text-white"><span className="text-purple-400">{t.quantity}x</span> {t.name}</span>
                                                         ))}
-                                                        {menu.length > 0 && <span className="text-[10px] text-[#DAA520] font-bold uppercase mt-1">+ {menu.reduce((a:any,c:any)=>a+c.quantity,0)} Items de Menú Anticipado</span>}
+                                                        {menu.length > 0 && <span className="text-[10px] text-[#DAA520] font-bold uppercase mt-1">+ {menu.reduce((a:any,c:any)=>a+c.quantity,0)} Items de Menú</span>}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
                                                     {res.status === 'pendiente' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full text-[10px] font-bold uppercase"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"/> Por Enviar</span>}
                                                     {res.status === 'confirmada' && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-[10px] font-bold uppercase"><CheckCircle className="w-3 h-3"/> APROBADO</span>}
-                                                    {(res.status === 'realizado' || res.status === 'ingresado') && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase"><QrCode className="w-3 h-3"/> Escaneado Local</span>}
+                                                    {(res.status === 'realizado' || res.status === 'ingresado') && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[10px] font-bold uppercase"><QrCode className="w-3 h-3"/> Escaneado</span>}
                                                 </td>
                                                 <td className="px-4 py-4 text-right">
                                                     <div className="flex flex-wrap justify-end gap-2 items-center">
                                                         {res.status === 'pendiente' && (
-                                                            <button onClick={() => handleConfirmShowTicket(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg shadow-green-900/20">
+                                                            <button onClick={() => handleConfirmShowTicket(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-[10px] font-bold uppercase shadow-lg shadow-green-900/20">
                                                                 {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <CheckCircle className="w-3 h-3"/>} <span className="hidden xl:inline">Aprobar</span>
                                                             </button>
                                                         )}
                                                         {res.status === 'confirmada' && (
-                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all text-xs font-bold uppercase shadow-lg">
-                                                                <QrCode className="w-3 h-3"/> <span className="hidden xl:inline">ESCANEAR / INGRESAR</span>
+                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all text-[10px] font-bold uppercase shadow-lg">
+                                                                <QrCode className="w-3 h-3"/> <span className="hidden xl:inline">ESCANEAR</span>
                                                             </button>
                                                         )}
                                                         <button onClick={() => handleDeleteReserva(res.id)} className="p-2 bg-zinc-800 hover:bg-red-500/20 text-zinc-500 hover:text-red-500 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
@@ -1142,13 +1183,12 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 2. GESTIÓN DE RESERVAS DE MESA (PERMITIDO PARA CAJERO) */}
             {activeTab === "reservas" && (
                 <motion.div key="reservas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                         <div>
                             <h2 className="text-xl font-black text-white flex items-center gap-2"><Calendar className="w-6 h-6 text-blue-400"/> Reservas de Mesa Normales</h2>
-                            <p className="text-xs text-zinc-400">Panel para gestionar ubicaciones y pedidos web de comida sin tickets asociados.</p>
+                            <p className="text-xs text-zinc-400">Panel para gestionar ubicaciones y pedidos web sin tickets asociados.</p>
                         </div>
                         <button onClick={() => handleResetTable('reservas', 'Reservas')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
                             <Trash2 className="w-4 h-4" /> Resetear Reservas
@@ -1178,16 +1218,32 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="bg-zinc-900 border border-white/10 p-4 rounded-2xl mb-6 flex flex-col xl:flex-row gap-4 justify-between items-center sticky top-0 z-30 shadow-2xl shrink-0">
-                        <div className="relative w-full xl:w-1/3 group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
-                            <input type="text" placeholder="Buscar reserva..." className="w-full bg-black border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
+                            <div className="relative w-full sm:w-64 group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520] transition-colors" />
+                                <input type="text" placeholder="Buscar reserva..." className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0 custom-scrollbar snap-x">
+                                {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'confirmadas', label: 'Confirmadas' }, { id: 'realizado', label: 'Ingresados' }].map(filter => (
+                                    <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-[#DAA520] text-black border-[#DAA520] shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex gap-2 overflow-x-auto w-full xl:w-auto pb-2 xl:pb-0 custom-scrollbar snap-x">
-                            {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Pendientes' }, { id: 'confirmadas', label: 'Confirmadas' }, { id: 'realizado', label: 'Ingresados' }].map(filter => (
-                                <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-[#DAA520] text-black border-[#DAA520] shadow-lg scale-105' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
-                            ))}
+
+                        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                            <input 
+                                type="date" 
+                                className="w-full sm:w-auto bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#DAA520] scheme-dark font-bold uppercase tracking-wider" 
+                                value={reservaDateFilter} 
+                                onChange={(e) => setReservaDateFilter(e.target.value)} 
+                            />
+                            <button 
+                                onClick={generarPDFListaReservas}
+                                className="bg-white text-black hover:bg-zinc-200 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
+                            >
+                                <FileDown className="w-4 h-4" /> Exportar Lista
+                            </button>
                         </div>
-                        <input type="date" className="w-full xl:w-auto bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#DAA520] scheme-dark font-bold uppercase tracking-wider" value={reservaDateFilter} onChange={(e) => setReservaDateFilter(e.target.value)} />
                     </div>
 
                     <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden flex-1 min-h-[500px] flex flex-col">
@@ -1243,12 +1299,12 @@ export default function DashboardPage() {
                                                 <td className="px-4 py-4 text-right">
                                                     <div className="flex flex-wrap justify-end gap-2 items-center">
                                                         {res.status === 'pendiente' && (
-                                                            <button onClick={() => handleConfirmReservation(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-xs font-bold uppercase">
+                                                            <button onClick={() => handleConfirmReservation(res)} disabled={processingId === res.id} className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all text-[10px] font-bold uppercase">
                                                                 {processingId === res.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <CheckCircle className="w-3 h-3"/>} <span className="hidden xl:inline">Aprobar</span>
                                                             </button>
                                                         )}
                                                         {res.status === 'confirmada' && (
-                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all text-xs font-bold uppercase">
+                                                            <button onClick={() => handleManualCheckIn(res.id)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all text-[10px] font-bold uppercase">
                                                                 <UserCheck className="w-3 h-3"/> <span className="hidden xl:inline">INGRESO</span>
                                                             </button>
                                                         )}
@@ -1265,7 +1321,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 3. PAGOS WEB (PERMITIDO PARA CAJERO) */}
             {activeTab === "pagos_web" && (
                 <motion.div key="pagos_web" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                      <div className="flex justify-end mb-4 gap-2">
@@ -1300,7 +1355,7 @@ export default function DashboardPage() {
                             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                                 <div className="flex gap-2 overflow-x-auto custom-scrollbar snap-x">
                                     {[{ id: 'todos', label: 'Todos' }, { id: 'getnet', label: 'Getnet' }, { id: 'transferencia', label: 'Transf.' }, { id: 'puerta', label: 'Puerta' }, { id: 'manual', label: 'Manual' }].map(filter => (
-                                        <button key={filter.id} onClick={() => setPaymentMethodFilter(filter.id)} className={`snap-start px-4 py-2 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all border ${paymentMethodFilter === filter.id ? 'bg-blue-600 text-white border-blue-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                                        <button key={filter.id} onClick={() => setPaymentMethodFilter(filter.id)} className={`snap-start px-4 py-2 rounded-xl text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${paymentMethodFilter === filter.id ? 'bg-blue-600 text-white border-blue-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
                                     ))}
                                 </div>
                                 <div className="relative w-full sm:w-64">
@@ -1352,7 +1407,7 @@ export default function DashboardPage() {
                                                         <Receipt className="w-3 h-3"/> Boleta
                                                     </button>
                                                     <select 
-                                                        className={`bg-zinc-900 text-xs px-3 py-2 rounded-lg outline-none font-bold uppercase border ${p.reserva_obj.status === 'confirmada' ? 'text-green-500 border-green-500/30' : p.reserva_obj.status === 'pendiente' ? 'text-yellow-500 border-yellow-500/30' : 'text-red-500 border-red-500/30'}`}
+                                                        className={`bg-zinc-900 text-[10px] px-3 py-2 rounded-lg outline-none font-bold uppercase border ${p.reserva_obj.status === 'confirmada' ? 'text-green-500 border-green-500/30' : p.reserva_obj.status === 'pendiente' ? 'text-yellow-500 border-yellow-500/30' : 'text-red-500 border-red-500/30'}`}
                                                         value={p.reserva_obj.status}
                                                         onChange={(e) => handleUpdatePaymentStatus(p.reserva_obj.id, e.target.value)}
                                                     >
@@ -1380,7 +1435,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 4. FINANZAS / ERP AVANZADO (BLOQUEADO PARA CAJERO) */}
             {activeTab === "finanzas" && !isCajero && (
                 <motion.div key="finanzas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full">
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
@@ -1392,26 +1446,24 @@ export default function DashboardPage() {
                              <button onClick={() => handleResetTable('ventas_generales', 'Finanzas (Ingresos)')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-3 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 transition-all">
                                  <Trash2 className="w-4 h-4" /> Reset
                              </button>
-                            <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
+                            <button onClick={handleOpenVentaModal} className="bg-green-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-green-700 transition-colors shadow-lg">
                                 <DollarSign className="w-4 h-4" /> Ingreso Manual (POS)
                             </button>
                         </div>
                     </div>
 
-                    {/* SUB-NAVEGACIÓN ERP */}
                     <div className="flex overflow-x-auto custom-scrollbar gap-2 mb-6 pb-2 border-b border-white/10 shrink-0">
                         {FINANZAS_TABS.map(tab => (
                             <button 
                                 key={tab.id} 
                                 onClick={() => setActiveFinanzasTab(tab.id)}
-                                className={`whitespace-nowrap px-4 py-2 rounded-t-xl text-xs font-bold uppercase transition-all ${activeFinanzasTab === tab.id ? 'bg-white/10 text-white border-b-2 border-[#DAA520]' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                className={`whitespace-nowrap px-4 py-2 rounded-t-xl text-[10px] font-bold uppercase transition-all ${activeFinanzasTab === tab.id ? 'bg-white/10 text-white border-b-2 border-[#DAA520]' : 'text-zinc-500 hover:text-zinc-300'}`}
                             >
                                 {tab.label}
                             </button>
                         ))}
                     </div>
 
-                    {/* ERP: 4.1 INGRESOS */}
                     {activeFinanzasTab === "ingresos" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1477,12 +1529,11 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {/* ERP: 4.2 COMPRAS */}
                     {activeFinanzasTab === "compras" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-center">
                                 <div><h3 className="font-bold text-lg">Registro de Compras</h3><p className="text-xs text-zinc-500">Proveedores, insumos y mercadería.</p></div>
-                                <button onClick={() => openFinanceModal('compras')} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase">+ Nueva Compra</button>
+                                <button onClick={() => openFinanceModal('compras')} className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase">+ Nueva Compra</button>
                             </div>
                             <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -1508,12 +1559,11 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {/* ERP: 4.3 INVENTARIO */}
                     {activeFinanzasTab === "inventario" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-center">
                                 <div><h3 className="font-bold text-lg">Control de Inventario</h3><p className="text-xs text-zinc-500">Cálculo de Costo de Ventas y Mermas.</p></div>
-                                <button onClick={() => openFinanceModal('inventario')} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase">+ Registrar Producto</button>
+                                <button onClick={() => openFinanceModal('inventario')} className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase">+ Registrar Producto</button>
                             </div>
                             <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -1543,12 +1593,11 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {/* ERP: 4.4 GASTOS */}
                     {activeFinanzasTab === "gastos" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-center">
                                 <div><h3 className="font-bold text-lg">Gastos Operativos</h3><p className="text-xs text-zinc-500">Fijos (Arriendo, Luz) y Variables (Marketing, Comisiones).</p></div>
-                                <button onClick={() => openFinanceModal('gastos')} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase">+ Registrar Gasto</button>
+                                <button onClick={() => openFinanceModal('gastos')} className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase">+ Registrar Gasto</button>
                             </div>
                             <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -1574,12 +1623,11 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {/* ERP: 4.5 SUELDOS */}
                     {activeFinanzasTab === "sueldos" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-center">
                                 <div><h3 className="font-bold text-lg flex items-center gap-2"><Briefcase className="w-5 h-5"/> Remuneraciones</h3><p className="text-xs text-zinc-500">Sueldos, bonos y propinas del equipo.</p></div>
-                                <button onClick={() => openFinanceModal('trabajadores')} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase">+ Agregar Planilla</button>
+                                <button onClick={() => openFinanceModal('trabajadores')} className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase">+ Agregar Planilla</button>
                             </div>
                             <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -1609,12 +1657,11 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {/* ERP: 4.6 TRIBUTARIO */}
                     {activeFinanzasTab === "tributario" && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="flex justify-between items-center">
                                 <div><h3 className="font-bold text-lg flex items-center gap-2"><Archive className="w-5 h-5"/> Impuestos y Declaraciones</h3><p className="text-xs text-zinc-500">Control de F29, IVA y F22.</p></div>
-                                <button onClick={() => openFinanceModal('tributario')} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold uppercase">+ Registro Tributario</button>
+                                <button onClick={() => openFinanceModal('tributario')} className="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase">+ Registro Tributario</button>
                             </div>
                             <div className="bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -1643,7 +1690,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 5. MENÚ RESERVA / EXPRESS (BLOQUEADO PARA CAJERO) */}
             {activeTab === "menu_express" && !isCajero && (
                 <motion.div key="menu_express" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -1655,7 +1701,7 @@ export default function DashboardPage() {
                              <button onClick={() => handleResetTable('productos_reserva', 'Catálogo del Menú')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
                                  <Trash2 className="w-4 h-4" /> Resetear Menú
                              </button>
-                            <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                            <button onClick={() => handleOpenMenuModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
                                 <Plus className="w-4 h-4" /> Nuevo Producto
                             </button>
                         </div>
@@ -1687,11 +1733,9 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 6. CLIENTES BOULEVARD (BLOQUEADO PARA CAJERO) */}
             {activeTab === "clientes" && !isCajero && (
                 <motion.div key="clientes" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        {/* Cumpleaños */}
                         <div className="bg-gradient-to-br from-zinc-900 to-black border border-[#DAA520]/30 p-6 rounded-3xl relative overflow-hidden shadow-2xl">
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Cake className="w-32 h-32 text-[#DAA520]" /></div>
                             <h3 className="text-lg font-black text-white mb-2 flex items-center gap-2 uppercase tracking-wider"><Gift className="w-5 h-5 text-[#DAA520]"/> Filtro Cumpleañeros</h3>
@@ -1707,7 +1751,6 @@ export default function DashboardPage() {
                                             <div><span className="text-xs font-bold text-white block">{c.nombre}</span><span className="text-[10px] text-zinc-500">{c.whatsapp}</span></div>
                                         </div>
                                         <div className="flex gap-2">
-                                            {/* Botón de envío automatizado con QR */}
                                             <button 
                                                 onClick={() => handleSendBirthdayGift(c)} 
                                                 disabled={sendingGiftId === c.id}
@@ -1717,7 +1760,6 @@ export default function DashboardPage() {
                                                 {sendingGiftId === c.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Gift className="w-4 h-4"/>}
                                             </button>
                                             
-                                            {/* Botón clásico manual de WhatsApp de respaldo */}
                                             <button 
                                                 onClick={() => openWhatsApp(c.whatsapp, `¡Hola ${c.nombre}! De parte de Boulevard Zapallar te deseamos un muy feliz cumpleaños 🎂. Te tenemos un regalo especial...`)} 
                                                 className="bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white p-2 rounded-lg transition-colors" 
@@ -1731,7 +1773,6 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* Importador */}
                         <div className="bg-zinc-900 border border-white/5 p-6 rounded-3xl flex flex-col justify-center items-center text-center shadow-lg">
                             <input type="file" accept=".csv" ref={csvInputRef} onChange={handleCSVUpload} className="hidden" />
                             <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-4 border border-green-500/20">
@@ -1739,7 +1780,7 @@ export default function DashboardPage() {
                             </div>
                             <h3 className="text-lg font-black text-white uppercase tracking-wider mb-2">Importar Base (CSV)</h3>
                             <p className="text-xs text-zinc-500 mb-6 max-w-sm">Sube un archivo .csv con las columnas exactas: <br/><strong className="text-zinc-300">Nombre, Email, Whatsapp, Fecha Nacimiento</strong> (Formato fecha: YYYY-MM-DD)</p>
-                            <button onClick={() => csvInputRef.current?.click()} className="bg-white text-black px-6 py-3 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-zinc-200 transition-all shadow-xl">
+                            <button onClick={() => csvInputRef.current?.click()} className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-zinc-200 transition-all shadow-xl">
                                 <Upload className="w-4 h-4" /> Seleccionar Archivo
                             </button>
                         </div>
@@ -1755,7 +1796,7 @@ export default function DashboardPage() {
                                  <button onClick={() => handleResetTable('clientes', 'Todos los Clientes')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
                                      <Trash2 className="w-4 h-4" /> Vaciar BD
                                  </button>
-                                <button onClick={() => handleOpenClientModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                                <button onClick={() => handleOpenClientModal()} className="bg-[#DAA520] text-black px-4 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
                                     <UserPlus className="w-4 h-4" /> Nuevo
                                 </button>
                             </div>
@@ -1802,7 +1843,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 7. SHOWS (BLOQUEADO PARA CAJERO) */}
             {activeTab === "shows" && !isCajero && (
                 <motion.div key="shows" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1811,10 +1851,10 @@ export default function DashboardPage() {
                             <input type="text" placeholder="Buscar show..." className="w-full bg-zinc-900 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" />
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
-                             <button onClick={() => handleResetTable('shows', 'Todos los Shows')} className="flex-1 sm:flex-none bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-3 sm:py-2 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 transition-all">
+                             <button onClick={() => handleResetTable('shows', 'Todos los Shows')} className="flex-1 sm:flex-none bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-3 sm:py-2 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all">
                                  <Trash2 className="w-4 h-4" /> Reset
                              </button>
-                            <button onClick={() => handleOpenShowModal()} className="flex-1 sm:flex-none bg-[#DAA520] text-black px-6 py-3 sm:py-2 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                            <button onClick={() => handleOpenShowModal()} className="flex-1 sm:flex-none bg-[#DAA520] text-black px-6 py-3 sm:py-2 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
                                 <Plus className="w-4 h-4" /> Nuevo Show
                             </button>
                         </div>
@@ -1831,6 +1871,8 @@ export default function DashboardPage() {
                                             <h3 className="font-black text-white text-xl uppercase tracking-wide">{show.title}</h3>
                                             {show.tag && <span className="text-[9px] bg-white text-black px-2 py-0.5 rounded font-bold uppercase">{show.tag}</span>}
                                             {show.is_adult && <span className="text-[9px] bg-red-900 text-red-200 px-2 py-0.5 rounded font-bold border border-red-500/30">+18</span>}
+                                            {show.external_ticket_url && <span className="text-[9px] bg-blue-900 text-blue-200 px-2 py-0.5 rounded font-bold border border-blue-500/30 flex items-center gap-1"><LinkIcon className="w-3 h-3"/> TICKET EXTERNO</span>}
+                                            {show.lock_time && <span className="text-[9px] bg-yellow-900 text-yellow-200 px-2 py-0.5 rounded font-bold border border-yellow-500/30 flex items-center gap-1"><Clock className="w-3 h-3"/> CIERRE WEB: {show.lock_time}</span>}
                                         </div>
                                         <p className="text-sm text-[#DAA520] font-medium mb-3">{show.subtitle}</p>
                                         <div className="flex flex-wrap gap-x-6 gap-y-2 mt-1">
@@ -1856,7 +1898,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 8. PROMOCIONES (BLOQUEADO PARA CAJERO) */}
             {activeTab === "promos" && !isCajero && (
                 <motion.div key="promos" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="flex justify-between items-center mb-6">
@@ -1865,7 +1906,7 @@ export default function DashboardPage() {
                              <button onClick={() => handleResetTable('promociones', 'Promociones')} className="bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 transition-all">
                                  <Trash2 className="w-4 h-4" /> Reset
                              </button>
-                            <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-6 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
+                            <button onClick={() => handleOpenPromoModal()} className="bg-[#DAA520] text-black px-6 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-[#B8860B] transition-colors shadow-lg">
                                 <Plus className="w-4 h-4" /> Nueva Promo
                             </button>
                         </div>
@@ -1905,7 +1946,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 9. EVENTOS / COTIZACIONES (BLOQUEADO PARA CAJERO) */}
             {activeTab === "eventos" && !isCajero && (
                 <motion.div key="eventos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
@@ -1944,13 +1984,13 @@ export default function DashboardPage() {
                                     <div className="mt-6 flex flex-col sm:flex-row gap-3">
                                         <button 
                                             onClick={() => updateSolicitudStatus(req.id, 'cotizada')} 
-                                            className={`flex-1 py-3.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border flex items-center justify-center gap-2 ${req.status === 'cotizada' ? 'bg-transparent border-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-white text-black border-white hover:bg-zinc-200 shadow-xl'}`}
+                                            className={`flex-1 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border flex items-center justify-center gap-2 ${req.status === 'cotizada' ? 'bg-transparent border-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-white text-black border-white hover:bg-zinc-200 shadow-xl'}`}
                                             disabled={req.status === 'cotizada'}
                                         >
                                             {req.status === 'cotizada' ? <><CheckCircle className="w-4 h-4"/> Ya Cotizada</> : 'Marcar como Atendida'}
                                         </button>
                                         <div className="flex flex-1 gap-2">
-                                            <button onClick={() => openWhatsApp(req.phone, `Hola ${req.name}, recibimos tu solicitud para celebrar un ${req.type} en Boulevard Zapallar...`)} className="flex-1 py-3.5 bg-[#25D366]/10 border border-[#25D366]/50 text-[#25D366] rounded-xl text-xs font-bold uppercase hover:bg-[#25D366] hover:text-black transition-colors flex items-center justify-center gap-2 shadow-lg">
+                                            <button onClick={() => openWhatsApp(req.phone, `Hola ${req.name}, recibimos tu solicitud para celebrar un ${req.type} en Boulevard Zapallar...`)} className="flex-1 py-3.5 bg-[#25D366]/10 border border-[#25D366]/50 text-[#25D366] rounded-xl text-[10px] font-bold uppercase hover:bg-[#25D366] hover:text-black transition-colors flex items-center justify-center gap-2 shadow-lg">
                                                 <Send className="w-4 h-4"/> WhatsApp
                                             </button>
                                             <button onClick={() => openMail(req.email, `Propuesta para tu ${req.type} en BZ`)} className="w-14 flex items-center justify-center bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-700 transition-colors">
@@ -1965,7 +2005,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 10. CARRUSEL (BLOQUEADO PARA CAJERO) */}
             {activeTab === "carrusel" && !isCajero && (
                 <motion.div key="carrusel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <div className="bg-zinc-900 border border-white/5 p-6 rounded-3xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -2025,7 +2064,6 @@ export default function DashboardPage() {
                 </motion.div>
             )}
 
-            {/* 11. RRHH / EQUIPO (BLOQUEADO PARA CAJERO) */}
             {activeTab === "rrhh" && !isCajero && (
                 <motion.div key="rrhh" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
@@ -2076,10 +2114,6 @@ export default function DashboardPage() {
             )}
        </AnimatePresence>
 
-        {/* --- MODALES COMPARTIDOS --- */}
-        {/* Renderizamos todos los modales ANTES del cierre del main, pero SIN el AnimatePresence exterior que causaba conflictos */}
-
-        {/* MODAL BOLETA DE PAGO WEB */}
         {isBoletaModalOpen && currentBoletaData && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsBoletaModalOpen(false)} />
@@ -2088,7 +2122,6 @@ export default function DashboardPage() {
                         <h3 className="font-black text-white uppercase flex items-center gap-2"><Receipt className="w-4 h-4"/> Detalle y Boleta</h3>
                         <button onClick={() => setIsBoletaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
                     </div>
-                    
                     <div className="overflow-y-auto custom-scrollbar mb-4 bg-white text-black p-4 rounded-lg flex-1" id="boleta-imprimible">
                         <div className="text-center mb-4 border-b-2 border-black/20 pb-4">
                             <h2 className="font-black text-xl tracking-widest">BOULEVARD</h2>
@@ -2097,14 +2130,12 @@ export default function DashboardPage() {
                             <p className="text-[10px]">Giro: Restaurant y Espectáculos</p>
                             <p className="text-[10px]">Curicó, Maule, Chile</p>
                         </div>
-                        
                         <div className="text-[10px] mb-4 space-y-1">
                             <p><strong>BOLETA ELECTRÓNICA N°:</strong> {currentBoletaData.id}</p>
                             <p><strong>FECHA:</strong> {new Date(currentBoletaData.fecha).toLocaleString('es-CL')}</p>
                             <p><strong>CLIENTE:</strong> {currentBoletaData.cliente}</p>
                             <p><strong>MÉTODO:</strong> {currentBoletaData.metodo} ({currentBoletaData.ref_getnet})</p>
                         </div>
-
                         <table className="w-full text-[10px] mb-4">
                             <thead className="border-b border-black/20">
                                 <tr><th className="text-left py-1">Cant</th><th className="text-left py-1">Detalle</th><th className="text-right py-1">Total</th></tr>
@@ -2117,23 +2148,17 @@ export default function DashboardPage() {
                                         <td className="text-right py-1">${(item.price * item.quantity).toLocaleString('es-CL')}</td>
                                     </tr>
                                 ))}
-                                {(!currentBoletaData.detalle_completo || currentBoletaData.detalle_completo.length === 0) && (
-                                    <tr><td colSpan={3} className="py-1 text-center italic text-zinc-500">Detalle genérico (Venta Manual)</td></tr>
-                                )}
                             </tbody>
                         </table>
-
                         <div className="text-right mb-6">
                             <p className="text-sm font-black">TOTAL: ${currentBoletaData.monto.toLocaleString('es-CL')}</p>
                             <p className="text-[8px] text-gray-500 mt-1">El IVA se encuentra incluido en el precio</p>
                         </div>
-                        
                         <div className="text-center text-[9px] border-t border-black/20 pt-2">
                             <p>GRACIAS POR SU COMPRA</p>
                             <p className="font-bold mt-1 tracking-widest">TIMBRE ELECTRÓNICO SII</p>
                         </div>
                     </div>
-
                     <button onClick={generatePDFBoleta} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
                         <FileDown className="w-4 h-4"/> Descargar PDF
                     </button>
@@ -2141,7 +2166,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL COMPROBANTE DE TRANSFERENCIA */}
         {isComprobanteModalOpen && currentComprobanteUrl && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsComprobanteModalOpen(false)} />
@@ -2161,7 +2185,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL INGRESAR PAGO MANUAL WEB */}
         {isAddPaymentModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddPaymentModalOpen(false)} />
@@ -2172,8 +2195,8 @@ export default function DashboardPage() {
                     </div>
                     <form onSubmit={handleSaveManualPayment} className="space-y-4">
                         <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre Comprador</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.cliente} onChange={e => setNewManualPayment({...newManualPayment, cliente: e.target.value})} /></div>
-                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email Cliente (Para BD)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.email} onChange={e => setNewManualPayment({...newManualPayment, email: e.target.value})} /></div>
-                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Detalle Exacto</label><input required type="text" placeholder="Ej: 2 Entradas General + Botella Ramazzotti" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.detalle} onChange={e => setNewManualPayment({...newManualPayment, detalle: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email Cliente</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.email} onChange={e => setNewManualPayment({...newManualPayment, email: e.target.value})} /></div>
+                        <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Detalle Exacto</label><input required type="text" placeholder="Ej: 2 Entradas General" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#DAA520]" value={newManualPayment.detalle} onChange={e => setNewManualPayment({...newManualPayment, detalle: e.target.value})} /></div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio Efectivo</label>
@@ -2184,14 +2207,12 @@ export default function DashboardPage() {
                             </div>
                             <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Monto Pagado ($)</label><input required type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-lg outline-none text-right" value={newManualPayment.monto || ''} onChange={e => setNewManualPayment({...newManualPayment, monto: parseInt(e.target.value)})} /></div>
                         </div>
-                        
                         {newManualPayment.metodo === 'Transferencia' && (
                             <div className="col-span-2 mt-2">
                                 <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante (Opcional)</label>
                                 <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#DAA520] file:text-black hover:file:bg-[#B8860B] transition-colors outline-none cursor-pointer" />
                             </div>
                         )}
-
                         <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-lg">
                             {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Registrar e Ingresar</>}
                         </button>
@@ -2200,7 +2221,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL VENTA ENTRADAS PUERTA */}
         {isVentaPuertaModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaPuertaModalOpen(false)} />
@@ -2209,9 +2229,7 @@ export default function DashboardPage() {
                         <h3 className="font-black text-white uppercase flex items-center gap-2"><Ticket className="w-5 h-5 text-purple-500"/> Venta de Entrada Manual</h3>
                         <button onClick={() => setIsVentaPuertaModalOpen(false)} className="text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
                     </div>
-                    
                     <form onSubmit={handleSaveVentaPuerta} className="space-y-4">
-                        {/* Selección de Show y Ticket */}
                         <div className="bg-black/50 p-4 rounded-2xl border border-white/5 space-y-4">
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Seleccionar Show</label>
@@ -2220,13 +2238,11 @@ export default function DashboardPage() {
                                     {shows.map(s => <option key={s.id} value={s.id}>{s.title} ({s.date_event})</option>)}
                                 </select>
                             </div>
-
                             {ventaPuertaData.showId && (() => {
                                 const selectedShow = shows.find(s => s.id.toString() === ventaPuertaData.showId);
                                 const tickets = selectedShow?.tickets || [];
                                 const currentTicketPrice = tickets[ventaPuertaData.ticketIndex]?.price || 0;
                                 const calcTotal = currentTicketPrice * ventaPuertaData.quantity;
-
                                 return (
                                     <>
                                         <div className="grid grid-cols-2 gap-4">
@@ -2250,13 +2266,10 @@ export default function DashboardPage() {
                                 );
                             })()}
                         </div>
-
-                        {/* Datos del Cliente y Pago */}
                         <div className="grid grid-cols-2 gap-4">
                             <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nombre</label><input required type="text" placeholder="Ej: Roberto Alfaro" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.cliente} onChange={e => setVentaPuertaData({...ventaPuertaData, cliente: e.target.value})} /></div>
                             <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">WhatsApp</label><input required type="text" placeholder="+569..." className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.whatsapp} onChange={e => setVentaPuertaData({...ventaPuertaData, whatsapp: e.target.value})} /></div>
                         </div>
-                        
                         <div className="grid grid-cols-2 gap-4">
                             <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.email} onChange={e => setVentaPuertaData({...ventaPuertaData, email: e.target.value})} /></div>
                             <div>
@@ -2268,14 +2281,12 @@ export default function DashboardPage() {
                                 </select>
                             </div>
                         </div>
-
                         {ventaPuertaData.metodo_pago === 'transferencia' && (
                             <div className="col-span-2 mt-2">
                                 <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subir Comprobante de Transferencia</label>
                                 <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 transition-colors outline-none cursor-pointer" />
                             </div>
                         )}
-
                         <button disabled={isLoading || !ventaPuertaData.showId} type="submit" className="w-full bg-purple-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-purple-500 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
                             {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Ticket className="w-5 h-5"/> Generar Ticket</>}
                         </button>
@@ -2284,7 +2295,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL FINANZAS GENÉRICO (COMPRAS, GASTOS, INVENTARIO, ETC) */}
         {isFinanceModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsFinanceModalOpen(false)} />
@@ -2294,8 +2304,6 @@ export default function DashboardPage() {
                         <button onClick={() => setIsFinanceModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-5 h-5"/></button>
                     </div>
                     <form onSubmit={handleSaveFinanceRecord} className="space-y-4">
-                        
-                        {/* CAMPOS PARA COMPRAS */}
                         {financeModalType === 'compras' && (
                             <>
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
@@ -2312,8 +2320,6 @@ export default function DashboardPage() {
                                 </div>
                             </>
                         )}
-
-                        {/* CAMPOS PARA GASTOS */}
                         {financeModalType === 'gastos' && (
                             <>
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Fecha</label><input type="date" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none scheme-dark" value={currentFinanceRecord.fecha || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, fecha: e.target.value})} /></div>
@@ -2335,8 +2341,6 @@ export default function DashboardPage() {
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Monto ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-red-400 font-bold text-lg outline-none" value={currentFinanceRecord.monto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, monto: parseInt(e.target.value)})} /></div>
                             </>
                         )}
-
-                        {/* CAMPOS PARA INVENTARIO */}
                         {financeModalType === 'inventario' && (
                             <>
                                 <div className="grid grid-cols-2 gap-4">
@@ -2344,18 +2348,16 @@ export default function DashboardPage() {
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Producto / Insumo</label><input type="text" required placeholder="Ej: Cerveza Corona" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.producto || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, producto: e.target.value})} /></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inv. Inicial (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.inventario_inicial || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_inicial: parseInt(e.target.value)})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Compras (Unidades)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.compras || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, compras: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Inv. Inicial (Un)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.inventario_inicial || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_inicial: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Compras (Un)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.compras || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, compras: parseInt(e.target.value)})} /></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Mermas / Pérdidas (Un)</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-sm outline-none" value={currentFinanceRecord.mermas || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mermas: parseInt(e.target.value)})} /></div>
-                                    <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Inv. Final (Unidades)</label><input type="number" required className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.inventario_final || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_final: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-red-500 mb-1">Mermas / Pérdidas</label><input type="number" required className="w-full bg-black border border-red-900/50 rounded-xl p-3 text-red-400 text-sm outline-none" value={currentFinanceRecord.mermas || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, mermas: parseInt(e.target.value)})} /></div>
+                                    <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Inv. Final (Un)</label><input type="number" required className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.inventario_final || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, inventario_final: parseInt(e.target.value)})} /></div>
                                 </div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Costo Total Asociado ($)</label><input type="number" required placeholder="Costo en dinero de las compras" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold text-lg outline-none" value={currentFinanceRecord.costo_total || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, costo_total: parseInt(e.target.value)})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Costo Total ($)</label><input type="number" required placeholder="Costo compras" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold text-lg outline-none" value={currentFinanceRecord.costo_total || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, costo_total: parseInt(e.target.value)})} /></div>
                             </>
                         )}
-
-                        {/* CAMPOS PARA TRABAJADORES */}
                         {financeModalType === 'trabajadores' && (
                             <>
                                 <div className="grid grid-cols-2 gap-4">
@@ -2363,15 +2365,13 @@ export default function DashboardPage() {
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Trabajador</label><input type="text" required placeholder="Nombre Empleado" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.nombre || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, nombre: e.target.value})} /></div>
                                 </div>
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cargo</label><input type="text" required placeholder="Ej: Bartender, Garzón, Guardia" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.cargo || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, cargo: e.target.value})} /></div>
-                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sueldo Base Acordado ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-lg font-bold outline-none" value={currentFinanceRecord.sueldo_base || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, sueldo_base: parseInt(e.target.value)})} /></div>
+                                <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Sueldo Base ($)</label><input type="number" required className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-lg font-bold outline-none" value={currentFinanceRecord.sueldo_base || ''} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, sueldo_base: parseInt(e.target.value)})} /></div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Horas Extras ($)</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none" value={currentFinanceRecord.horas_extras || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, horas_extras: parseInt(e.target.value)})} /></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-green-500 mb-1">Propinas ($)</label><input type="number" className="w-full bg-black border border-green-900/50 rounded-xl p-3 text-green-400 font-bold text-sm outline-none" value={currentFinanceRecord.propinas || 0} onChange={e => setCurrentFinanceRecord({...currentFinanceRecord, propinas: parseInt(e.target.value)})} /></div>
                                 </div>
                             </>
                         )}
-
-                        {/* CAMPOS PARA TRIBUTARIO */}
                         {financeModalType === 'tributario' && (
                             <>
                                 <div className="grid grid-cols-2 gap-4">
@@ -2392,7 +2392,6 @@ export default function DashboardPage() {
                                 </div>
                             </>
                         )}
-
                         <button disabled={isLoading} type="submit" className="w-full bg-green-600 text-white font-bold uppercase tracking-widest py-4 rounded-xl mt-4 hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg">
                             {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Guardar Registro</>}
                         </button>
@@ -2401,7 +2400,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL VENTA POS RÁPIDA */}
         {isVentaModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsVentaModalOpen(false)} />
@@ -2436,7 +2434,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL CLIENTES (AÑADIDO EMAIL Y FECHA OPCIONAL) */}
         {isClientModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsClientModalOpen(false)} />
@@ -2458,7 +2455,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL MENÚ EXPRESS */}
         {isMenuModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsMenuModalOpen(false)} />
@@ -2492,7 +2488,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL EDICIÓN PROMOCIONES */}
         {isPromoModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsPromoModalOpen(false)} />
@@ -2531,7 +2526,6 @@ export default function DashboardPage() {
             </div>
         )}
 
-        {/* MODAL EDICIÓN SHOWS */}
         {isShowModalOpen && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsShowModalOpen(false)} />
@@ -2552,7 +2546,6 @@ export default function DashboardPage() {
                     <div className="flex-1 p-6 md:p-10 overflow-y-auto custom-scrollbar bg-zinc-900">
                         <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4"><h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">{currentShow.id ? "Configurar Evento" : "Crear Nuevo Evento"}</h3><button type="button" onClick={() => setIsShowModalOpen(false)} className="bg-black p-2 rounded-full text-zinc-500 hover:text-white"><X className="w-6 h-6"/></button></div>
                         <form onSubmit={handleSaveShow} className="space-y-6">
-                            
                             <div className="space-y-4">
                                 <div><label className="block text-[10px] uppercase font-bold text-[#DAA520] mb-1 tracking-wider">Nombre del Show</label><input required type="text" placeholder="Ej: Fiesta de los 80s" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-lg font-bold outline-none focus:border-[#DAA520]" value={currentShow.title} onChange={e => setCurrentShow({...currentShow, title: e.target.value})} /></div>
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Subtítulo o Artistas</label><input type="text" placeholder="Ej: Banda en vivo + DJ Invitado" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none" value={currentShow.subtitle || ""} onChange={e => setCurrentShow({...currentShow, subtitle: e.target.value})} /></div>
@@ -2568,6 +2561,17 @@ export default function DashboardPage() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Ubicación</label><input type="text" readOnly className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-400 text-sm outline-none cursor-not-allowed" value={currentShow.location} /></div>
                                     <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Etiqueta Visual</label><input type="text" placeholder="Ej: SOLD OUT" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none focus:border-[#DAA520]" value={currentShow.tag || ""} onChange={e => setCurrentShow({...currentShow, tag: e.target.value})} /></div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] uppercase font-bold text-blue-500 mb-1">Link Ticketera Externa (Opcional)</label>
+                                        <input type="url" placeholder="Ej: https://www.passline.com/..." className="w-full bg-black border border-blue-900/50 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-500" value={currentShow.external_ticket_url || ""} onChange={e => setCurrentShow({...currentShow, external_ticket_url: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] uppercase font-bold text-yellow-500 mb-1">Hora Bloqueo Venta Web</label>
+                                        <input type="time" className="w-full bg-black border border-yellow-900/50 rounded-xl p-4 text-white text-sm outline-none focus:border-yellow-500 scheme-dark" value={currentShow.lock_time || ""} onChange={e => setCurrentShow({...currentShow, lock_time: e.target.value})} />
+                                    </div>
                                 </div>
                                 
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Descripción Web</label><textarea rows={3} placeholder="Describa el ambiente del evento..." className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white text-sm outline-none resize-none focus:border-[#DAA520]" value={currentShow.description || ""} onChange={e => setCurrentShow({...currentShow, description: e.target.value})} /></div>
