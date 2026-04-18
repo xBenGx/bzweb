@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
     ArrowLeft, Calendar, MapPin, Clock, Minus, Plus, 
     ShoppingCart, Share2, AlertCircle, 
     Ticket as TicketIcon, CheckCircle, X, Loader2, AlertTriangle, Shield, 
-    Lock
+    Lock, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -29,7 +29,7 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<any>(null); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [isLocked, setIsLocked] = useState(false); // NUEVO: Controla si la venta cerró
+  const [isLocked, setIsLocked] = useState(false); 
 
   // Estados de interacción
   const [ticketsSelection, setTicketsSelection] = useState<{ [key: string]: number }>({});
@@ -66,7 +66,8 @@ export default function EventDetailPage() {
                     tickets: data.tickets && data.tickets.length > 0 ? data.tickets : [
                         { id: 'gen', name: 'Entrada General', desc: 'Acceso General', price: 15000 }
                     ],
-                    lock_time: data.lock_time || null // Guardamos la hora límite
+                    lock_time: data.lock_time || null,
+                    external_ticket_url: data.external_ticket_url || null // Rescatamos link externo
                 });
 
                 // Evaluar si ya está bloqueado en la carga inicial
@@ -88,38 +89,43 @@ export default function EventDetailPage() {
     fetchEvent();
   }, [id]);
 
-  // --- 2. LOOP DE REVISIÓN CONSTANTE (Evita compras por dejar pestaña abierta) ---
+  // --- 2. LOOP DE REVISIÓN CONSTANTE ---
   useEffect(() => {
       if (!event || !event.fullDate || !event.lock_time) return;
 
-      // Revisa cada 30 segundos si la hora ya pasó
+      // Revisa cada 15 segundos para mayor precisión
       const intervalId = setInterval(() => {
           checkLockStatus(event.fullDate, event.lock_time);
-      }, 30000); 
+      }, 15000); 
 
-      return () => clearInterval(intervalId); // Limpiar al salir de la vista
-  }, [event]);
+      return () => clearInterval(intervalId); 
+  }, [event?.fullDate, event?.lock_time]); // Dependencias optimizadas
 
-  // Función pura para evaluar el bloqueo
+  // Función robusta para evaluar el bloqueo
   const checkLockStatus = (dateEvent: string, lockTime: string) => {
-      const [year, month, day] = dateEvent.split('-');
-      const [hour, minute] = lockTime.split(':');
-      
-      const limitDate = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-      const now = new Date();
+      if (!dateEvent || !lockTime) return;
 
-      if (now >= limitDate) {
-          setIsLocked(true);
-          // Si se bloquea mientras el usuario tenía seleccionados tickets, los borramos
-          setTicketsSelection({}); 
-      } else {
-          setIsLocked(false);
+      try {
+          const [year, month, day] = dateEvent.split('-').map(Number);
+          const [hour, minute] = lockTime.split(':').map(Number);
+          
+          const limitDate = new Date(year, month - 1, day, hour, minute, 0);
+          const now = new Date();
+
+          if (now >= limitDate) {
+              setIsLocked(true);
+              setTicketsSelection({}); 
+          } else {
+              setIsLocked(false);
+          }
+      } catch (e) {
+          console.error("Error calculando hora de bloqueo", e);
       }
   };
 
   // --- LÓGICA DEL CARRITO ---
   const updateLocalSelection = (ticketId: string, delta: number) => {
-    if (isLocked) return; // Seguridad extra
+    if (isLocked) return; 
     setTicketsSelection(prev => {
         const current = prev[ticketId] || 0;
         const newValue = Math.max(0, current + delta);
@@ -229,6 +235,11 @@ export default function EventDetailPage() {
                     <Lock className="w-3 h-3"/> Venta Cerrada
                 </div>
             )}
+            {event.external_ticket_url && !isLocked && (
+                <div className="inline-flex items-center gap-1 bg-blue-600 text-white border border-blue-500/50 text-[10px] font-black px-3 py-1 rounded mb-3 ml-2 uppercase tracking-widest shadow-lg">
+                    <ExternalLink className="w-3 h-3"/> Ticketera Externa
+                </div>
+            )}
             <h1 className="text-3xl md:text-4xl font-bold text-white uppercase leading-tight mb-2 drop-shadow-xl">{event.title}</h1>
             <p className="text-lg text-zinc-300 font-medium mb-4">{event.subtitle}</p>
             
@@ -255,8 +266,8 @@ export default function EventDetailPage() {
           </div>
       )}
 
-      {/* --- SELECCIÓN DE ENTRADAS (Solo si no está bloqueado) --- */}
-      {!isLocked && (
+      {/* --- SELECCIÓN DE ENTRADAS (Solo si no está bloqueado Y no es ticketera externa) --- */}
+      {!isLocked && !event.external_ticket_url && (
           <div className="px-4 mt-6">
             <div className="bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
                 <div className="bg-zinc-800 p-4 flex justify-between items-center border-b border-white/5">
@@ -320,8 +331,8 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {/* --- POLÍTICAS DE COMPRA CON CHECK OBLIGATORIO (Se oculta si está bloqueado) --- */}
-      {!isLocked && (
+      {/* --- POLÍTICAS DE COMPRA CON CHECK OBLIGATORIO (Se oculta si está bloqueado o usa ticketera externa) --- */}
+      {!isLocked && !event.external_ticket_url && (
           <div className="px-4 mb-8">
             <div className={`bg-zinc-900/50 border rounded-xl p-5 transition-colors ${termsAccepted ? 'border-[#DAA520]' : 'border-white/5'}`}>
                 <div className="flex items-center gap-2 mb-3 text-zinc-300">
@@ -359,7 +370,7 @@ export default function EventDetailPage() {
           </div>
       )}
 
-      {/* --- BARRA INFERIOR DE ACCIÓN (Se adapta si está bloqueado) --- */}
+      {/* --- BARRA INFERIOR DE ACCIÓN (Se adapta según bloqueo y link externo) --- */}
       <div className="fixed bottom-0 left-0 w-full bg-zinc-900 border-t border-white/10 p-4 pb-6 shadow-[0_-5px_30px_rgba(0,0,0,0.5)] z-50 flex items-center justify-between safe-area-bottom">
         
         {isLocked ? (
@@ -369,6 +380,15 @@ export default function EventDetailPage() {
                 </span>
                 <span className="text-[10px] text-zinc-400 mt-1">Compra disponible en puerta.</span>
             </div>
+        ) : event.external_ticket_url ? (
+            <a 
+                href={event.external_ticket_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full px-8 py-4 rounded-xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 transition-all active:scale-95 bg-blue-600 hover:bg-blue-500 text-white"
+            >
+                Comprar en Ticketera <ExternalLink className="w-5 h-5" />
+            </a>
         ) : isFreeEvent ? (
             <button 
                 onClick={handleGoToReservations}
