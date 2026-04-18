@@ -1,10 +1,12 @@
+// app/tickets/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
     Search, Calendar, MapPin, ArrowLeft, 
-    ChevronRight, Music, Filter, Loader2, AlertCircle 
+    ChevronRight, Music, Filter, Loader2, AlertCircle,
+    ExternalLink, ShieldAlert, Lock
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,25 +22,23 @@ export default function TicketsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("semana");
-  const [visibleCount, setVisibleCount] = useState(10); // Cargamos bastantes para que los celulares se vean llenos
+  const [visibleCount, setVisibleCount] = useState(10);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // --- HELPER: Formatear Fecha para UI (100% Blindado para cualquier navegador móvil) ---
+  // --- HELPER: Formatear Fecha para UI ---
   const formatDateForUI = (dateString: string) => {
     if (!dateString) return "Fecha Pendiente";
     try {
-        // Separamos manualmente para evitar el bug de zona horaria de Safari/iOS
         const parts = dateString.split('-');
         if (parts.length !== 3) return dateString;
         
         const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1; // En JS los meses van de 0 a 11
+        const month = parseInt(parts[1], 10) - 1; 
         const day = parseInt(parts[2], 10);
         
         const dateObj = new Date(year, month, day);
         if (isNaN(dateObj.getTime())) return dateString;
 
-        // Diccionario manual (NO falla nunca, sin importar el idioma del celular)
         const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
         const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         
@@ -49,17 +49,30 @@ export default function TicketsPage() {
         return `${dayName} ${dayNum} ${monthName}`;
     } catch (error) {
         console.error("Error al formatear fecha:", error);
-        return dateString; // Fallback de seguridad extrema
+        return dateString;
     }
   };
 
-  // --- CONEXIÓN A BASE DE DATOS (CARGA INICIAL) ---
+  // --- HELPER: Determinar si la venta está bloqueada ---
+  const isWebSaleLocked = (dateEvent: string, lockTime: string) => {
+    if (!dateEvent || !lockTime) return false;
+
+    const [year, month, day] = dateEvent.split('-');
+    const [hour, minute] = lockTime.split(':');
+    
+    // Fecha límite establecida en el panel
+    const limitDate = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+    const now = new Date();
+
+    return now >= limitDate;
+  };
+
+  // --- CONEXIÓN A BASE DE DATOS ---
   useEffect(() => {
     const fetchShows = async () => {
         try {
             setFetchError(null);
 
-            // Obtenemos la fecha actual en formato YYYY-MM-DD local
             const now = new Date();
             const tYear = now.getFullYear();
             const tMonth = String(now.getMonth() + 1).padStart(2, '0');
@@ -70,16 +83,16 @@ export default function TicketsPage() {
                 .from('shows')
                 .select('*')
                 .eq('active', true)
-                // FILTRO CLAVE: Solo traer shows cuya fecha sea mayor o igual a hoy
                 .gte('date_event', todayString) 
                 .order('date_event', { ascending: true }); 
 
             if (error) throw error;
 
             if (data) {
-                // El .filter(Boolean) asegura que si un elemento falla en el map, no rompe el array final
                 const mappedEvents = data.map(evt => {
                     try {
+                        const isLocked = isWebSaleLocked(evt.date_event, evt.lock_time);
+
                         return {
                             id: evt.id,
                             title: evt.title || "Evento Sin Título",
@@ -88,7 +101,7 @@ export default function TicketsPage() {
                             date: formatDateForUI(evt.date_event), 
                             fullDate: evt.date_event || "", 
                             time: evt.time_event ? String(evt.time_event).substring(0, 5) : "22:00",
-                            endTime: "05:00",
+                            endTime: evt.end_time ? String(evt.end_time).substring(0, 5) : "05:00",
                             location: evt.location || "Boulevard Zapallar",
                             address: "Av. Manuel Labra Lillo 430, Curicó",
                             image: evt.image_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=1470&auto=format&fit=crop",
@@ -96,7 +109,9 @@ export default function TicketsPage() {
                             category: "semana", 
                             isAdultOnly: evt.is_adult || false,
                             description: evt.description || "Sin descripción disponible.",
-                            tickets: evt.tickets || [] 
+                            tickets: evt.tickets || [],
+                            externalTicketUrl: evt.external_ticket_url || null,
+                            isLocked: isLocked
                         };
                     } catch (e) {
                         console.error(`Error procesando show ID ${evt.id}:`, e);
@@ -117,12 +132,9 @@ export default function TicketsPage() {
     fetchShows();
   }, []);
 
-  // --- LÓGICA DE FILTRADO (A Prueba de Móviles) ---
+  // --- LÓGICA DE FILTRADO ---
   const filteredEvents = events.filter(event => {
-      // 1. Filtro por Texto (Buscador)
       const matchesSearch = (event.title || "").toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // 2. Filtro por Pestañas (Construcción manual de fecha para evitar desfases de GMT)
       let matchesTab = true;
       
       const today = new Date();
@@ -143,7 +155,7 @@ export default function TicketsPage() {
       } else if (activeTab === "manana") {
           matchesTab = event.rawDate === tomorrowString;
       } else if (activeTab === "semana") {
-          matchesTab = true; // Fuerzo a que muestre TODO el catálogo activo siempre
+          matchesTab = true;
       }
 
       return matchesSearch && matchesTab;
@@ -151,13 +163,29 @@ export default function TicketsPage() {
 
   const visibleEvents = filteredEvents.slice(0, visibleCount);
 
-  // --- MANEJADOR DE "VER MÁS" ---
+  // --- MANEJADOR DE CARGA ---
   const handleLoadMore = () => {
     setIsLoadingMore(true);
     setTimeout(() => {
         setVisibleCount(prev => prev + 6); 
         setIsLoadingMore(false);
     }, 500); 
+  };
+
+  // --- RENDER DE ENLACE CONDICIONAL (Interno o Externo) ---
+  const EventCardLink = ({ event, children, className }: { event: any, children: React.ReactNode, className?: string }) => {
+    if (event.externalTicketUrl) {
+      return (
+        <a href={event.externalTicketUrl} target="_blank" rel="noopener noreferrer" className={className}>
+          {children}
+        </a>
+      );
+    }
+    return (
+      <Link href={`/tickets/${event.id}`} className={className}>
+        {children}
+      </Link>
+    );
   };
 
   return (
@@ -169,7 +197,6 @@ export default function TicketsPage() {
             <ArrowLeft className="w-5 h-5 text-white" />
         </Link>
         
-        {/* LOGO AUMENTADO */}
         <div className="relative w-60 h-16"> 
             <Image src="/logo.png" alt="Boulevard Zapallar" fill className="object-contain" priority />
         </div>
@@ -179,7 +206,7 @@ export default function TicketsPage() {
         </button>
       </div>
 
-      {/* --- MENSAJE DE ERROR DE CONEXIÓN (Solo se ve si falla Supabase en ese celular) --- */}
+      {/* --- MENSAJE DE ERROR DE CONEXIÓN --- */}
       {fetchError && (
           <div className="mx-4 mt-4 bg-red-900/30 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -201,24 +228,35 @@ export default function TicketsPage() {
             <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-full">
                 {events.slice(0, 3).map((event) => (
                     <div key={event.id} className="snap-center min-w-full relative h-full">
-                        <Link href={`/tickets/${event.id}`}>
-                            <div className="relative w-full h-full">
-                                <Image src={event.image} alt={event.title} fill className="object-cover opacity-80" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-                                <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
+                        <EventCardLink event={event} className="block w-full h-full relative">
+                            <Image src={event.image} alt={event.title} fill className={`object-cover transition-opacity duration-700 ${event.isLocked ? 'opacity-40 grayscale' : 'opacity-80'}`} />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+                            
+                            <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
+                                <div className="flex flex-wrap gap-2 mb-2">
                                     {event.tag && (
-                                        <span className="bg-[#DAA520] text-black text-[9px] font-extrabold px-3 py-1 rounded mb-2 inline-block uppercase tracking-widest shadow-lg">
+                                        <span className="bg-[#DAA520] text-black text-[9px] font-extrabold px-3 py-1 rounded inline-block uppercase tracking-widest shadow-lg">
                                             {event.tag}
                                         </span>
                                     )}
-                                    <h2 className="text-4xl font-bold text-white uppercase leading-none mb-1 drop-shadow-xl">{event.title}</h2>
-                                    <p className="text-sm text-zinc-200 font-medium mb-2">{event.subtitle}</p>
-                                    <p className="text-xs text-[#DAA520] flex items-center gap-1 font-bold tracking-wide">
-                                        <Calendar className="w-3 h-3"/> {event.date} • {event.location}
-                                    </p>
+                                    {event.externalTicketUrl && (
+                                        <span className="bg-blue-600 text-white text-[9px] font-bold px-2 py-1 rounded uppercase flex items-center gap-1 shadow-lg">
+                                            <ExternalLink className="w-3 h-3"/> Web Externa
+                                        </span>
+                                    )}
+                                    {event.isLocked && (
+                                        <span className="bg-red-600 text-white text-[9px] font-bold px-2 py-1 rounded uppercase flex items-center gap-1 shadow-lg">
+                                            <Lock className="w-3 h-3"/> Venta Cerrada
+                                        </span>
+                                    )}
                                 </div>
+                                <h2 className="text-4xl font-bold text-white uppercase leading-none mb-1 drop-shadow-xl">{event.title}</h2>
+                                <p className="text-sm text-zinc-200 font-medium mb-2">{event.subtitle}</p>
+                                <p className="text-xs text-[#DAA520] flex items-center gap-1 font-bold tracking-wide">
+                                    <Calendar className="w-3 h-3"/> {event.date} • {event.location}
+                                </p>
                             </div>
-                        </Link>
+                        </EventCardLink>
                     </div>
                 ))}
             </div>
@@ -237,14 +275,17 @@ export default function TicketsPage() {
           <div className="mb-8 overflow-hidden relative">
             <h3 className="px-4 text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Próximos Hits</h3>
             <div className="flex gap-4 w-max animate-marquee hover:pause">
-                {/* Cuadruplicamos el array para que el efecto infinito no se rompa en pantallas grandes */}
                 {[...events, ...events, ...events, ...events].map((evt, index) => (
-                    <Link href={`/tickets/${evt.id}`} key={`${evt.id}-${index}`} className="w-40 h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0">
-                        <Image src={evt.image} alt={evt.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                    <EventCardLink event={evt} key={`${evt.id}-${index}`} className="w-40 h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0 block">
+                        <Image src={evt.image} alt={evt.title} fill className={`object-cover transition-transform duration-700 group-hover:scale-110 ${evt.isLocked ? 'opacity-50 grayscale' : 'opacity-100'}`} />
                         <div className="absolute inset-0 bg-black/50 flex items-end p-3">
-                            <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md">{evt.title}</span>
+                            <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md flex items-center gap-1">
+                                {evt.externalTicketUrl && <ExternalLink className="w-3 h-3 shrink-0 text-blue-400" />}
+                                {evt.isLocked && <Lock className="w-3 h-3 shrink-0 text-red-400" />}
+                                {evt.title}
+                            </span>
                         </div>
-                    </Link>
+                    </EventCardLink>
                 ))}
             </div>
           </div>
@@ -288,20 +329,28 @@ export default function TicketsPage() {
             </div>
         ) : visibleEvents.length > 0 ? (
             visibleEvents.map((event) => (
-                <Link href={`/tickets/${event.id}`} key={event.id}>
+                <EventCardLink event={event} key={event.id} className="block">
                     <motion.div 
                         initial={{ opacity: 0, y: 10 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 flex h-36 relative active:scale-[0.98] transition-transform mb-4 shadow-lg"
+                        className={`bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 flex h-36 relative active:scale-[0.98] transition-transform mb-4 shadow-lg ${event.isLocked ? 'opacity-80' : ''}`}
                     >
-                        {event.tag && (
-                            <div className="absolute top-0 left-0 z-20 bg-[#DAA520] text-black text-[8px] font-extrabold px-3 py-1 rounded-br-lg uppercase tracking-wider shadow-md">
-                                {event.tag}
-                            </div>
-                        )}
+                        <div className="absolute top-2 right-2 flex flex-col gap-1 z-20 items-end">
+                             {event.tag && (
+                                <div className="bg-[#DAA520] text-black text-[8px] font-extrabold px-2 py-1 rounded uppercase tracking-wider shadow-md">
+                                    {event.tag}
+                                </div>
+                            )}
+                            {event.isAdultOnly && (
+                                <div className="bg-red-600 text-white text-[8px] font-extrabold px-2 py-1 rounded uppercase shadow-md flex items-center gap-1 w-fit">
+                                    <ShieldAlert className="w-2 h-2"/> +18
+                                </div>
+                            )}
+                        </div>
+
                         <div className="w-36 relative shrink-0">
-                            <Image src={event.image} alt={event.title} fill className="object-cover opacity-90" />
+                            <Image src={event.image} alt={event.title} fill className={`object-cover ${event.isLocked ? 'grayscale opacity-50' : 'opacity-90'}`} />
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-zinc-900/80" />
                         </div>
 
@@ -310,9 +359,15 @@ export default function TicketsPage() {
                                 <div className="flex items-center gap-1 text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">
                                     <MapPin className="w-3 h-3 text-[#DAA520]" /> {event.location}
                                 </div>
-                                <h3 className="text-sm font-bold text-white uppercase leading-snug line-clamp-2 mb-2">
+                                <h3 className={`text-sm font-bold uppercase leading-snug line-clamp-2 mb-1 ${event.isLocked ? 'text-zinc-400 line-through decoration-zinc-500' : 'text-white'}`}>
                                     {event.title}
                                 </h3>
+                                {/* Badge Externo / Bloqueo visible en la lista */}
+                                {event.isLocked ? (
+                                     <span className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1"><Lock className="w-3 h-3"/> Venta Puerta</span>
+                                ) : event.externalTicketUrl ? (
+                                    <span className="text-[9px] font-bold text-blue-400 uppercase flex items-center gap-1"><ExternalLink className="w-3 h-3"/> Link Externo</span>
+                                ) : null}
                             </div>
 
                             <div className="flex items-end justify-between border-t border-white/5 pt-2">
@@ -326,13 +381,14 @@ export default function TicketsPage() {
                                         <span className="text-[9px] text-zinc-500 uppercase">hrs</span>
                                     </div>
                                 </div>
-                                <div className="bg-white/10 p-2 rounded-full hover:bg-[#DAA520] hover:text-black transition-all">
-                                    <ChevronRight className="w-5 h-5" />
+                                
+                                <div className={`p-2 rounded-full transition-all ${event.isLocked ? 'bg-zinc-800 text-zinc-600' : event.externalTicketUrl ? 'bg-blue-900/30 text-blue-400 hover:bg-blue-600 hover:text-white' : 'bg-white/10 text-white hover:bg-[#DAA520] hover:text-black'}`}>
+                                    {event.isLocked ? <Lock className="w-4 h-4"/> : event.externalTicketUrl ? <ExternalLink className="w-5 h-5"/> : <ChevronRight className="w-5 h-5" />}
                                 </div>
                             </div>
                         </div>
                     </motion.div>
-                </Link>
+                </EventCardLink>
             ))
         ) : (
             !loading && !fetchError && (
