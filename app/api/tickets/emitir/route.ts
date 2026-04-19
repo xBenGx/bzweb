@@ -12,10 +12,48 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
 
+// Configuración Evolution API
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL!;
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE!;
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!;
+
+// Helper para Evolution API (Envía el Base64 directamente)
+async function enviarWhatsAppTicket(telefono: string, base64Image: string, mensajeTexto: string) {
+  let raw = telefono.replace(/\D/g, "");
+  if (raw.length === 9 && raw.startsWith("9")) raw = "56" + raw;
+  if (raw.length === 8) raw = "569" + raw;
+  
+  try {
+    const res = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "apikey": EVOLUTION_API_KEY
+      },
+      body: JSON.stringify({
+        number: raw,
+        options: { delay: 1200, presence: "composing" },
+        mediaMessage: {
+          mediatype: "image",
+          caption: mensajeTexto,
+          media: base64Image 
+        }
+      })
+    });
+    const responseData = await res.json();
+    if (!res.ok) throw new Error(JSON.stringify(responseData));
+    return { success: true };
+  } catch (e: any) {
+    console.error("❌ Error enviando WhatsApp (Evolution):", e);
+    return { success: false, error: e.message };
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userEmail, customerName, eventId, paymentRef } = body;
+    // Agregamos customerPhone para que el botón pueda mandar el número
+    const { userEmail, customerName, customerPhone, eventId, paymentRef } = body;
 
     // 1. Obtener datos del show
     const { data: show, error: showError } = await supabase
@@ -48,13 +86,18 @@ export async function POST(req: Request) {
     }
 
     // 3. Generar QR (URL de validación)
-    const validationUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://boulevardzapallar.cl'}/admin/validar/${ticket.id}`;
+    const validationUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://bzweb.vercel.app'}/validar-ticket/${ticket.id}`;
     const qrCodeDataUrl = await QRCode.toDataURL(validationUrl);
 
-    // 4. Enviar Email
+    // 4. Enviar WhatsApp (Si el frontend envió un teléfono)
+    if (customerPhone) {
+      const waMessage = `¡Hola ${customerName}! 👋\n\nAquí tienes tu entrada confirmada para *${show.nombre}* 🎟️.\n\n📅 Fecha: ${show.fecha}\n🎫 Código: ${ticket.id.slice(0, 8).toUpperCase()}\n\nMuestra este código QR en el acceso.\n¡Te esperamos!`;
+      await enviarWhatsAppTicket(customerPhone, qrCodeDataUrl, waMessage);
+    }
+
+    // 5. Enviar Email
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: 'Boulevard Zapallar <entradas@boulevardzapallar.cl>', 
-      // IMPORTANTE: Si no has verificado dominio en Resend, usa: 'onboarding@resend.dev' para probar
       to: [userEmail],
       subject: `Tu entrada para ${show.nombre}`,
       react: TicketEmail({
