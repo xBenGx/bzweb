@@ -9,29 +9,23 @@ import QRCode from "qrcode";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Cliente con permisos de Admin (Service Role) para poder escribir/leer todo
+// Cliente con permisos de Admin (Service Role)
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Configuración UltraMsg
-const WAPP_INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID || "instance161222";
-const WAPP_TOKEN = process.env.ULTRAMSG_TOKEN || "65qat7d38cyc4ozf";
-const WAPP_API_URL = `https://api.ultramsg.com/${WAPP_INSTANCE_ID}`;
+// Configuración Evolution API
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL!;
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE!;
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!;
 
 // ----------------------------------------------------------------------
 // 2. FUNCIONES AUXILIARES
 // ----------------------------------------------------------------------
 
-/**
- * Genera un código aleatorio dinámico según el tipo (TKT-XXXX o BZ-XXXX)
- */
 function generarCodigoRespaldo(prefix: string = "BZ"): string {
   const numeroAleatorio = Math.floor(100000 + Math.random() * 900000); 
   return `${prefix}-${numeroAleatorio}`;
 }
 
-/**
- * Formatea la fecha para que se vea bonita en el mensaje (Fallback)
- */
 function formatearFechaBonita(fechaStr: string): string {
   if (!fechaStr) return "Fecha por confirmar";
   try {
@@ -51,9 +45,6 @@ function formatearFechaBonita(fechaStr: string): string {
   }
 }
 
-/**
- * Generador interno de mensaje detallado (Actúa como respaldo si el Dashboard no envía el customMessage)
- */
 function generarMensajeDetalladoFallback(reserva: any, codigo: string, hasTickets: boolean): string {
     const fechaTexto = formatearFechaBonita(reserva.date_reserva);
     const tickets = reserva.pre_order?.filter((i: any) => i.category === 'ticket') || [];
@@ -88,9 +79,6 @@ function generarMensajeDetalladoFallback(reserva: any, codigo: string, hasTicket
     return mensaje;
 }
 
-/**
- * Genera el Buffer de la imagen QR a partir de una URL o Texto
- */
 async function generarImagenQR(texto: string): Promise<Buffer> {
   try {
     const qrBuffer = await QRCode.toBuffer(texto, {
@@ -106,9 +94,6 @@ async function generarImagenQR(texto: string): Promise<Buffer> {
   }
 }
 
-/**
- * Sube el QR a Supabase y retorna la URL pública
- */
 async function subirQRaSupabase(idReserva: string, buffer: Buffer): Promise<string | null> {
   try {
     const fileName = `qr-${idReserva}-${Date.now()}.png`;
@@ -130,34 +115,39 @@ async function subirQRaSupabase(idReserva: string, buffer: Buffer): Promise<stri
   }
 }
 
-/**
- * Envía el mensaje con el QR o E-Ticket a UltraMsg
- */
+// NUEVA FUNCIÓN: Envío nativo mediante Evolution API
 async function enviarWhatsApp(telefono: string, imageUrl: string, mensajeTexto: string) {
   let raw = telefono.replace(/\D/g, "");
   if (raw.length === 9 && raw.startsWith("9")) raw = "56" + raw;
   if (raw.length === 8) raw = "569" + raw;
   
   try {
-    const params = new URLSearchParams();
-    params.append("token", WAPP_TOKEN);
-    params.append("to", raw);
-    params.append("image", imageUrl);
-    params.append("caption", mensajeTexto);
-    params.append("priority", "10");
-
-    const res = await fetch(`${WAPP_API_URL}/messages/image`, {
+    const res = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params
+      headers: { 
+        "Content-Type": "application/json",
+        "apikey": EVOLUTION_API_KEY
+      },
+      body: JSON.stringify({
+        number: raw,
+        options: {
+          delay: 1200,
+          presence: "composing"
+        },
+        mediaMessage: {
+          mediatype: "image",
+          caption: mensajeTexto,
+          media: imageUrl // Evolution API procesa URLs públicas sin problemas
+        }
+      })
     });
 
-    const responseText = await res.text();
-    if (!res.ok) throw new Error(responseText);
+    const responseData = await res.json();
+    if (!res.ok) throw new Error(JSON.stringify(responseData));
     
-    return { success: true, details: responseText };
+    return { success: true, details: responseData };
   } catch (e: any) {
-    console.error("❌ Error enviando WhatsApp:", e);
+    console.error("❌ Error enviando WhatsApp (Evolution):", e);
     return { success: false, error: e.message };
   }
 }
@@ -169,12 +159,9 @@ async function enviarWhatsApp(telefono: string, imageUrl: string, mensajeTexto: 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // Extraemos las nuevas variables que envía el Dashboard actualizado
     const { reservaId, reservation_code, ticketUrl, customMessage } = body; 
 
-    // --- CORRECCIÓN CRÍTICA DEL DOMINIO ---
     let origin = process.env.NEXT_PUBLIC_BASE_URL;
-    
     if (!origin) {
         const protocol = req.headers.get("x-forwarded-proto") || "https";
         const host = req.headers.get("host");
@@ -194,7 +181,6 @@ export async function POST(req: Request) {
 
     console.log(`🚀 Iniciando confirmación. ID: ${reservaId}`);
 
-    // 1. Obtener datos de la reserva actual (incluyendo pre_order)
     const { data: reserva, error } = await supabaseAdmin
       .from("reservas")
       .select("*") 
@@ -205,36 +191,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Reserva no encontrada" }, { status: 404 });
     }
 
-    // ---------------------------------------------------------
-    // LÓGICA DE DETECCIÓN Y SINCRONIZACIÓN
-    // ---------------------------------------------------------
-    // Detectamos si hay tickets comprados en el pre_order
     const hasTickets = reserva.pre_order?.some((i: any) => i.category === 'ticket');
-    
     const codigoPrefix = hasTickets ? "TKT" : "BZ";
     const codigoBZ = reservation_code || reserva.reservation_code || generarCodigoRespaldo(codigoPrefix); 
     
-    console.log(`✅ Usando Código: ${codigoBZ} | Es Show: ${hasTickets}`);
-
-    // 2. Asignar URL de Validación Correcta
-    // Si es Show va a validar-ticket, si es mesa va a admin/validar
     const urlValidacion = hasTickets 
         ? `${origin}/validar-ticket/${reservaId}` 
         : `${origin}/admin/validar/${reservaId}`;
     
-    console.log(`🔗 Link Validación generado: ${urlValidacion}`);
-
-    // 3. Determinar Imagen a Enviar (E-Ticket vs QR Nativo)
-    let imagenPublica = ticketUrl; // Intentamos usar el ticket bonito del Frontend
+    let imagenPublica = ticketUrl; 
 
     if (!imagenPublica) {
-        console.log("⚠️ No se recibió ticketUrl del Frontend. Generando QR nativo...");
         const qrBuffer = await generarImagenQR(urlValidacion);
         imagenPublica = await subirQRaSupabase(reservaId, qrBuffer);
         if (!imagenPublica) throw new Error("Fallo al generar código QR de respaldo");
     }
 
-    // 4. Actualizar Base de Datos
     const { error: updateError } = await supabaseAdmin
       .from("reservas")
       .update({ 
@@ -249,10 +221,8 @@ export async function POST(req: Request) {
       throw updateError;
     }
 
-    // 5. Enviar WhatsApp al cliente
     let whatsappResult: any = { success: false, error: "Sin teléfono" };
     if (reserva.phone) {
-      // Priorizamos el mensaje exacto generado por el Dashboard, si falla, usamos nuestro generador interno
       const mensajeFinal = customMessage || generarMensajeDetalladoFallback(reserva, codigoBZ, hasTickets);
 
       whatsappResult = await enviarWhatsApp(
