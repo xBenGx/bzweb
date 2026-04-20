@@ -88,8 +88,6 @@ export default function DashboardPage() {
 
   const [showFilterShowId, setShowFilterShowId] = useState("");
   const [showFilterDate, setShowFilterDate] = useState("");
-  const [showSearch, setShowSearch] = useState("");
-  const [showStatusFilter, setShowStatusFilter] = useState("todos");
 
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<any>(null);
@@ -833,99 +831,33 @@ export default function DashboardPage() {
         const { jsPDF } = await import("jspdf");
         const autoTable = (await import("jspdf-autotable")).default;
 
-        const doc = new jsPDF({ orientation: 'landscape' });
-        const showTitle = showFilterShowId ? shows.find(s => s.id.toString() === showFilterShowId)?.title || 'Show Seleccionado' : 'Todos los Shows';
-        const estadoLabel: Record<string, string> = { todos: 'Todos', pendientes: 'Por Enviar', confirmadas: 'Enviados', realizado: 'Escaneados' };
-
-        doc.setFillColor(131, 56, 236);
-        doc.rect(0, 0, 297, 22, 'F');
+        const doc = new jsPDF();
         doc.setFontSize(16);
-        doc.setTextColor(255, 255, 255);
-        doc.setFont('helvetica', 'bold');
-        doc.text('BOULEVARD ZAPALLAR — Lista Oficial de Entradas', 14, 14);
+        doc.text("Lista Oficial de Entradas - Shows", 14, 20);
 
-        doc.setFontSize(9);
-        doc.setTextColor(200, 200, 200);
-        doc.text(`Show: ${showTitle}  |  Fecha: ${showFilterDate || 'Todas'}  |  Estado: ${estadoLabel[showStatusFilter] || showStatusFilter}  |  Total: ${filteredReservasShow.length} entradas  |  Generado: ${new Date().toLocaleDateString('es-CL')}`, 14, 29);
+        let filterText = `Fecha: ${showFilterDate || 'Todas'} | Show: ${showFilterShowId ? shows.find(s => s.id.toString() === showFilterShowId)?.title : 'Todos'} | Estado: ${reservaFilterStatus}`;
+        doc.setFontSize(10);
+        doc.text(filterText, 14, 28);
 
-        const tableData = filteredReservasShow.map((res, idx) => {
-            const { tickets, menu } = getTicketDetails(res.pre_order);
-            const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(' | ');
-            const menuItems = menu.length > 0 ? `+${menu.reduce((a:any,c:any)=>a+c.quantity,0)} menú` : '';
-            const estadoBadge: Record<string, string> = { pendiente: 'POR ENVIAR', confirmada: 'ENVIADO', realizado: 'ESCANEADO', ingresado: 'ESCANEADO', rechazada: 'RECHAZADO' };
-            return [
-                String(idx + 1),
-                res.reservation_code || res.code || 'TKT-PEND',
-                res.name || '-',
-                res.phone || '-',
-                res.email || '-',
-                ticketNames + (menuItems ? ` (${menuItems})` : ''),
-                `$${(res.total_pre_order || 0).toLocaleString('es-CL')}`,
-                estadoBadge[res.status] || res.status.toUpperCase(),
-            ];
+        const tableData = filteredReservasShow.map(res => {
+            const { tickets } = getTicketDetails(res.pre_order);
+            const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join('\n');
+            return [ res.reservation_code || res.code || "TKT-PEND", res.name, res.phone || '-', ticketNames, res.status.toUpperCase() ];
         });
 
         autoTable(doc, {
             startY: 35,
-            head: [['#', 'Código', 'Comprador', 'Teléfono', 'Email', 'Detalle Entradas', 'Monto', 'Estado']],
+            head: [['Código', 'Comprador', 'Teléfono', 'Entradas', 'Estado']],
             body: tableData,
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 3 },
-            headStyles: { fillColor: [131, 56, 236], textColor: 255, fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: [245, 245, 255] },
-            columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 30 }, 7: { cellWidth: 25, halign: 'center' } },
+            headStyles: { fillColor: [131, 56, 236] } 
         });
 
-        const pageCount = (doc as any).internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            doc.setFontSize(7);
-            doc.setTextColor(150, 150, 150);
-            doc.text(`Página ${i} de ${pageCount}  —  Boulevard Zapallar`, 14, doc.internal.pageSize.height - 8);
-        }
-
-        doc.save(`Lista_Shows_${showTitle.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+        doc.save(`Lista_Shows_${new Date().getTime()}.pdf`);
     } catch(e) {
         console.error(e);
-        alert("Error al generar PDF. Verifica que 'jspdf' y 'jspdf-autotable' estén instalados.");
+        alert("Asegúrate de haber instalado 'jspdf' y 'jspdf-autotable' en tu proyecto.");
     }
-  };
-
-  const generarExcelListaShow = () => {
-    const showTitle = showFilterShowId ? shows.find(s => s.id.toString() === showFilterShowId)?.title || 'Shows' : 'Todos_los_Shows';
-    const estadoBadge: Record<string, string> = { pendiente: 'Por Enviar', confirmada: 'Enviado', realizado: 'Escaneado', ingresado: 'Escaneado', rechazada: 'Rechazado' };
-
-    const rows = filteredReservasShow.map((res, idx) => {
-        const { tickets, menu } = getTicketDetails(res.pre_order);
-        const ticketNames = tickets.map((t:any) => `${t.quantity}x ${t.name}`).join(' | ');
-        const menuItems = menu.map((m:any) => `${m.quantity}x ${m.name}`).join(' | ');
-        return [
-            idx + 1,
-            res.reservation_code || res.code || 'TKT-PEND',
-            res.name || '',
-            res.phone || '',
-            res.email || '',
-            ticketNames,
-            menuItems,
-            res.total_pre_order || 0,
-            estadoBadge[res.status] || res.status,
-            res.date_reserva || '',
-        ];
-    });
-
-    const header = ['#', 'Código', 'Comprador', 'Teléfono', 'Email', 'Entradas', 'Menú', 'Monto CLP', 'Estado', 'Fecha Show'];
-    const csvContent = [header, ...rows]
-        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
-
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Lista_Shows_${showTitle.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   const generarPDFListaReservas = async () => {
@@ -970,14 +902,15 @@ export default function DashboardPage() {
   });
 
   const filteredReservasShow = reservasTicketsOnly.filter(r => {
-    const searchLower = showSearch.toLowerCase();
+    const searchLower = reservaSearch.toLowerCase();
     const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
     const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
-    const matchStatus = showStatusFilter === "todos" ? true : showStatusFilter === "pendientes" ? r.status === "pendiente" : showStatusFilter === "confirmadas" ? r.status === "confirmada" : r.status === showStatusFilter;
+    const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
     const matchDate = showFilterDate ? r.date_reserva === showFilterDate : true;
-    const matchShow = showFilterShowId
-        ? getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId)
-        : true;
+    const matchShow = showFilterShowId ? (
+        getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId) ||
+        shows.find(s => s.id.toString() === showFilterShowId)?.date_event === r.date_reserva
+    ) : true;
     return matchText && matchStatus && matchDate && matchShow;
   });
 
@@ -1145,41 +1078,35 @@ export default function DashboardPage() {
                         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
                             <div className="relative w-full sm:w-64 group">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-purple-500 transition-colors" />
-                                <input type="text" placeholder="Buscar comprador o ticket..." className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-purple-500 transition-colors" value={showSearch} onChange={(e) => setShowSearch(e.target.value)} />
+                                <input type="text" placeholder="Buscar comprador o ticket..." className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-purple-500 transition-colors" value={reservaSearch} onChange={(e) => setReservaSearch(e.target.value)} />
                             </div>
                             <div className="flex gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0 custom-scrollbar snap-x">
                                 {[{ id: 'todos', label: 'Todos' }, { id: 'pendientes', label: 'Por Enviar' }, { id: 'confirmadas', label: 'Enviados' }, { id: 'realizado', label: 'Escaneados' }].map(filter => (
-                                    <button key={filter.id} onClick={() => setShowStatusFilter(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${showStatusFilter === filter.id ? 'bg-purple-600 text-white border-purple-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
+                                    <button key={filter.id} onClick={() => setReservaFilterStatus(filter.id)} className={`snap-start px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${reservaFilterStatus === filter.id ? 'bg-purple-600 text-white border-purple-500 shadow-lg' : 'bg-black text-zinc-400 border-white/10 hover:bg-white/5'}`}>{filter.label}</button>
                                 ))}
                             </div>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
-                            <select
+                            <select 
                                 className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 font-bold uppercase tracking-wider"
-                                value={showFilterShowId}
+                                value={showFilterShowId} 
                                 onChange={(e) => setShowFilterShowId(e.target.value)}
                             >
                                 <option value="">Todos los Shows</option>
                                 {shows.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                             </select>
-                            <input
-                                type="date"
-                                className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 scheme-dark font-bold uppercase tracking-wider"
-                                value={showFilterDate}
-                                onChange={(e) => setShowFilterDate(e.target.value)}
+                            <input 
+                                type="date" 
+                                className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 scheme-dark font-bold uppercase tracking-wider" 
+                                value={showFilterDate} 
+                                onChange={(e) => setShowFilterDate(e.target.value)} 
                             />
-                            <button
-                                onClick={generarExcelListaShow}
-                                className="bg-green-700 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
-                            >
-                                <FileSpreadsheet className="w-4 h-4" /> Excel
-                            </button>
-                            <button
+                            <button 
                                 onClick={generarPDFListaShow}
                                 className="bg-white text-black hover:bg-zinc-200 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
                             >
-                                <FileDown className="w-4 h-4" /> PDF
+                                <FileDown className="w-4 h-4" /> Exportar Lista
                             </button>
                         </div>
                     </div>
