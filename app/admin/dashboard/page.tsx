@@ -1710,7 +1710,7 @@ export default function DashboardPage() {
                         {menuItems.map((item) => (
                             <div key={item.id} className={`group bg-zinc-900 border ${item.active ? 'border-white/10' : 'border-red-900/30 opacity-60'} p-4 rounded-2xl relative transition-all hover:border-[#DAA520]/50 flex flex-col h-full`}>
                                 <div className="relative w-full aspect-square bg-black rounded-xl overflow-hidden mb-4 border border-white/5 shrink-0">
-                                    <Image src={item.image_url || "/placeholder.jpg"} alt={item.name} fill className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
+                                    <Image src={item.image_url || "/placeholder.jpg"} alt={item.name} fill className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" unoptimized />
                                 </div>
                                 <div className="relative z-10 flex flex-col flex-1">
                                     <div className="flex justify-between items-start gap-2 mb-1">
@@ -1864,7 +1864,7 @@ export default function DashboardPage() {
                             <div key={show.id} className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 group hover:border-[#DAA520]/30 transition-all shadow-lg">
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-6 w-full md:w-auto">
                                     <div className="w-full sm:w-28 aspect-video sm:aspect-square sm:h-28 bg-black rounded-xl relative overflow-hidden shrink-0 shadow-inner border border-white/10">
-                                        <Image src={show.image_url || "/placeholder.jpg"} alt={show.title} fill className="object-cover group-hover:scale-105 transition-transform duration-700" />
+                                        <Image src={show.image_url || "/placeholder.jpg"} alt={show.title} fill className="object-cover group-hover:scale-105 transition-transform duration-700" unoptimized />
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -1915,7 +1915,7 @@ export default function DashboardPage() {
                         {promos.map((promo) => (
                             <div key={promo.id} className={`group bg-zinc-900 border ${promo.active ? 'border-white/10' : 'border-red-900/30 opacity-60'} p-4 rounded-3xl relative transition-all hover:border-[#DAA520]/50 shadow-lg flex flex-col h-full`}>
                                 <div className="relative w-full aspect-square bg-black rounded-2xl overflow-hidden mb-4 border border-white/5 shrink-0">
-                                    <Image src={promo.image_url || "/placeholder.jpg"} alt={promo.title} fill className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
+                                    <Image src={promo.image_url || "/placeholder.jpg"} alt={promo.title} fill className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" unoptimized />
                                     <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
                                         <span className={`text-[9px] font-bold px-2.5 py-1 rounded-full uppercase shadow-lg ${promo.category === 'pack' ? 'bg-[#8338EC] text-white' : 'bg-blue-600 text-white'}`}>{promo.category}</span>
                                         {promo.tag && <span className="text-[9px] font-bold px-2.5 py-1 rounded-full uppercase bg-white text-black shadow-lg">{promo.tag}</span>}
@@ -2040,7 +2040,7 @@ export default function DashboardPage() {
                                     </div>
                                     
                                     <div className="relative w-full h-3/4 bg-zinc-900 shrink-0">
-                                        <Image src={item.image_url || "/placeholder.jpg"} alt={item.title} fill className={`object-cover transition-transform duration-700 ${item.active ? 'group-hover:scale-105' : ''}`} />
+                                        <Image src={item.image_url || "/placeholder.jpg"} alt={item.title} fill className={`object-cover transition-transform duration-700 ${item.active ? 'group-hover:scale-105' : ''}`} unoptimized />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
                                         <div className="absolute bottom-0 left-0 w-full p-5">
                                             <h3 className="text-2xl font-black text-white uppercase italic leading-none mb-1 drop-shadow-lg">{item.title}</h3>
@@ -2464,7 +2464,7 @@ export default function DashboardPage() {
                         <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                             {currentMenuItem.image_url ? (
                                 <>
-                                    <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                    <Image src={currentMenuItem.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" unoptimized />
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Imagen</p></div>
                                 </>
                             ) : (
@@ -2497,7 +2497,7 @@ export default function DashboardPage() {
                         <div onClick={triggerFileInput} className="relative w-full h-full max-w-[250px] max-h-[250px] aspect-square rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden">
                             {currentPromo.image_url ? (
                                 <>
-                                    <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                    <Image src={currentPromo.image_url} alt="Preview" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" unoptimized />
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar</p></div>
                                 </>
                             ) : (
@@ -2535,7 +2535,7 @@ export default function DashboardPage() {
                         <div onClick={triggerFileInput} className="relative w-full h-full max-w-[200px] md:max-w-[300px] aspect-[3/4] rounded-3xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-[#DAA520] hover:bg-white/5 transition-all overflow-hidden shadow-2xl">
                             {currentShow.image_url ? (
                                 <>
-                                    <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-80 group-hover:opacity-100 transition-all duration-500" />
+                                    <Image src={currentShow.image_url} alt="Preview" fill className="object-cover opacity-80 group-hover:opacity-100 transition-all duration-500" unoptimized />
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"><p className="text-xs font-bold text-white uppercase flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Cambiar Flyer</p></div>
                                 </>
                             ) : (
