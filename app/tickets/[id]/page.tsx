@@ -212,7 +212,7 @@ export default function EventDetailPage() {
       
       {/* --- HEADER EVENTO (HERO) --- */}
       <div className="relative h-[450px] w-full">
-        <Image src={event.image} alt={event.title} fill className={`object-cover ${isLocked ? 'grayscale opacity-70' : ''}`} priority />
+        <Image src={event.image} alt={event.title} fill className={`object-cover ${isLocked ? 'grayscale opacity-70' : ''}`} priority unoptimized />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black" />
         
         <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-20">

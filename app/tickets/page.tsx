@@ -229,7 +229,7 @@ export default function TicketsPage() {
                 {events.slice(0, 3).map((event) => (
                     <div key={event.id} className="snap-center min-w-full relative h-full">
                         <EventCardLink event={event} className="block w-full h-full relative">
-                            <Image src={event.image} alt={event.title} fill className={`object-cover transition-opacity duration-700 ${event.isLocked ? 'opacity-40 grayscale' : 'opacity-80'}`} />
+                            <Image src={event.image} alt={event.title} fill className={`object-cover transition-opacity duration-700 ${event.isLocked ? 'opacity-40 grayscale' : 'opacity-80'}`} unoptimized />
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
                             
                             <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
@@ -277,7 +277,7 @@ export default function TicketsPage() {
             <div className="flex gap-4 w-max animate-marquee hover:pause">
                 {[...events, ...events, ...events, ...events].map((evt, index) => (
                     <EventCardLink event={evt} key={`${evt.id}-${index}`} className="w-40 h-28 relative rounded-2xl overflow-hidden border border-white/10 group shadow-lg shrink-0 block">
-                        <Image src={evt.image} alt={evt.title} fill className={`object-cover transition-transform duration-700 group-hover:scale-110 ${evt.isLocked ? 'opacity-50 grayscale' : 'opacity-100'}`} />
+                        <Image src={evt.image} alt={evt.title} fill className={`object-cover transition-transform duration-700 group-hover:scale-110 ${evt.isLocked ? 'opacity-50 grayscale' : 'opacity-100'}`} unoptimized />
                         <div className="absolute inset-0 bg-black/50 flex items-end p-3">
                             <span className="text-[10px] font-bold text-white leading-tight uppercase truncate w-full drop-shadow-md flex items-center gap-1">
                                 {evt.externalTicketUrl && <ExternalLink className="w-3 h-3 shrink-0 text-blue-400" />}
@@ -350,7 +350,7 @@ export default function TicketsPage() {
                         </div>
 
                         <div className="w-36 relative shrink-0">
-                            <Image src={event.image} alt={event.title} fill className={`object-cover ${event.isLocked ? 'grayscale opacity-50' : 'opacity-90'}`} />
+                            <Image src={event.image} alt={event.title} fill className={`object-cover ${event.isLocked ? 'grayscale opacity-50' : 'opacity-90'}`} unoptimized />
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-zinc-900/80" />
                         </div>
 
