@@ -404,7 +404,6 @@ export default function DashboardPage() {
       setIsClientModalOpen(true);
   };
 
-  // 🔥 FIX APLICADO: Evitar envío de strings vacíos a DB
   const handleSaveClient = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
@@ -477,7 +476,6 @@ export default function DashboardPage() {
   const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
   const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
   
-  // 🔥 FIX APLICADO: Evitar envío de strings vacíos en variables Time o URL que colapsaban la BD
   const handleSaveShow = async (e: React.FormEvent) => { 
       e.preventDefault(); 
       setIsLoading(true); 
@@ -491,7 +489,6 @@ export default function DashboardPage() {
           const showData = { 
               ...currentShow, 
               image_url: finalImageUrl,
-              // Saneamiento clave: Si están vacíos, enviar null para no romper el INSERT SQL
               end_time: currentShow.end_time?.trim() === "" ? null : currentShow.end_time,
               lock_time: currentShow.lock_time?.trim() === "" ? null : currentShow.lock_time,
               external_ticket_url: currentShow.external_ticket_url?.trim() === "" ? null : currentShow.external_ticket_url
@@ -925,26 +922,74 @@ export default function DashboardPage() {
     }
   };
 
+  // 🔥 FIX APLICADO: Filtros Robustos y Normalización Dinámica de Fechas 
   const filteredReservasMesa = reservasNormalesOnly.filter(r => {
-      const searchLower = reservaSearch.toLowerCase();
+      const searchLower = reservaSearch.toLowerCase().trim();
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
-      const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
+      const nameMatch = (r.name || "").toLowerCase().includes(searchLower);
+      const emailMatch = (r.email || "").toLowerCase().includes(searchLower);
+      const phoneMatch = (r.phone || "").toLowerCase().includes(searchLower);
+      const whatsappMatch = (r.whatsapp || "").toLowerCase().includes(searchLower);
+      
+      const matchText = searchLower === "" || codeMatch || nameMatch || emailMatch || phoneMatch || whatsappMatch;
       const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
-      const matchDate = reservaDateFilter ? r.date_reserva === reservaDateFilter : true;
+      
+      let matchDate = true;
+      if (reservaDateFilter) {
+          if (!r.date_reserva) {
+              matchDate = false;
+          } else {
+              let dbDate = r.date_reserva.split('T')[0];
+              const parts = dbDate.split(/[-/]/);
+              if (parts.length === 3) {
+                  if (parts[0].length <= 2) {
+                      dbDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                  } else {
+                      dbDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                  }
+              }
+              matchDate = dbDate === reservaDateFilter;
+          }
+      }
       return matchText && matchStatus && matchDate;
   });
 
+  // 🔥 FIX APLICADO: Filtros Robustos y Normalización Dinámica de Fechas 
   const filteredReservasShow = reservasTicketsOnly.filter(r => {
-    const searchLower = reservaSearch.toLowerCase();
-    const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
-    const matchText = (r.name || "").toLowerCase().includes(searchLower) || codeMatch || (r.email || "").toLowerCase().includes(searchLower);
-    const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
-    const matchDate = showFilterDate ? r.date_reserva === showFilterDate : true;
-    const matchShow = showFilterShowId ? (
-        getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId) ||
-        shows.find(s => s.id.toString() === showFilterShowId)?.date_event === r.date_reserva
-    ) : true;
-    return matchText && matchStatus && matchDate && matchShow;
+      const searchLower = reservaSearch.toLowerCase().trim();
+      const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
+      const nameMatch = (r.name || "").toLowerCase().includes(searchLower);
+      const emailMatch = (r.email || "").toLowerCase().includes(searchLower);
+      const phoneMatch = (r.phone || "").toLowerCase().includes(searchLower);
+      const whatsappMatch = (r.whatsapp || "").toLowerCase().includes(searchLower);
+      
+      const matchText = searchLower === "" || codeMatch || nameMatch || emailMatch || phoneMatch || whatsappMatch;
+      const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
+      
+      let matchDate = true;
+      if (showFilterDate) {
+          if (!r.date_reserva) {
+              matchDate = false;
+          } else {
+              let dbDate = r.date_reserva.split('T')[0];
+              const parts = dbDate.split(/[-/]/);
+              if (parts.length === 3) {
+                  if (parts[0].length <= 2) {
+                      dbDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                  } else {
+                      dbDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                  }
+              }
+              matchDate = dbDate === showFilterDate;
+          }
+      }
+      
+      const matchShow = showFilterShowId ? (
+          getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId) ||
+          shows.find(s => s.id.toString() === showFilterShowId)?.date_event === r.date_reserva
+      ) : true;
+      
+      return matchText && matchStatus && matchDate && matchShow;
   });
 
   const filteredShowsList = shows.filter(s => 
@@ -2656,8 +2701,8 @@ export default function DashboardPage() {
                                 <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Cortesías / Vendidas Manual</label><input type="number" className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-zinc-400 text-lg font-bold outline-none text-center focus:border-green-500" value={currentShow.sold || ''} onChange={e => setCurrentShow({...currentShow, sold: parseInt(e.target.value)})} /></div>
                             </div>
                             
-                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-5 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-[0_10px_20px_rgba(218,165,32,0.2)] mt-6">
-                                {isLoading ? <Loader2 className="w-6 h-6 animate-spin"/> : <><Save className="w-6 h-6"/> Publicar Evento</>}
+                            <button disabled={isLoading} type="submit" className="w-full bg-[#DAA520] text-black font-black uppercase tracking-widest py-5 rounded-xl hover:bg-[#B8860B] transition-colors flex items-center justify-center gap-2 shadow-xl mt-2">
+                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Save className="w-5 h-5"/> Publicar Show</>}
                             </button>
                         </form>
                     </div>
