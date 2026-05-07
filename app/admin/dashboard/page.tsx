@@ -29,7 +29,7 @@ const TABS = [
     { id: "shows", label: "Shows", icon: Music },
     { id: "promos", label: "Promociones", icon: Flame },
     { id: "menu_express", label: "Menú Reserva", icon: Utensils }, 
-    { id: "clientes", label: "Clientes Boulevard", icon: UserPlus },
+    { id: "clientes", label: "Clientes", icon: UserPlus },
     { id: "eventos", label: "Cotizaciones", icon: FileText },
     { id: "carrusel", label: "Carrusel", icon: Presentation },
     { id: "rrhh", label: "Equipo", icon: Users },
@@ -88,6 +88,7 @@ export default function DashboardPage() {
 
   const [showFilterShowId, setShowFilterShowId] = useState("");
   const [showFilterDate, setShowFilterDate] = useState("");
+  const [showSearchList, setShowSearchList] = useState("");
 
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState<any>(null);
@@ -403,16 +404,28 @@ export default function DashboardPage() {
       setIsClientModalOpen(true);
   };
 
+  // 🔥 FIX APLICADO: Evitar envío de strings vacíos a DB
   const handleSaveClient = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsLoading(true);
       try {
-          const clientData = { nombre: currentClient.nombre, email: currentClient.email, whatsapp: currentClient.whatsapp, fecha_nacimiento: currentClient.fecha_nacimiento };
-          if (currentClient.id) await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
-          else await supabase.from('clientes').insert([clientData]);
+          const clientData = { 
+              nombre: currentClient.nombre, 
+              email: currentClient.email?.trim() === "" ? null : currentClient.email, 
+              whatsapp: currentClient.whatsapp, 
+              fecha_nacimiento: currentClient.fecha_nacimiento?.trim() === "" ? null : currentClient.fecha_nacimiento 
+          };
+          
+          if (currentClient.id) {
+              const { error } = await supabase.from('clientes').update(clientData).eq('id', currentClient.id);
+              if (error) throw error;
+          } else {
+              const { error } = await supabase.from('clientes').insert([clientData]);
+              if (error) throw error;
+          }
           await fetchData();
           setIsClientModalOpen(false);
-      } catch (error: any) { alert("Error al guardar: " + error.message); } finally { setIsLoading(false); }
+      } catch (error: any) { alert("Error al guardar cliente: " + error.message); } finally { setIsLoading(false); }
   };
   const handleDeleteClient = async (id: number) => {
       if(confirm("¿Estás seguro de eliminar este cliente?")) { await supabase.from('clientes').delete().eq('id', id); fetchData(); }
@@ -456,28 +469,48 @@ export default function DashboardPage() {
       setCurrentShow(show || { 
           title: "", subtitle: "", description: "", date_event: "", time_event: "", end_time: "", 
           location: "Boulevard Zapallar, Curicó", sold: 0, total: 200, active: true, image_url: "", 
-          tag: "", is_adult: false, tickets: [], external_ticket_url: "", lock_time: "" // <- AGREGADOS NUEVOS CAMPOS AQUÍ
+          tag: "", is_adult: false, tickets: [], external_ticket_url: "", lock_time: ""
       }); 
       setIsShowModalOpen(true); 
   };
   const addTicketType = () => setCurrentShow({ ...currentShow, tickets: [...(currentShow.tickets || []), { id: Date.now().toString(), name: "", price: 0, desc: "" }] });
   const removeTicketType = (index: number) => { const nt = [...currentShow.tickets]; nt.splice(index, 1); setCurrentShow({ ...currentShow, tickets: nt }); };
   const updateTicketType = (index: number, field: string, value: any) => { const nt = [...currentShow.tickets]; nt[index] = { ...nt[index], [field]: field === 'price' ? (isNaN(value) ? 0 : value) : value }; setCurrentShow({ ...currentShow, tickets: nt }); };
+  
+  // 🔥 FIX APLICADO: Evitar envío de strings vacíos en variables Time o URL que colapsaban la BD
   const handleSaveShow = async (e: React.FormEvent) => { 
       e.preventDefault(); 
       setIsLoading(true); 
       try { 
           let finalImageUrl = currentShow.image_url; 
           if (selectedFile) { 
-              const uploadedUrl = await uploadImageToSupabase(); 
+              const uploadedUrl = await uploadImageToSupabase('images'); 
               if (uploadedUrl) finalImageUrl = uploadedUrl; 
           } 
-          const showData = { ...currentShow, image_url: finalImageUrl }; 
-          if (currentShow.id) await supabase.from('shows').update(showData).eq('id', currentShow.id); 
-          else await supabase.from('shows').insert([showData]); 
+          
+          const showData = { 
+              ...currentShow, 
+              image_url: finalImageUrl,
+              // Saneamiento clave: Si están vacíos, enviar null para no romper el INSERT SQL
+              end_time: currentShow.end_time?.trim() === "" ? null : currentShow.end_time,
+              lock_time: currentShow.lock_time?.trim() === "" ? null : currentShow.lock_time,
+              external_ticket_url: currentShow.external_ticket_url?.trim() === "" ? null : currentShow.external_ticket_url
+          }; 
+          
+          if (currentShow.id) {
+              const { error } = await supabase.from('shows').update(showData).eq('id', currentShow.id); 
+              if (error) throw error;
+          } else {
+              const { error } = await supabase.from('shows').insert([showData]); 
+              if (error) throw error;
+          }
           await fetchData(); 
           setIsShowModalOpen(false); 
-      } catch (error: any) { alert(error.message); } finally { setIsLoading(false); } 
+      } catch (error: any) { 
+          alert("Error al guardar el show en la base de datos: " + error.message); 
+      } finally { 
+          setIsLoading(false); 
+      } 
   };
   const handleDeleteShow = async (id: number) => { if(confirm("¿Eliminar show?")) { await supabase.from('shows').delete().eq('id', id); fetchData(); } };
 
@@ -913,6 +946,11 @@ export default function DashboardPage() {
     ) : true;
     return matchText && matchStatus && matchDate && matchShow;
   });
+
+  const filteredShowsList = shows.filter(s => 
+      (s.title || "").toLowerCase().includes(showSearchList.toLowerCase()) || 
+      (s.subtitle || "").toLowerCase().includes(showSearchList.toLowerCase())
+  );
 
   const updateSolicitudStatus = async (id: number, status: string) => { await supabase.from('solicitudes').update({ status }).eq('id', id); fetchData(); };
 
@@ -1848,7 +1886,13 @@ export default function DashboardPage() {
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                         <div className="relative w-full sm:w-64 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[#DAA520]" />
-                            <input type="text" placeholder="Buscar show..." className="w-full bg-zinc-900 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" />
+                            <input 
+                                type="text" 
+                                placeholder="Buscar show..." 
+                                className="w-full bg-zinc-900 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm text-white outline-none focus:border-[#DAA520] transition-colors" 
+                                value={showSearchList}
+                                onChange={(e) => setShowSearchList(e.target.value)}
+                            />
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
                              <button onClick={() => handleResetTable('shows', 'Todos los Shows')} className="flex-1 sm:flex-none bg-red-900/30 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white px-4 py-3 sm:py-2 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all">
@@ -1860,7 +1904,7 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="grid gap-4">
-                        {shows.length === 0 ? <div className="text-center py-20 bg-zinc-900 rounded-3xl border border-dashed border-zinc-800 text-zinc-500">No hay shows programados.</div> : shows.map((show) => (
+                        {filteredShowsList.length === 0 ? <div className="text-center py-20 bg-zinc-900 rounded-3xl border border-dashed border-zinc-800 text-zinc-500">No hay shows programados.</div> : filteredShowsList.map((show) => (
                             <div key={show.id} className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 group hover:border-[#DAA520]/30 transition-all shadow-lg">
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-6 w-full md:w-auto">
                                     <div className="w-full sm:w-28 aspect-video sm:aspect-square sm:h-28 bg-black rounded-xl relative overflow-hidden shrink-0 shadow-inner border border-white/10">
@@ -2274,10 +2318,10 @@ export default function DashboardPage() {
                             <div><label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Email (Opcional)</label><input type="email" placeholder="correo@ejemplo.com" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.email} onChange={e => setVentaPuertaData({...ventaPuertaData, email: e.target.value})} /></div>
                             <div>
                                 <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Medio de Pago</label>
-                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
-                                    <option value="efectivo">💵 Efectivo</option>
-                                    <option value="debito">💳 Débito / Tarjeta</option>
-                                    <option value="transferencia">📲 Transferencia</option>
+                                <select className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white text-xs outline-none focus:border-purple-500" value={ventaPuertaData.metodo_pago} onChange={e => setVentaPuertaData({...ventaPuertaData, metodo_pago: e.target.value})}>
+                                        <option value="efectivo">💵 Efectivo</option>
+                                        <option value="debito">💳 Débito / Tarjeta</option>
+                                        <option value="transferencia">📲 Transferencia</option>
                                 </select>
                             </div>
                         </div>
