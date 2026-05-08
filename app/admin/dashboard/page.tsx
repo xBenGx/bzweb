@@ -127,10 +127,21 @@ export default function DashboardPage() {
     initSession();
   }, []);
 
+  const normalizeDate = (dateStr: string): string => {
+      if (!dateStr) return "";
+      const datePart = dateStr.split(/T| /)[0].trim();
+      const parts = datePart.split(/[-\/]/);
+      if (parts.length !== 3) return datePart;
+      if (parts[0].length === 4) {
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  };
+
   const formatDateSafe = (dateString: string) => {
       if (!dateString) return "Sin Fecha";
-      const date = new Date(`${dateString}T12:00:00`); 
-      if (isNaN(date.getTime())) return dateString; 
+      const date = new Date(`${normalizeDate(dateString)}T12:00:00`);
+      if (isNaN(date.getTime())) return dateString;
       return date.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
   };
 
@@ -287,7 +298,7 @@ export default function DashboardPage() {
 
   const getShowPerformance = () => {
     return shows.map(show => {
-        const matchReservas = reservas.filter(r => r.date_reserva === show.date_event && r.status !== 'rechazada');
+        const matchReservas = reservas.filter(r => normalizeDate(r.date_reserva) === normalizeDate(show.date_event) && r.status !== 'rechazada');
         const totalPax = matchReservas.reduce((acc, curr) => acc + parseInt(curr.guests || 0), 0);
         let ticketsAmount = 0;
         let foodAmount = 0;
@@ -922,7 +933,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🔥 FIX APLICADO: Filtros Robustos y Normalización Dinámica de Fechas 
   const filteredReservasMesa = reservasNormalesOnly.filter(r => {
       const searchLower = reservaSearch.toLowerCase().trim();
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
@@ -930,31 +940,12 @@ export default function DashboardPage() {
       const emailMatch = (r.email || "").toLowerCase().includes(searchLower);
       const phoneMatch = (r.phone || "").toLowerCase().includes(searchLower);
       const whatsappMatch = (r.whatsapp || "").toLowerCase().includes(searchLower);
-      
       const matchText = searchLower === "" || codeMatch || nameMatch || emailMatch || phoneMatch || whatsappMatch;
       const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
-      
-      let matchDate = true;
-      if (reservaDateFilter) {
-          if (!r.date_reserva) {
-              matchDate = false;
-          } else {
-              let dbDate = r.date_reserva.split('T')[0];
-              const parts = dbDate.split(/[-/]/);
-              if (parts.length === 3) {
-                  if (parts[0].length <= 2) {
-                      dbDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                  } else {
-                      dbDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-                  }
-              }
-              matchDate = dbDate === reservaDateFilter;
-          }
-      }
+      const matchDate = !reservaDateFilter || normalizeDate(r.date_reserva) === reservaDateFilter;
       return matchText && matchStatus && matchDate;
   });
 
-  // 🔥 FIX APLICADO: Filtros Robustos y Normalización Dinámica de Fechas 
   const filteredReservasShow = reservasTicketsOnly.filter(r => {
       const searchLower = reservaSearch.toLowerCase().trim();
       const codeMatch = (r.reservation_code || r.code || "").toLowerCase().includes(searchLower);
@@ -962,33 +953,13 @@ export default function DashboardPage() {
       const emailMatch = (r.email || "").toLowerCase().includes(searchLower);
       const phoneMatch = (r.phone || "").toLowerCase().includes(searchLower);
       const whatsappMatch = (r.whatsapp || "").toLowerCase().includes(searchLower);
-      
       const matchText = searchLower === "" || codeMatch || nameMatch || emailMatch || phoneMatch || whatsappMatch;
       const matchStatus = reservaFilterStatus === "todos" ? true : reservaFilterStatus === "pendientes" ? r.status === "pendiente" : reservaFilterStatus === "confirmadas" ? r.status === "confirmada" : r.status === reservaFilterStatus;
-      
-      let matchDate = true;
-      if (showFilterDate) {
-          if (!r.date_reserva) {
-              matchDate = false;
-          } else {
-              let dbDate = r.date_reserva.split('T')[0];
-              const parts = dbDate.split(/[-/]/);
-              if (parts.length === 3) {
-                  if (parts[0].length <= 2) {
-                      dbDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                  } else {
-                      dbDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-                  }
-              }
-              matchDate = dbDate === showFilterDate;
-          }
-      }
-      
-      const matchShow = showFilterShowId ? (
+      const matchDate = !showFilterDate || normalizeDate(r.date_reserva) === showFilterDate;
+      const matchShow = !showFilterShowId || (
           getTicketDetails(r.pre_order).tickets.some((t:any) => t.show_id?.toString() === showFilterShowId) ||
-          shows.find(s => s.id.toString() === showFilterShowId)?.date_event === r.date_reserva
-      ) : true;
-      
+          normalizeDate(shows.find(s => s.id.toString() === showFilterShowId)?.date_event || "") === normalizeDate(r.date_reserva)
+      );
       return matchText && matchStatus && matchDate && matchShow;
   });
 
@@ -1010,16 +981,13 @@ export default function DashboardPage() {
   
   const getBirthdays = () => {
       if (!birthdayFilterDate) return [];
-      const filterDate = new Date(birthdayFilterDate);
-      const filterMonth = filterDate.getMonth();
-      const filterDay = filterDate.getDate() + 1;
+      const [, fMonth, fDay] = birthdayFilterDate.split('-').map(Number);
 
       return clientes.filter(c => {
           if (!c.fecha_nacimiento) return false;
-          const dParts = c.fecha_nacimiento.split('-');
-          const dMonth = parseInt(dParts[1]) - 1;
-          const dDay = parseInt(dParts[2]);
-          return dMonth === filterMonth && dDay === filterDay;
+          const normalized = normalizeDate(c.fecha_nacimiento);
+          const [, cMonth, cDay] = normalized.split('-').map(Number);
+          return cMonth === fMonth && cDay === fDay;
       });
   };
   const birthdays = getBirthdays();
