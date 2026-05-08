@@ -1147,13 +1147,25 @@ export default function DashboardPage() {
                                 <option value="">Todos los Shows</option>
                                 {shows.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                             </select>
-                            <input 
-                                type="date" 
-                                className="bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 scheme-dark font-bold uppercase tracking-wider" 
-                                value={showFilterDate} 
-                                onChange={(e) => setShowFilterDate(e.target.value)} 
-                            />
-                            <button 
+                            <div className="relative flex items-center">
+                                <input
+                                    type="date"
+                                    className="w-44 bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500 scheme-dark font-bold tracking-wider transition-colors"
+                                    style={{ colorScheme: 'dark' }}
+                                    value={showFilterDate}
+                                    onChange={(e) => setShowFilterDate(e.target.value)}
+                                />
+                                {showFilterDate && (
+                                    <button
+                                        onClick={() => setShowFilterDate("")}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 bg-zinc-700 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors"
+                                        title="Limpiar fecha"
+                                    >
+                                        <X className="w-3 h-3 text-white" />
+                                    </button>
+                                )}
+                            </div>
+                            <button
                                 onClick={generarPDFListaShow}
                                 className="bg-white text-black hover:bg-zinc-200 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
                             >
@@ -1282,13 +1294,25 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
-                            <input 
-                                type="date" 
-                                className="w-full sm:w-auto bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#DAA520] scheme-dark font-bold uppercase tracking-wider" 
-                                value={reservaDateFilter} 
-                                onChange={(e) => setReservaDateFilter(e.target.value)} 
-                            />
-                            <button 
+                            <div className="relative flex items-center w-full sm:w-auto">
+                                <input
+                                    type="date"
+                                    className="w-full sm:w-48 bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#DAA520] scheme-dark font-bold tracking-wider transition-colors"
+                                    style={{ colorScheme: 'dark' }}
+                                    value={reservaDateFilter}
+                                    onChange={(e) => setReservaDateFilter(e.target.value)}
+                                />
+                                {reservaDateFilter && (
+                                    <button
+                                        onClick={() => setReservaDateFilter("")}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 bg-zinc-700 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors"
+                                        title="Limpiar fecha"
+                                    >
+                                        <X className="w-3 h-3 text-white" />
+                                    </button>
+                                )}
+                            </div>
+                            <button
                                 onClick={generarPDFListaReservas}
                                 className="bg-white text-black hover:bg-zinc-200 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all shadow-lg"
                             >
