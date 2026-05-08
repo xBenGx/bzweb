@@ -296,7 +296,7 @@ export default function BookingPage() {
               name: userData.name,
               email: userData.email,
               phone: userData.phone,
-              date_reserva: `${selectedDate} de ${currentMonthName}`,
+              date_reserva: `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}-${String(selectedDate).padStart(2, '0')}`,
               time_reserva: time,
               guests: guests,
               zone: zoneDetails?.name || "Zona General",

@@ -129,6 +129,17 @@ export default function DashboardPage() {
 
   const normalizeDate = (dateStr: string): string => {
       if (!dateStr) return "";
+      const MESES: Record<string, string> = {
+          enero:'01', febrero:'02', marzo:'03', abril:'04', mayo:'05', junio:'06',
+          julio:'07', agosto:'08', septiembre:'09', octubre:'10', noviembre:'11', diciembre:'12'
+      };
+      const spanishMatch = dateStr.trim().match(/^(\d{1,2})\s+de\s+([a-záéíóúü]+)(?:\s+(\d{4}))?$/i);
+      if (spanishMatch) {
+          const day = spanishMatch[1].padStart(2, '0');
+          const month = MESES[spanishMatch[2].toLowerCase()] || '01';
+          const year = spanishMatch[3] || new Date().getFullYear().toString();
+          return `${year}-${month}-${day}`;
+      }
       const datePart = dateStr.split(/T| /)[0].trim();
       const parts = datePart.split(/[-\/]/);
       if (parts.length !== 3) return datePart;
