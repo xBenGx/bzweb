@@ -14,7 +14,7 @@ export default function MaintenancePage() {
   return (
     <main className={`relative min-h-screen w-full bg-black flex flex-col items-center justify-center overflow-hidden ${montserrat.className}`}>
       
-      {/* 1. FONDO CINEMÁTICO (Mismo estilo que el original para coherencia) */}
+      {/* 1. FONDO CINEMÁTICO */}
       <div className="fixed inset-0 z-0">
         <Image 
           src="/fondo-boulevard.jpg" 
@@ -23,7 +23,6 @@ export default function MaintenancePage() {
           className="object-cover opacity-40 blur-[4px] scale-110" 
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black" />
-        {/* Efecto de ruido/textura que ya tenías */}
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none" />
       </div>
 
@@ -37,7 +36,9 @@ export default function MaintenancePage() {
           transition={{ duration: 1.5, ease: "easeOut" }}
           className="relative w-72 h-72 md:w-80 md:h-80 mb-4"
         >
+          {/* ¡AQUÍ ESTABA EL FIX! Agregamos relative w-full h-full para que el Image fill funcione */}
           <motion.div
+            className="relative w-full h-full"
             animate={{ 
               scale: [1, 1.03, 1],
               opacity: [0.9, 1, 0.9]
@@ -82,7 +83,7 @@ export default function MaintenancePage() {
           </p>
         </motion.div>
 
-        {/* REDES SOCIALES (Para que no pierdan contacto) */}
+        {/* REDES SOCIALES */}
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
