@@ -36,7 +36,6 @@ export default function MaintenancePage() {
           transition={{ duration: 1.5, ease: "easeOut" }}
           className="relative w-72 h-72 md:w-80 md:h-80 mb-4"
         >
-          {/* ¡AQUÍ ESTABA EL FIX! Agregamos relative w-full h-full para que el Image fill funcione */}
           <motion.div
             className="relative w-full h-full"
             animate={{ 
@@ -93,6 +92,7 @@ export default function MaintenancePage() {
           <a 
             href="https://www.instagram.com/boulevardzapallar/?hl=es" 
             target="_blank" 
+            rel="noopener noreferrer"
             className="text-white/40 hover:text-white transition-colors"
           >
             <Instagram className="w-6 h-6" />
@@ -100,6 +100,7 @@ export default function MaintenancePage() {
           <a 
             href="https://waze.com/ul?q=Av.+Manuel+Labra+Lillo+430,+Curicó" 
             target="_blank" 
+            rel="noopener noreferrer"
             className="text-white/40 hover:text-white transition-colors"
           >
             <MapPin className="w-6 h-6" />
@@ -114,16 +115,21 @@ export default function MaintenancePage() {
 
       </div>
 
-      {/* FOOTER */}
+      {/* FOOTER CON REDIRECCIÓN A TU WEB */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.5 }}
         className="absolute bottom-10 z-10"
       >
-        <p className="text-[9px] text-zinc-600 font-bold tracking-[0.4em] uppercase">
-          Powered By <span className="text-white/40">BAYX</span>
-        </p>
+        <a 
+          href="https://bayx.pro/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="group block text-[9px] text-zinc-600 font-bold tracking-[0.4em] uppercase hover:text-zinc-400 transition-colors"
+        >
+          Powered By <span className="text-white/40 group-hover:text-white transition-colors">BAYX</span>
+        </a>
       </motion.div>
 
     </main>
